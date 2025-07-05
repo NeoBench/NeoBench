@@ -1,0 +1,31 @@
+name: Build NeoKick ROM
+
+on:
+  push:
+    paths:
+      - 'roms/**'
+      - 'tools/remus/**'
+      - '.github/workflows/build-rom.yml'
+  workflow_dispatch:
+
+jobs:
+  build-rom:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Build Remus
+      working-directory: tools/remus
+      run: make
+
+    - name: Build ROM
+      working-directory: roms
+      run: ../../tools/remus/remus neokick.romconf
+
+    - name: Upload ROM artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: NeoKick.rom
+        path: roms/neokick.rom

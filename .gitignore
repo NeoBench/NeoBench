@@ -1,0 +1,19 @@
+# Build output
+target/
+**/*.rom
+**/*.elf
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Lockfiles
+Cargo.lock
+
+# Temp files
+*.log
+*.tmp

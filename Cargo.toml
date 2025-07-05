@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "src/neorom",
+    "src/neoboot",
+    "src/neofs"
+]
+
+[workspace.package]
+edition = "2021"
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"

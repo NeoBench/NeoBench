@@ -1,0 +1,18 @@
+ROM_NAME = "NeoKick v1.0"
+ROM_VERSION = 46
+ROM_REVISION = 1
+ROM_DATE = "2025-07-04"
+
+MODULES = [
+  "exec",
+  "graphics",
+  "intuition",
+  "input.device",
+  "ram-handler",
+  "shell",
+  "neoboot",
+  "neosplash",
+  "neofs",
+  "neoshell"
+]
+
