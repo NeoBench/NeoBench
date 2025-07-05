@@ -1,25 +1,22 @@
 ENTRY(rom_boot_check)
 
 SECTIONS {
-    . = 0xF80000; /* ROM base address for 512KB BIOS */
+  . = 0xFFFF0000;
 
-    .text : {
-        *(.text*)
-    }
+  .text : {
+    *(.text*)
+  }
 
-    .rodata : {
-        *(.rodata*)
-    }
+  .rodata : {
+    *(.rodata*)
+  }
 
-    .data : {
-        *(.data*)
-    }
+  .data : {
+    *(.data*)
+  }
 
-    .bss : {
-        *(.bss COMMON)
-    }
-
-    /DISCARD/ : {
-        *(.eh_frame)
-    }
+  .bss : {
+    *(.bss*)
+    *(COMMON)
+  }
 }
