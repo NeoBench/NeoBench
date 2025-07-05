@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "src/neorom",
-    "src/neoboot",
-    "src/neofs"
+  "src/neofs",
+  "src/neoboot",
+  "src/neorom",
+  "src/neocli",
+  "src/neoshell",    
+  "src/neosplash",
 ]
-
-[workspace.package]
-edition = "2021"
 
 [profile.release]
 opt-level = "z"

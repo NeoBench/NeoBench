@@ -1,0 +1,8 @@
+[package]
+name = "neosplash"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# e.g. for a simple image display you might use minifb or similar:
+# minifb = "0.19"

@@ -1,0 +1,14 @@
+[package]
+name = "neoboot"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "neoboot"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
