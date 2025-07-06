@@ -2,13 +2,14 @@
 members = [
   "src/neofs",
   "src/neoboot",
+  "src/neosplash",
   "src/neorom",
   "src/neocli",
-  "src/neoshell",    
-  "src/neosplash",
+  "src/neoshell",
 ]
 
 [profile.release]
 opt-level = "z"
 lto = true
 panic = "abort"
+

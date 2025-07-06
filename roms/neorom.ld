@@ -1,15 +1,11 @@
-ENTRY(mbr_entry)
-
-SECTIONS
-{
-    /* Origin 0x7C00: where the BIOS loads the boot sector */
-    . = 0x7C00;
-
+ENTRY(rom_boot_check)
+SECTIONS {
+    /* Link so that the end of this 512 KiB image
+     * lands at 0x000FFFFF, i.e. starts at 0x000F0000 */
+    . = 0x000F0000;
     .text : { *(.text*) }
     .rodata : { *(.rodata*) }
     .data : { *(.data*) }
-    .bss : { *(.bss COMMON) }
-
-    /* BIOS boot signature at offset 0x1FE in the 512-byte sector */
+    .bss  : { *(.bss COMMON) }
     /DISCARD/ : { *(.eh_frame) }
 }

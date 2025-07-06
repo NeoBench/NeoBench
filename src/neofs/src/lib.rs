@@ -1,5 +1,17 @@
 // src/neofs/src/lib.rs
 
-// (no `#![no_std]`, no `#![no_main]`, no panic handler here)
+#![no_std]
+#![no_main]
 
-pub mod fs;
+use core::panic::PanicInfo;
+
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    loop {}
+}
+
+// Your public init symbol for linking:
+#[no_mangle]
+pub extern "C" fn neofs_init() {
+    // ... your FS init code ...
+}

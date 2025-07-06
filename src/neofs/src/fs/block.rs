@@ -1,21 +1,19 @@
-pub const BLOCK_SIZE: usize = 512;
+#![allow(dead_code)]
 
-/// A NeoFS disk block (fixed size)
+/// One 512-byte block.
 pub struct Block {
-    pub data: [u8; BLOCK_SIZE],
+    data: [u8; 512],
 }
 
 impl Block {
     pub fn new() -> Self {
-        Self {
-            data: [0; BLOCK_SIZE],
-        }
+        Block { data: [0; 512] }
     }
 
     pub fn from_slice(slice: &[u8]) -> Self {
-        let mut block = Block::new();
-        block.data.copy_from_slice(&slice[..BLOCK_SIZE]);
-        block
+        let mut blk = Block::new();
+        blk.data[..slice.len()].copy_from_slice(slice);
+        blk
     }
 
     pub fn as_bytes(&self) -> &[u8] {

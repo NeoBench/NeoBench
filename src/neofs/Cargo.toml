@@ -3,3 +3,11 @@ name = "neofs"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "neofs"
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[features]
+default = ["std"]
+std = []

@@ -2,13 +2,21 @@
 #![no_main]
 
 use core::panic::PanicInfo;
+use core::ptr::{read_volatile, write_volatile};  // ← pull in both
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! { loop {} }
+fn panic(_info: &PanicInfo) -> ! {
+    loop {}
+}
 
-/// Called by the ROM entry
 #[no_mangle]
 pub extern "C" fn neoboot_main() {
-    // e.g. serial_print("Bootloader running...\n");
-    loop {}
+    // Example serial write:
+    let byte = b'N';
+    unsafe {
+        // wait until transmitter empty
+        while read_volatile((0x3F8 + 5) as *const u8) & 0x20 == 0 {}
+        write_volatile(0x3F8 as *mut u8, byte);
+    }
+    // return to ROM stub
 }

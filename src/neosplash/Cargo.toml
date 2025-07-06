@@ -3,6 +3,9 @@ name = "neosplash"
 version = "0.1.0"
 edition = "2021"
 
+# Build as a library ― static archive
+[lib]
+crate-type = ["staticlib"]
+
 [dependencies]
-# e.g. for a simple image display you might use minifb or similar:
-# minifb = "0.19"
+# (any no_std dependencies you need)
