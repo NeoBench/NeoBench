@@ -1,7 +1,10 @@
+[build]
+target = "targets/neobench-m68k.json"
+
 [target.neobench-m68k]
 linker = "m68k-elf-ld"
 rustflags = [
   "-C", "link-arg=-Tmemory.ld",
   "-C", "link-arg=--gc-sections",
-  "-C", "link-arg=-nostdlib",
+  "-C", "link-arg=-nostdlib"
 ]

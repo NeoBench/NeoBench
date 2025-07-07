@@ -1,24 +1,20 @@
 ENTRY(_start)
 
+MEMORY
+{
+    ROM (rx) : ORIGIN = 0x00000000, LENGTH = 512K
+}
+
 SECTIONS
 {
-  . = 0x00000000;
+    .text : {
+        *(.text*)
+        *(.rodata*)
+        *(.data*)
+        . = ALIGN(4);
+    } > ROM
 
-  .text : {
-    *(.text*)
-    *(.rodata*)
-  }
-
-  .data : {
-    *(.data*)
-  }
-
-  .bss : {
-    *(.bss*)
-    *(COMMON)
-  }
-
-  /DISCARD/ : {
-    *(.eh_frame)
-  }
+    /DISCARD/ : {
+        *(.eh_frame*)
+    }
 }

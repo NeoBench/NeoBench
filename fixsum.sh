@@ -12,15 +12,23 @@ if [[ $(stat -c%s "$ROM") -ne 524288 ]]; then
   exit 1
 fi
 
-# Clear existing checksum (first longword)
-SUM=$(od -An -td4 -w4 -v "$ROM" | awk '{sum += $1} END {print sum}')
-CHECKSUM=$(( (0xFFFFFFFF - SUM) & 0xFFFFFFFF ))
+# Zero the first 4 bytes (checksum area)
+printf '\x00\x00\x00\x00' | dd of="$ROM" bs=1 seek=0 count=4 conv=notrunc &>/dev/null
 
-# Calculate checksum
+# Compute checksum using Perl (handles unsigned 32-bit correctly)
+SUM=$(od -An -N524288 -t u4 -v "$ROM" | \
+  perl -ne '
+    for (split) { $s += $_ }
+    END { printf "%08X\n", (0xFFFFFFFF - $s) & 0xFFFFFFFF }
+  ')
 
-printf "%02X\n" $SUM  # Optional: display SUM for debugging
+# Split hex into bytes
+B1=${SUM:0:2}
+B2=${SUM:2:2}
+B3=${SUM:4:2}
+B4=${SUM:6:2}
 
-# Convert and write directly
-printf "%08X" $CHECKSUM | xxd -r -p | dd of="$ROM" bs=1 seek=0 count=4 conv=notrunc 2>/dev/null
+# Write checksum into first 4 bytes
+printf "\\x$B1\\x$B2\\x$B3\\x$B4" | dd of="$ROM" bs=1 seek=0 count=4 conv=notrunc &>/dev/null
 
 echo "✅ ROM checksum fixed: $ROM"
