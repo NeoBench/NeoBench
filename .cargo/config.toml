@@ -2,7 +2,8 @@
 target = "targets/neobench-m68k.json"
 rustflags = [
   "-C", "link-arg=-nostartfiles",
-  "-C", "link-arg=-Tmemory.ld"
+  "-C", "link-arg=-Tmemory.ld",
+  "-C", "link-arg=vectors.o"
 ]
 
 [target.neobench-m68k]
