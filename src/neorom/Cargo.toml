@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-neolib  = { path = "../neolib" }
 neoboot = { path = "../neoboot" }
+neolib  = { path = "../neolib" }
 
 [lib]
 path = "src/lib.rs"

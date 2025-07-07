@@ -1,16 +1,15 @@
 #![no_std]
 #![no_main]
 
-use neoboot::boot;
-use core::panic::PanicInfo;
+extern crate neoboot;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    boot();
-    loop {} // Prevent returning
+    neoboot::boot();
+    loop {}
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }

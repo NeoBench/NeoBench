@@ -1,9 +1,19 @@
 #![no_std]
+#![no_main]
 
-use neolib::serial::puts;
+extern crate neoboot;
 
-pub fn boot() -> ! {
-    puts("NeoROM booting...\n");
+use core::panic::PanicInfo;
 
+#[no_mangle]
+pub extern "C" fn _start() -> ! {
+    unsafe {
+        neoboot::boot();
+    }
+    loop {}
+}
+
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
