@@ -1,0 +1,24 @@
+{
+  "llvm-target": "m68k-unknown-none",
+  "data-layout": "E-m:e-p:32:16:32-i8:8:8-i16:16:16-i32:16:32-n8:16:32-a:0:16-S16",
+  "arch": "m68k",
+  "os": "none",
+  "vendor": "neobench",
+  "target-endian": "big",
+  "target-pointer-width": "32",
+  "target-c-int-width": "32",
+  "disable-redzone": true,
+  "eliminate-frame-pointer": false,
+  "linker-flavor": "ld.lld",
+  "linker": "ld.lld",
+  "pre-link-args": {
+    "ld.lld": ["-Tmemory.ld"]
+  },
+  "features": "+soft-float",
+  "relocation-model": "static",
+  "code-model": "small",
+  "default-hidden-visibility": true,
+  "executables": true,
+  "no-compiler-rt": true,
+  "panic-strategy": "abort"
+}

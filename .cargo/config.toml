@@ -1,0 +1,9 @@
+[build]
+target = "targets/neobench-m68k.json"
+rustflags = [
+  "-C", "link-arg=-nostartfiles",
+  "-C", "link-arg=-Tmemory.ld"
+]
+
+[target.neobench-m68k]
+linker = "m68k-elf-gcc"

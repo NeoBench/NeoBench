@@ -1,15 +1,9 @@
 [workspace]
 members = [
-  "src/neofs",
-  "src/neoboot",
-  "src/neosplash",
-  "src/neorom",
-  "src/neocli",
-  "src/neoshell",
+    "src/neorom",
+    "src/neoboot",
+    "src/neolib"
 ]
 
-[profile.release]
-opt-level = "z"
-lto = true
-panic = "abort"
-
+# Optionally allow unstable build-std if needed:
+# resolver = "2"

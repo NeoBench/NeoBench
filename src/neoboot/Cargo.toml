@@ -1,11 +1,11 @@
 [package]
-name    = "neoboot"
+name = "neoboot"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["staticlib"]
-path = "src/lib.rs"
+[dependencies]
+neolib  = { path = "../neolib" }
+compiler_builtins = { version = "0.1.101" }
 
-[profile.release]
-panic = "abort"
+[lib]
+path = "src/lib.rs"

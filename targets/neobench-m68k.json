@@ -1,0 +1,18 @@
+{
+  "llvm-target": "m68k-unknown-none",
+  "target-endian": "big",
+  "target-pointer-width": "32",
+  "arch": "m68k",
+  "os": "none",
+  "vendor": "neobench",
+  "linker-flavor": "gcc",
+  "data-layout": "E-m:e-p:32:16:32-i8:8:8-i16:16:16-i32:16:32-n8:16:32-a:0:16-S16",
+  "disable-redzone": true,
+  "features": "",
+  "panic-strategy": "abort",
+  "executables": true,
+  "relocation-model": "static",
+  "code-model": "small",
+  "eliminate-frame-pointer": false,
+  "no-compiler-rt": true
+}
