@@ -8,7 +8,7 @@ if [ ! -d .git ]; then
     git branch -M main
     git remote add origin https://github.com/NeoBench/NeoBench.git
     git config user.name "ArchLinux Dev"
-    git config user.email "your@email.com"
+    git config user.email "dlester626@gmail.com"
 fi
 
 git add -A
