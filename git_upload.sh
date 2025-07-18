@@ -6,7 +6,7 @@ cd /home/adolf/neobench
 if [ ! -d .git ]; then
     git init
     git branch -M main
-    git remote add origin https://github.com/NeoBench/NeoBench.git
+    git remote add origin https://github.com/NeoBench/NeoBench
     git config user.name "ArchLinux Dev"
     git config user.email "dlester626@gmail.com"
 fi
