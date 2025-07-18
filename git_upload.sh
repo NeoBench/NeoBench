@@ -6,13 +6,11 @@ cd /home/adolf/neobench
 if [ ! -d .git ]; then
     git init
     git branch -M main
-    git remote add origin https://github.com/NeoBench/NeoBench
+    git remote add origin https://github.com/NeoBench/NeoBench.git
     git config user.name "ArchLinux Dev"
-    git config user.email "dlester626@gmail.com"
+    git config user.email "your@email.com"
 fi
 
 git add -A
 git commit -m "Update $(date)" || echo "Nothing to commit."
 git push -u --force origin main
-
-echo "NeoBench GitHub sync complete: https://github.com/NeoBench/NeoBench"
