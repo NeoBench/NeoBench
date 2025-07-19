@@ -1,121 +1,91 @@
-        section "ROM",code
-        org     $0000
+        section  ROM,code
+        org      $000000
 
-;--- Kickstart vector table (minimal, points to start)
-        dc.l    _start                  ; 0x00: Initial PC (entry point)
-        dc.l    $00008000               ; 0x04: Initial SP (arbitrary)
-        ds.l    14                      ; 0x08: Unused/empty vectors
+;---- Amiga ROM vector table (minimal) ----
+        dc.l     _start         ; Reset vector
+        dc.l     $00008000      ; Initial SSP
+        ds.l     14             ; Unused vectors
 
-; ========== MAIN ENTRY ==========
+;==== CODE ENTRY ====
 _start:
-        lea     $dff000,a6              ; A6 = CUSTOM (chipset regs)
+        lea      $dff000,a6     ; CUSTOM chips base
 
-        bsr     show_splash
-        bsr     play_sound
+;==== Set Palette ====
+        lea      splash_palette,a0
+        moveq    #31,d7
+.palloop:
+        move.w   (a0)+,$180(a6)
+        dbra     d7,.palloop
 
-.loop:                                  ; idle with flashing border
-        move.w  #$0880,($180,a6)        ; blue border
-        bsr     delay
-        move.w  #$0f00,($180,a6)        ; red border
-        bsr     delay
-        bra     .loop
+;==== Setup bitplanes (4 planes: 16 colors, 320x256) ====
+        lea      splash_bpl,a0      ; Start of bitplane data
+        lea      $dff100,a4         ; BPL pointers
+        lsl.w    #3,d7              ; 4 planes (0-3)
+        move.w   d0,0(a4,d7.w)    ; BPLxPTH
+        lsr.w    #3,d7
+	swap     d0
+        move.w   d0,4(a4,d7.w*8)    ; BPLxPTL
+        lea      10240(a0),a0       ; Next plane (320*256/8)
+        dbra     d7,.bplloop
 
-; ========== SPLASH BLIT ROUTINE ==========
-show_splash:
-        lea     $dff000,a6
-        ; Bitplane pointers: $DFF0E0-$DFF0EE (BPL1PTH/PL, BPL2PTH/PL, ...)
-        lea     splash_bpl,a0
-        moveq   #0,d0
-.setplanes:
-        move.l  (a0)+,d1                ; address of bitplane data
-        move.w  d1,$0E2(a6)             ; BPL1PTL, ...
-        swap    d1
-        move.w  d1,$0E0(a6)
-        addq.l  #1,d0
-        cmpi.l  #5,d0                   ; 5 bitplanes (32 color AGA)
-        bls     .setplanes
+;==== Display window, DMA, enable bitplanes ====
+        move.w   #$2c81,$08e(a6)    ; DIWSTRT
+        move.w   #$f4c1,$090(a6)    ; DIWSTOP
+        move.w   #$0038,$092(a6)    ; DDFSTRT
+        move.w   #$00d0,$094(a6)    ; DDFSTOP
+        move.w   #$0240,$104(a6)    ; BPL1MOD, 0
+        move.w   #$0240,$106(a6)    ; BPL2MOD, 0
+        move.w   #$6200,$096(a6)    ; DMACON (enable bitplane + copper + sprite DMA)
+        move.w   #$0204,$100(a6)    ; BPLCON0 (4 planes, color)
 
-        ; Set bitplane modulo (standard 320x256, no mod)
-        move.w  #0,$108(a6)             ; BPL1MOD
-        move.w  #0,$10A(a6)             ; BPL2MOD
+;==== Keyboard/CIAA: init ====
+        lea      $bfe001,a1        ; CIAA base
+        move.b   #$7f,(a1)         ; Set all lines input except PA7
+        lea      $bfd000,a2        ; CIAB base (for future)
 
-        ; Set display window (standard PAL)
-        move.w  #$2C81,$08E(a6)         ; DIWSTRT (h=0x2C, v=0x81)
-        move.w  #$F4C1,$090(a6)         ; DIWSTOP (h=0xF4, v=0xC1)
+;==== Main Loop ====
+mainloop:
+        bsr      check_del
+        bsr      poll_drivers      ; (stub, extend later!)
+        bra      mainloop
 
-        ; Set color palette
-        lea     splash_pal,a0
-        lea     $180(a6),a1             ; COLOR00 base
-        moveq   #31,d0
-.palette:
-        move.w  (a0)+,(a1)
-        addq.l  #2,a1
-        dbra    d0,.palette
-
+;==== DEL Key: If pressed, call menu ====
+check_del:
+        lea      $bfe001,a1        ; CIAA
+        move.b   (a1),d0           ; Read keyboard line
+        not.b    d0
+        andi.b   #$80,d0           ; DEL = 0x45 -> code 0x80 bit high when pressed
+        beq      .no_del
+        bsr      boot_menu
+.no_del:
         rts
 
-; ========== PLAY BOOT SOUND ==========
-play_sound:
-        lea     $dff000,a6
-        lea     boot_sound,a0
-        move.l  #boot_sound_end-boot_sound,d0  ; length in bytes
-        lsr.l   #1,d0                          ; convert to words
-
-        move.w  #0,$A8(a6)                     ; AUD0VOL = 0 (silence)
-        move.w  #$0028,$A6(a6)                 ; AUD0PER = 8KHz (PAL: 3546895/8000/2 ≈ 221.7)
-        move.l  a0,d1
-        swap    d1
-        move.w  d1,$0A0(a6)                    ; AUD0LCH
-        swap    d1
-        move.w  d1,$0A2(a6)                    ; AUD0LCL
-        move.w  d0,$0A4(a6)                    ; AUD0LEN
-        move.w  #64,$A8(a6)                    ; AUD0VOL = 64
-        move.w  #$8200,$096(a6)                ; DMACON = AUD0EN + DMAEN
-
-        ; crude wait for ~sound duration (not accurate)
-        bsr     delay
-        bsr     delay
-        bsr     delay
-
-        move.w  #0,$A8(a6)                     ; AUD0VOL = 0 (stop)
-        move.w  #$0200,$09A(a6)                ; DMACON = AUD0EN off
-
+;==== Placeholder: Boot Device Scan ====
+poll_drivers:
+        ; call SCSI/IDE/USB/PCI/Zorro stubs here
         rts
 
-; ========== DELAY LOOP ==========
+;==== Placeholder: Boot Menu ====
+boot_menu:
+        ; As a demo: flash border color
+        move.w   #$f00,$180(a6)
+        bsr      delay
+        move.w   #$0f0,$180(a6)
+        bsr      delay
+        rts
+
 delay:
-        move.l  #120000,d0
-.dloop:
-        subq.l  #1,d0
-        bne     .dloop
+        move.l   #150000,d0
+.dl:    subq.l   #1,d0
+        bne      .dl
         rts
 
-; ========== DATA/BITPLANE INCLUDE ==========
-        align 4
+;==== Palette and Bitplanes Data (auto-generated, see Python script!) ====
+splash_palette:
+        incbin   "src/splash.pal"        ; 32x2 bytes
 splash_bpl:
-        dc.l    splash_plane0, splash_plane1, splash_plane2, splash_plane3, splash_plane4
+        incbin   "src/splash.bpl"        ; (or splash1.bpl, etc.)
 
-        align 4
-splash_pal:
-        incbin  "src/splash.pal"        ; 32x2 bytes (AGA/OCS/ECS format, optional)
-                                        ; (or include palette inline here if you wish)
-
-splash_plane0:
-        incbin  "src/splash.bpl"        ; Each bitplane should be 10240 bytes (320*256/8)
-splash_plane1:
-        incbin  "src/splash1.bpl"
-splash_plane2:
-        incbin  "src/splash2.bpl"
-splash_plane3:
-        incbin  "src/splash3.bpl"
-splash_plane4:
-        incbin  "src/splash4.bpl"
-
-boot_sound:
-        incbin  "src/neoboot.raw"
-boot_sound_end:
-
-; ========== PAD ROM TO 512K ==========
-        align 2
-	ds.b $80000-(*-$$)
-        end
+;==== Pad to 512K ====
+end_of_code:
+    ds.b $80000-*
