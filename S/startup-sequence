@@ -1,6 +1,0 @@
-NeoBench booting...
-SetPatch QUIET
-Assign NeoBench: ./NeoBench
-cd NeoBench:
-run >nil: C/NeoBenchShell
-run >nil: NeoBench/NeoBenchBar

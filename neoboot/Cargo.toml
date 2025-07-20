@@ -1,0 +1,16 @@
+[package]
+name = "neoboot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[profile.release]
+panic = "abort"
+strip = true
+lto = true
+codegen-units = 1
+
+[build-dependencies]
+
+[workspace]

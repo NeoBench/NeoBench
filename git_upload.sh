@@ -1,16 +1,34 @@
 #!/bin/bash
 set -e
 
-cd /home/adolf/neobench
+REPO_DIR="../neobench-git"
 
-if [ ! -d .git ]; then
-    git init
-    git branch -M main
-    git remote add origin git@github.com:NeoBench/NeoBench.git
-    git config user.name "ArchLinux Dev"
-    git config user.email "your@email.com"
+# Safety: don't run this script from inside the Git repo
+if [ "$PWD" = "$(realpath "$REPO_DIR")" ]; then
+  echo "❌ ERROR: You are running from inside the Git repo: $REPO_DIR"
+  exit 1
 fi
 
-git add -A
-git commit -m "Update $(date)" || echo "Nothing to commit."
-git push -u --force origin main
+# Safety: check if it's a real Git repo
+if [ ! -d "$REPO_DIR/.git" ]; then
+  echo "❌ ERROR: $REPO_DIR is not a valid Git repository (missing .git)"
+  exit 1
+fi
+
+echo "[NeoBench] Wiping repo contents except .git..."
+cd "$REPO_DIR"
+find . -mindepth 1 -not -path "./.git*" -exec rm -rf {} +
+
+echo "[NeoBench] Copying NeoBench project files..."
+cd ../neobench0.1
+
+# Use rsync to preserve permissions and avoid nested .git issues
+rsync -a --exclude='.git/' --exclude='build/' --exclude='target/' ./ "$REPO_DIR"
+
+echo "[NeoBench] Committing and pushing..."
+cd "$REPO_DIR"
+git add .
+git commit -m "Full clean upload of NeoBench source"
+git push -f
+
+echo "[NeoBench] ✅ Git push complete."
