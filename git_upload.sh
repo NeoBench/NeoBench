@@ -19,16 +19,16 @@ echo "[NeoBench] Wiping repo contents except .git..."
 cd "$REPO_DIR"
 find . -mindepth 1 -not -path "./.git*" -exec rm -rf {} +
 
-echo "[NeoBench] Copying NeoBench project files..."
+echo "[NeoBench-kernel] Copying NeoBench project files..."
 cd ../neobench0.1
 
 # Use rsync to preserve permissions and avoid nested .git issues
 rsync -a --exclude='.git/' --exclude='build/' --exclude='target/' ./ "$REPO_DIR"
 
-echo "[NeoBench] Committing and pushing..."
+echo "[NeoBench-kernel] Committing and pushing..."
 cd "$REPO_DIR"
 git add .
 git commit -m "Full clean upload of NeoBench source"
 git push -f
 
-echo "[NeoBench] ✅ Git push complete."
+echo "[NeoBench-kernel] ✅ Git push complete."

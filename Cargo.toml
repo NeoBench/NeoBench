@@ -1,10 +1,8 @@
+# Cargo.toml (root)
 [workspace]
 members = [
-    "src/init",
-    "src/neosh"
+    "src/init/init",
+    "src/neosh/neosh",
+    "src/neoboot"
 ]
 resolver = "2"
-
-[profile.release]
-strip = true
-lto = true
