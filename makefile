@@ -1,33 +1,17 @@
-CC = /home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-gcc
-LD = /home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-ld
+ROM_NAME = build/neobench.rom
+ELF_NAME = build/neobench.elf
+OBJS = build/rom.o
 
-CFLAGS = -ffreestanding -nostdlib -Wall -Wextra -m68060 -O2
+all: $(ROM_NAME)
 
-BUILD_DIR = build
-SRC_DIR = src
+$(ROM_NAME): $(OBJS)
+	$(CCPREFIX)ld -Ttext=0x000000 -N -o $(ELF_NAME) $(OBJS)
+	$(CCPREFIX)objcopy -O binary $(ELF_NAME) $(ROM_NAME)
+	dd if=/dev/zero bs=1k count=512 >> $(ROM_NAME)
 
-SOURCES = \
-    $(SRC_DIR)/kernel.c \
-    $(SRC_DIR)/arch/m68k/boot.s
-
-OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-OBJECTS := $(OBJECTS:$(SRC_DIR)/%.s=$(BUILD_DIR)/%.o)
-
-all: $(BUILD_DIR)/neobench.elf
-
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.s
-	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/neobench.elf: $(OBJECTS) link.ld
-	$(LD) -Tlink.ld -nostdlib -o $@ $(OBJECTS)
-
-run: all
-	qemu-system-m68k -M virt -nographic -kernel $(BUILD_DIR)/neobench.elf -serial mon:stdio
+build/rom.o: src/arch/m68k/rom.S
+	mkdir -p build
+	$(CCPREFIX)gcc -ffreestanding -nostdlib -Wall -Wextra -m68000 -O2 -c $< -o $@
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf build

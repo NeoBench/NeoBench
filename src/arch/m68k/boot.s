@@ -1,7 +1,8 @@
-.section .text
-.global _start
+    .section .text
+    .global _start
 
 _start:
-    lea     main,%a0        # Load address of main() into A0
-    jsr     (%a0)           # Jump to C entry point
-    bra     .
+    move.l #0x20000, %sp      /* Set up stack pointer */
+    jsr main                  /* Call C main() */
+loop:
+    bra loop                  /* Hang */

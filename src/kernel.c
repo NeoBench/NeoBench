@@ -1,8 +1,14 @@
+#define UART_TX (*(volatile unsigned char *)0x10000000)
+
 void uart_putc(char c) {
-    asm volatile (
-        "move.b %0, %%d0\n\t"
-        "trap #15"             // example trap, won't work unless emulator or BIOS implements it
-        :
-        : "d"(c)
-    );
+    UART_TX = c;
+}
+
+int main() {
+    uart_putc('N');
+    uart_putc('E');
+    uart_putc('O');
+    uart_putc('\n');
+    while (1) {}
+    return 0;
 }
