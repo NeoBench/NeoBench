@@ -1,5 +1,0 @@
-[build]
-target = "m68k-unknown-none"
-
-[target.m68k-unknown-none]
-linker = "m68k-elf-ld"

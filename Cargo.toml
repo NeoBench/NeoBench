@@ -1,8 +1,0 @@
-# Cargo.toml (root)
-[workspace]
-members = [
-    "src/init/init",
-    "src/neosh/neosh",
-    "src/neoboot"
-]
-resolver = "2"
