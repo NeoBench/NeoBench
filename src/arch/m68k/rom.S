@@ -1,8 +1,18 @@
-    .section .text
-    .globl _start
+.section .text
+.globl _start
 
 _start:
-    jmp entry_point
+    bra main               | Reset vector
+
+.word 0                    | Stack pointer placeholder
+
+main:
+    lea 0x8200, %a7
+    jsr init_aga
+    jsr draw_logo
+    bra .
+
+jmp entry_point
     dc.l 0, 0  /* reserved, part of exec base */
 
 entry_point:
