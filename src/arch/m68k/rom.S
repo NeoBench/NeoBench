@@ -1,22 +1,34 @@
     .section .text
     .globl _start
+
 _start:
-    move.l  #0x100000, %sp        /* Setup stack pointer */
+    lea     0x8200, %sp         | Set stack pointer (Chip RAM)
+    jsr     init_aga            | Init AGA registers
+    jsr     draw_logo           | Draw logo to screen
+    jsr     play_boot_sound     | (optional) play boot sound
+.hang:
+    bra     .hang               | Infinite loop
 
-    /* Enable DMA (bitplane) + display */
-    move.w  #$8200, 0xdff096      /* DMACON: set DMAEN + BPLEN */
-    move.w  #$0200, 0xdff100      /* BPLCON0: 1 bitplane, color mode */
+init_aga:
+    move.w  #0x0200, 0xdff096   | BPLCON0: enable bitplane DMA, HIRES
+    rts
 
-    /* Point BPL1PT to Chip RAM at 0x00010000 */
-    move.w  #0x0001, 0xdff0e0     /* BPL1PTH */
-    move.w  #0x0000, 0xdff0e2     /* BPL1PTL */
+draw_logo:
+    lea     neobench_logo, %a0
+    move.l  %a0, 0xdff0e0       | BPL1PTH: pointer to bitplane
+    move.w  #40, 0xdff108       | BPL1MOD: modulo
+    move.w  #0x0200, 0xdff096   | BPLCON0 again (redundant but safe)
+    move.w  #1, 0xdff0a0        | BPLCON2: one bitplane
+    rts
 
-    /* Fill bitplane memory (0x00010000) with white pixels */
-    lea     0x00010000, %a0
-    move.w  #5120, %d0
-fill:
-    move.l  #0xffffffff, (%a0)+
-    dbra    %d0, fill
+play_boot_sound:
+    rts                         | <- placeholder if not implemented
 
-loop:
-    bra loop
+    .section .data
+    .globl neobench_logo
+neobench_logo:
+    .incbin "build/neobench_logo.raw"
+
+    .globl boot_sound
+boot_sound:
+    .incbin "build/boot_sound.raw"
