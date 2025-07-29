@@ -39,7 +39,7 @@ $(OBJ): $(SRC) $(RAW_LOGO) $(RAW_SOUND)
 $(ROM_BIN): $(OBJ)
 	$(LD) -Ttext=0x000000 -N -o $(ROM_ELF) $(OBJ)
 	$(OBJCOPY) -O binary $(ROM_ELF) $(ROM_BIN)
-	truncate -s 524288 $(ROM_BIN)
+	truncate -s 524288 build/neobench.rom
 
 clean:
 	rm -rf $(BUILD_DIR)
