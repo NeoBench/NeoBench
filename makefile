@@ -1,64 +1,65 @@
 CC=/home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-gcc
 LD=/home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-ld
 OBJCOPY=/home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-objcopy
-
 CFLAGS=-ffreestanding -nostdlib -Wall -Wextra -O2 -m68060
+LDFLAGS=-T linker.ld -N
 
-all: build/neobench.rom
+SRC=src/arch/m68k/rom.S
+BUILD_DIR=build
 
-build/neobench.rom: build/rom.o
-	$(LD) -T linker.ld -o build/neobench.elf build/rom.o
-	$(OBJCOPY) -O binary build/neobench.elf build/neobench.rom
-	truncate -s 524288 build/neobench.rom
+all: $(BUILD_DIR)/neobench.rom
 
-build/rom.o: rom.S build/neobench_logo.raw build/boot_sound.raw
-	mkdir -p build
-	$(CC) $(CFLAGS) -c rom.S -o $@
+$(BUILD_DIR)/neobench.rom: $(BUILD_DIR)/neobench.elf
+	$(OBJCOPY) -O binary $< $@
+	truncate -s 524288 $@
 
-build/neobench_logo.raw: Modern_logo.png
-	mkdir -p build
-	magick Modern_logo.png -resize 320x256\! -colors 2 -depth 1 gray:build/neobench_logo.raw
+$(BUILD_DIR)/neobench.elf: $(BUILD_DIR)/rom.o
+	mkdir -p $(BUILD_DIR)
+	$(LD) $(LDFLAGS) -o $@ $^
+
+$(BUILD_DIR)/rom.o: $(SRC) $(BUILD_DIR)/neobench_logo.raw $(BUILD_DIR)/boot_sound.raw
+	mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/neobench_logo.raw: Modern_logo.png
+	mkdir -p $(BUILD_DIR)
+	magick Modern_logo.png -resize 320x256\! -colors 2 -depth 1 gray:$(BUILD_DIR)/neobench_logo.raw
 
 # Create boot sound - try multiple methods
-build/boot_sound.raw: 
-	mkdir -p build
+$(BUILD_DIR)/boot_sound.raw:
+	mkdir -p $(BUILD_DIR)
 	@echo "Creating boot sound..."
-	@# Method 1: If you have a WAV file, uncomment the next line:
-	@# ffmpeg -y -i "Welcome to NeoBoot.wav" -ar 8000 -ac 1 -t 0.5 -f u8 build/boot_sound.raw
-	@# Method 2: Extract from existing ROM (if audio data exists at known offset)
-	@# dd if=neobench.rom of=build/boot_sound.raw bs=1 skip=65536 count=4000 2>/dev/null || \
-	@# Method 3: Generate a simple boot beep
-	python3 -c "\
+	@python3 -c "\
 import math, struct; \
 sample_rate = 8000; \
 duration = 0.5; \
 frequency = 880; \
 samples = int(sample_rate * duration); \
 data = [int(127 + 100 * math.sin(2 * math.pi * frequency * i / sample_rate)) for i in range(samples)]; \
-open('build/boot_sound.raw', 'wb').write(bytes(data))"
-	@echo "Generated $(shell wc -c < build/boot_sound.raw) bytes of audio data"
+open('$(BUILD_DIR)/boot_sound.raw', 'wb').write(bytes(data))"
+	@echo "Generated $$(wc -c < $(BUILD_DIR)/boot_sound.raw) bytes of audio data"
 
 # Alternative target if you have a WAV file
-build/boot_sound_from_wav.raw: Welcome\ to\ NeoBoot.wav
-	mkdir -p build
-	ffmpeg -y -i "Welcome to NeoBoot.wav" -ar 8000 -ac 1 -t 0.5 -f u8 build/boot_sound.raw
+$(BUILD_DIR)/boot_sound_from_wav.raw: Welcome\ to\ NeoBoot.wav
+	mkdir -p $(BUILD_DIR)
+	ffmpeg -y -i "Welcome to NeoBoot.wav" -ar 8000 -ac 1 -t 0.5 -f u8 $(BUILD_DIR)/boot_sound.raw
 
 clean:
-	rm -rf build
+	rm -rf $(BUILD_DIR)
 
 # Debug targets
-debug-logo: build/neobench_logo.raw
-	@echo "Logo file size: $(shell wc -c < build/neobench_logo.raw) bytes"
+debug-logo: $(BUILD_DIR)/neobench_logo.raw
+	@echo "Logo file size: $$(wc -c < $(BUILD_DIR)/neobench_logo.raw) bytes"
 	@echo "Expected size for 320x256x1bit: $$(( 320 * 256 / 8 )) bytes"
 
-debug-sound: build/boot_sound.raw
-	@echo "Sound file size: $(shell wc -c < build/boot_sound.raw) bytes"
-	@echo "Duration at 8kHz: $$(( $(shell wc -c < build/boot_sound.raw) / 8000 )) seconds"
+debug-sound: $(BUILD_DIR)/boot_sound.raw
+	@echo "Sound file size: $$(wc -c < $(BUILD_DIR)/boot_sound.raw) bytes"
+	@echo "Duration at 8kHz: $$(( $$(wc -c < $(BUILD_DIR)/boot_sound.raw) / 8000 )) seconds"
 
-debug-rom: build/neobench.rom
-	@echo "ROM file size: $(shell wc -c < build/neobench.rom) bytes (should be 524288)"
+debug-rom: $(BUILD_DIR)/neobench.rom
+	@echo "ROM file size: $$(wc -c < $(BUILD_DIR)/neobench.rom) bytes (should be 524288)"
 	@echo "First 32 bytes:"
-	@hexdump -C build/neobench.rom | head -3
+	@hexdump -C $(BUILD_DIR)/neobench.rom | head -3
 
 # Help target
 help:
