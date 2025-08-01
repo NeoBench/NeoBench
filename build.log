@@ -1,0 +1,12 @@
+mkdir -p build
+magick Modern_logo.png -resize 320x256\! -colors 2 -depth 1 gray:build/neobench_logo.raw
+mkdir -p build
+Creating boot sound...
+Generated 4000 bytes of audio data
+mkdir -p build
+/home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-gcc -ffreestanding -nostdlib -Wall -Wextra -O2 -m68060 -c rom.S -o build/rom.o
+mkdir -p build
+/home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-ld -T linker.ld -o build/neobench.elf build/rom.o
+/home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-ld: warning: build/neobench.elf has a LOAD segment with RWX permissions
+/home/adolf/x-tools/m68k-neobench-linux-gnu/bin/m68k-neobench-linux-gnu-objcopy -O binary build/neobench.elf build/neobench.rom
+truncate -s 524288 build/neobench.rom

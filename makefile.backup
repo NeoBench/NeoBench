@@ -1,7 +1,7 @@
 BUILD_DIR = build
 
 # Source files
-SRC = src/main.c src/boot.c src/graphics.c src/audio.c src/mc68060.c src/aga_chipset.c src/copper_effects.c src/mod_player.c src/neobench_desktop.c src/amiga_mmu.c src/bios_interface.c src/multiboot.c resources/backgrounds.c
+SRC = src/main.c src/boot.c src/graphics.c src/audio.c
 LOGO_SOURCE = Modern_logo.png
 AUDIO_SOURCE = Welcome to NeoBoot.wav
 
