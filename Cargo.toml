@@ -1,0 +1,10 @@
+[package]
+name = "neobench"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lord_Protector"]
+
+[dependencies]
+compiler_builtins = { version = "0.1.160", default-features = false, features = ["mem"] }
+
+[build-dependencies]

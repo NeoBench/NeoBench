@@ -1,35 +1,32 @@
 ENTRY(_start)
 
+MEMORY
+{
+    ROM (rx) : ORIGIN = 0x00F80000, LENGTH = 512K
+    RAM (rw) : ORIGIN = 0x00000000, LENGTH = 4M
+}
+
 SECTIONS
 {
-    /* Start address of the ROM */
-    . = 0x000000;
+    .vectors ORIGIN(ROM) :
+    {
+        KEEP(*(.vectors*))
+    } > ROM
 
-    /* Text/code section */
     .text :
     {
-        *(.text)
-    }
-
-    /* Read-only data (if used) */
-    .rodata :
-    {
+        *(.text*)
         *(.rodata*)
-    }
+    } > ROM
 
-    /* Initialized data */
     .data :
     {
-        *(.data)
-    }
+        *(.data*)
+    } > RAM
 
-    /* Uninitialized data */
-    .bss :
+    .bss (NOLOAD) :
     {
-        *(.bss)
+        *(.bss*)
         *(COMMON)
-    }
-
-    /* Pad to 512KB total ROM size */
-    . = 0x80000;
+    } > RAM
 }

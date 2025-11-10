@@ -1,0 +1,19 @@
+{
+  "llvm-target": "m68k-unknown-none",
+  "arch": "m68k",
+  "cpu": "68000",
+  "os": "none",
+  "vendor": "neobench",
+  "linker-flavor": "gcc",
+  "linker": "m68k-amigaos-gcc",
+  "features": "",
+  "executables": true,
+  "panic-strategy": "abort",
+  "disable-redzone": true,
+  "target-pointer-width": 32,
+  "max-atomic-width": 32,
+  "relocation-model": "static",
+  "emit-debug-gdb-scripts": false,
+  "target-endian": "big",
+  "data-layout": "E-m:e-p:32:32-i1:8:32-i8:8:32-i16:16:32-i32:32:32-i64:32:32-f32:32:32-f64:32:32-v64:64:64-a:0:32-n32"
+}

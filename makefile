@@ -1,144 +1,16 @@
-BUILD_DIR = build
+TARGET = neobench-m68k
+ELF = target/$(TARGET)/release/neobench
+ROM = roms/neobench.rom
 
-# Source files
-SRC = src/main.c src/boot.c src/graphics.c src/audio.c src/mc68060.c src/aga_chipset.c src/copper_effects.c src/mod_player.c src/neobench_desktop.c src/amiga_mmu.c src/bios_interface.c src/multiboot.c resources/backgrounds.c
-LOGO_SOURCE = Modern_logo.png
-AUDIO_SOURCE = Welcome to NeoBoot.wav
+all: $(ROM)
 
-# Compiler and linker settings
-CC = gcc
-AS = as
-LD = ld
-OBJCOPY = objcopy
+$(ROM): $(ELF)
+	mkdir -p roms
+	m68k-amigaos-objcopy -O binary $(ELF) $(ROM)
 
-# Flags
-CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector -nostartfiles -nodefaultlibs -Wall -Wextra -Werror -c
-ASFLAGS = --32
-LDFLAGS = -m elf_i386 -T linker.ld
+$(ELF):
+	cargo build --release --target $(TARGET)
 
-# Main targets
-all: $(BUILD_DIR)/neobench.rom
-
-$(BUILD_DIR)/neobench.rom: $(BUILD_DIR)/neobench.elf
-	@echo "Creating ROM image..."
-	$(OBJCOPY) -O binary $< $@
-	@echo "ROM created: $@"
-
-$(BUILD_DIR)/neobench.elf: $(BUILD_DIR)/rom.o
-	@echo "Linking ELF file..."
-	$(LD) $(LDFLAGS) -o $@ $<
-
-$(BUILD_DIR)/rom.o: rom.S $(BUILD_DIR)/neobench_logo.raw $(BUILD_DIR)/boot_sound.raw
-	@echo "Assembling ROM object..."
-	mkdir -p $(BUILD_DIR)
-	$(AS) $(ASFLAGS) -o $@ rom.S
-
-# Logo processing
-$(BUILD_DIR)/neobench_logo.raw: $(LOGO_SOURCE)
-	@echo "Converting logo to raw bitmap..."
-	mkdir -p $(BUILD_DIR)
-	convert "$(LOGO_SOURCE)" -resize 320x256! -depth 1 -type bilevel -colorspace Gray gray:$@
-
-# Audio processing - using WAV conversion
-build/boot_sound.raw: Welcome\ to\ NeoBoot.wav
-	@echo "Converting audio to raw format..."
-	mkdir -p $(BUILD_DIR)
-	ffmpeg -y -i "Welcome to NeoBoot.wav" -ar 8000 -ac 1 -t 0.5 -f u8 $@
-	@echo "Audio conversion complete: 4000 bytes expected"
-
-# Debug targets
-debug-logo: $(BUILD_DIR)/neobench_logo.raw
-	@echo "Logo Debug Information:"
-	@echo "Logo file size: $$(stat -c%s $(BUILD_DIR)/neobench_logo.raw) bytes"
-	@echo "Expected size for 320x256x1bit: 10240 bytes"
-
-debug-sound: $(BUILD_DIR)/boot_sound.raw
-	@echo "Sound Debug Information:"
-	@echo "Sound file size: $$(stat -c%s $(BUILD_DIR)/boot_sound.raw) bytes"
-	@echo "Duration at 8kHz: $$(echo "scale=2; $$(stat -c%s $(BUILD_DIR)/boot_sound.raw) / 8000" | bc) seconds"
-
-debug-rom: $(BUILD_DIR)/neobench.rom
-	@echo "ROM Debug Information:"
-	@echo "ROM file size: $$(stat -c%s $(BUILD_DIR)/neobench.rom) bytes"
-	@echo "Expected size: 524288 bytes (512KB)"
-	@echo ""
-	@echo "Build components:"
-	@echo "  $(BUILD_DIR)/neobench.rom     - Final 512KB ROM file"
-	@echo "  $(BUILD_DIR)/neobench_logo.raw - Processed logo bitmap"
-	@echo "  $(BUILD_DIR)/boot_sound.raw   - Boot sound audio data"
-
-# Alternative targets for different audio formats
-$(BUILD_DIR)/boot_sound_8bit.raw: $(AUDIO_SOURCE)
-	@echo "Converting to 8-bit audio..."
-	mkdir -p $(BUILD_DIR)
-	ffmpeg -y -i $(AUDIO_SOURCE) -ar 8000 -ac 1 -t 0.5 -f u8 $@
-
-$(BUILD_DIR)/boot_sound_16bit.raw: $(AUDIO_SOURCE)
-	@echo "Converting to 16-bit audio..."
-	mkdir -p $(BUILD_DIR)
-	ffmpeg -y -i $(AUDIO_SOURCE) -ar 8000 -ac 1 -t 0.5 -f s16le $@
-
-# Installation and deployment
-install: $(BUILD_DIR)/neobench.rom
-	@echo "Installing ROM to neobench.adf..."
-	cp $(BUILD_DIR)/neobench.rom neobench.adf
-
-# Development helpers
-rebuild: clean all
-
-test-audio: $(BUILD_DIR)/boot_sound.raw
-	@echo "Testing audio file..."
-	@if command -v aplay >/dev/null 2>&1; then \
-		echo "Playing raw audio file with aplay..."; \
-		aplay -f U8 -r 8000 -c 1 $(BUILD_DIR)/boot_sound.raw; \
-	elif command -v ffplay >/dev/null 2>&1; then \
-		echo "Playing raw audio file with ffplay..."; \
-		ffplay -f u8 -ar 8000 -channels 1 -nodisp -autoexit $(BUILD_DIR)/boot_sound.raw; \
-	elif command -v paplay >/dev/null 2>&1; then \
-		echo "Playing raw audio file with paplay..."; \
-		paplay --format=u8 --rate=8000 --channels=1 --raw $(BUILD_DIR)/boot_sound.raw; \
-	else \
-		echo "No audio player available (tried aplay, ffplay, paplay)"; \
-		echo "File info: 4000 bytes, 8kHz, 8-bit unsigned, mono, 0.5 seconds"; \
-	fi
-
-# Information targets
-info:
-	@echo "NeoBench OS Build System"
-	@echo "========================"
-	@echo "Source files: $(SRC)"
-	@echo "Logo source: $(LOGO_SOURCE)"
-	@echo "Audio source: $(AUDIO_SOURCE)"
-	@echo "Build directory: $(BUILD_DIR)"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  all          - Build complete ROM"
-	@echo "  debug-logo   - Debug logo conversion"
-	@echo "  debug-sound  - Debug audio conversion"
-	@echo "  debug-rom    - Debug ROM information"
-	@echo "  install      - Copy ROM to neobench.adf"
-	@echo "  test-audio   - Play converted audio file"
-	@echo "  clean        - Remove all build files"
-	@echo "  rebuild      - Clean and build all"
-
-# File checks
-check-deps:
-	@echo "Checking dependencies..."
-	@command -v ffmpeg >/dev/null 2>&1 || { echo "ffmpeg is required but not installed"; exit 1; }
-	@command -v convert >/dev/null 2>&1 || { echo "ImageMagick convert is required but not installed"; exit 1; }
-	@command -v bc >/dev/null 2>&1 || { echo "bc calculator is required but not installed"; exit 1; }
-	@test -f "$(LOGO_SOURCE)" || { echo "Logo source file missing: $(LOGO_SOURCE)"; exit 1; }
-	@test -f "Welcome to NeoBoot.wav" || { echo "Audio source file missing: Welcome to NeoBoot.wav"; exit 1; }
-	@echo "All dependencies satisfied"
-
-# Cleanup
 clean:
-	@echo "Cleaning build directory..."
-	rm -rf $(BUILD_DIR)
-
-distclean: clean
-	@echo "Cleaning generated files..."
-	rm -f neobench.adf build.log
-
-# Phony targets
-.PHONY: all clean distclean rebuild install info check-deps debug-logo debug-sound debug-rom test-audio
+	cargo clean
+	rm -f $(ROM)
