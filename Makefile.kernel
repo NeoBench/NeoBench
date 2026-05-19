@@ -1,0 +1,62 @@
+VBCC ?= /home/lordp/Downloads/vbcc
+VC   = export VBCC=$(VBCC); export PATH=$(VBCC)/bin:$$PATH; $(VBCC)/bin/vc +aos68k
+VLINK = $(VBCC)/bin/vlink
+VASM = $(VBCC)/bin/vasmm68k_mot
+ROMTOOLS ?= /run/media/lordp/2BC705E7252CB03B/neobench/v1.0.0/toolchain/bin
+CFLAGS = -c99 -O2 -Iinclude -Idrivers/chipset -D__KERNEL__ -D__VBCC__
+ASFLAGS = -Fhunk -m68030
+
+BUILD    ?= build
+OBJS = $(BUILD)/start.o $(BUILD)/kernel.o $(BUILD)/memory.o $(BUILD)/rtg.o $(BUILD)/zorro.o $(BUILD)/bootscreen.o $(BUILD)/string.o $(BUILD)/printf.o $(BUILD)/gui_core.o $(BUILD)/globals.o $(BUILD)/nb_shell.o
+BIN      = $(BUILD)/neobench.bin
+ELF      = $(BUILD)/neobench
+HDF      = $(BUILD)/neobench.hdf
+
+.PHONY: all clean hdf
+
+all: build/neobench
+
+build/neobench: $(OBJS)
+	@mkdir -p build
+	$(VLINK) -bamigahunk -x -Bstatic -Cvbcc -nostdlib -T linker.ld -e _start $(OBJS) -L$(VBCC)/targets/m68k-amigaos/lib -lvc -o $@
+
+$(BUILD)/start.o: boot/start.S
+	@mkdir -p build
+	$(VASM) $(ASFLAGS) $< -o $@
+
+$(BUILD)/kernel.o: kernel/kernel.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/memory.o: kernel/memory.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/rtg.o: drivers/chipset/rtg.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/zorro.o: drivers/chipset/zorro.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/bootscreen.o: kernel/bootscreen.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/string.o: lib/string.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/printf.o: lib/printf.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/gui_core.o: kernel/gui_core.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/globals.o: kernel/globals.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/nb_shell.o: Shell/nb_shell.c
+	@mkdir -p build
+	$(VC) $(CFLAGS) -c $< -o $@
+
+hdf: build/neobench
+	$(ROMTOOLS)/neobench-makehdf build/neobench $(HDF) 64
+
+clean:
+	rm -rf $(BUILD)

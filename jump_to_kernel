@@ -1,0 +1,13 @@
+typedef void (*kernel_entry_t)(void);
+
+void jump_to_kernel(void* entry, void* stack)
+{
+    asm volatile (
+        "mov sp, %0\n"
+        :
+        : "r"(stack)
+    );
+
+    kernel_entry_t kernel = (kernel_entry_t)entry;
+    kernel();
+}

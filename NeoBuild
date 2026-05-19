@@ -1,0 +1,7 @@
+.KEY HDF,KERNEL,BOOTBLOCK
+.DEFAULT HDF "neo"
+.DEFAULT KERNEL "kernel.bin"
+.DEFAULT BOOTBLOCK "bootblock.bin"
+
+echo "Rebuilding NeoBench HDF: <HDF>"
+NeoInstall_Amiga <HDF> <KERNEL> <BOOTBLOCK>

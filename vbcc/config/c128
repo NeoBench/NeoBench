@@ -1,0 +1,15 @@
+-cc=vbcc6502 -I"$VBCC"/targets/6502-c64/include -quiet -cbmascii -mainargs -avoid-bank-switch %s -o= %s %s -O=%ld
+-ccv=vbcc6502 -I"$VBCC"/targets/6502-c64/include -cbmascii -mainargs -avoid-bank-switch %s -o= %s %s -O=%ld
+-mask-opt
+-unsigned-char
+-as=vasm6502_oldstyle -quiet -nowarn=62 -opt-branch -Fvobj %s -o %s -ldots
+-asv=vasm6502_oldstyle -nowarn=62 -Fvobj -opt-branch %s -o %s -ldots
+-rm=rm %s
+-rmv=rm %s
+-cpr=vcpr6502 -quiet %s %s
+-cprv=vcpr6502 %s %s
+-ld=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-c64/vlink128.cmd -L"$VBCC"/targets/6502-c64/lib "$VBCC"/targets/6502-c64/lib/startup128.o %s %s -o %s -lvc
+-ldv=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-c64/vlink128.cmd -L"$VBCC"/targets/6502-c64/lib "$VBCC"/targets/6502-c64/lib/startup128.o %s %s  -o %s -lvc -Mmapfile
+-l2=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-c64/vlink128.cmd -L"$VBCC"/targets/6502-c64/lib %s %s -o %s
+-l2v=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-c64/vlink128.cmd -L"$VBCC"/targets/6502-c64/lib %s %s  -o %s -Mmapfile
+

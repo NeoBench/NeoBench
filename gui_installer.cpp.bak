@@ -1,0 +1,161 @@
+/*
+ * NeoBench Graphical Installer
+ * Windows-style UI for Amiga Bare-Metal Unix Environment
+ */
+
+#include "include/neobench.h"
+#include "include/gui.h"
+
+#ifdef __KERNEL__
+#include "drivers/storage/ide.cpp"
+#include "fs/neofs.cpp"
+using namespace neo::ide;
+#else
+#include <iostream>
+#include <string>
+#include <fstream>
+#include <vector>
+#include <cstring>
+#endif
+
+enum class InstallState {
+    Welcome,
+    License,
+    DiskSelect,
+    Formatting,
+    Copying,
+    Success,
+    Fail
+};
+
+static InstallState g_state = InstallState::Welcome;
+static float g_progress = 0.0f;
+static const char* g_status_msg = "Starting Installer...";
+static char g_target_drive[32] = "Primary Master (IDE 0)";
+
+void draw_windows_frame(int x, int y, int w, int h, const char* title) {
+    using namespace neo::gui;
+    // Main window background
+    fill_rect({x, y, (uint32_t)w, (uint32_t)h}, {0xC0, 0xC0, 0xC0, 0xFF}); // Classic Grey
+    
+    // Border highlights/shadows
+    draw_line(x, y, x+w, y, colors::WHITE);
+    draw_line(x, y, x, y+h, colors::WHITE);
+    draw_line(x+w-1, y, x+w-1, y+h, {0x40, 0x40, 0x40, 0xFF});
+    draw_line(x, y+h-1, x+w, y+h-1, {0x40, 0x40, 0x40, 0xFF});
+
+    // Title bar
+    fill_rect({x+4, y+4, (uint32_t)w-8, 20}, {0x00, 0x00, 0x80, 0xFF}); // Classic Blue
+    draw_text(x+8, y+6, title, colors::WHITE, FontSize::Small);
+
+    // Close button (dummy)
+    fill_rect({x+w-20, y+6, 14, 14}, {0xC0, 0xC0, 0xC0, 0xFF});
+    draw_text(x+w-16, y+7, "x", colors::BLACK, FontSize::Small);
+}
+
+void draw_button(int x, int y, int w, int h, const char* label, bool hovered, bool pressed) {
+    using namespace neo::gui;
+    fill_rect({x, y, (uint32_t)w, (uint32_t)h}, {0xC0, 0xC0, 0xC0, 0xFF});
+    
+    Color topLeft = pressed ? {0x40, 0x40, 0x40, 0xFF} : colors::WHITE;
+    Color bottomRight = pressed ? colors::WHITE : {0x40, 0x40, 0x40, 0xFF};
+
+    draw_line(x, y, x+w, y, topLeft);
+    draw_line(x, y, x, y+h, topLeft);
+    draw_line(x+w-1, y, x+w-1, y+h, bottomRight);
+    draw_line(x, y+h-1, x+w, y+h-1, bottomRight);
+
+    int tw = text_width(label, FontSize::Small);
+    draw_text(x + (w-tw)/2, y + (h-12)/2, label, colors::BLACK, FontSize::Small);
+}
+
+// Simplified installation logic for the prompt
+void RunInstallLogic() {
+    g_state = InstallState::Formatting;
+    g_progress = 0.1f;
+    g_status_msg = "Formatting partitions (NeoFS)...";
+    // ... simulate work ...
+    g_progress = 0.4f;
+    g_status_msg = "Creating Unix directory structure (/bin, /etc, /usr)...";
+    // ... simulate work ...
+    g_progress = 0.7f;
+    g_status_msg = "Copying kernel and system binaries...";
+    // ... simulate work ...
+    g_progress = 1.0f;
+    g_state = InstallState::Success;
+}
+
+#ifdef __KERNEL__
+extern "C" void kernel_main(uint32 cpu_type, uint32 chip_ram, uint32 fast_base, uint32 fast_size, uint32 fpu) {
+#else
+int main() {
+#endif
+    uint32_t sw = 640, sh = 480;
+#ifdef __KERNEL__
+    neo::gui::init(neo::gui::GfxMode::GFX_AGA);
+    neo::mouse::init(sw, sh);
+#endif
+
+    while(true) {
+#ifdef __KERNEL__
+        neo::mouse::update();
+        int32_t mx, my; neo::mouse::get_position(&mx, &my);
+        bool click = neo::mouse::left_pressed();
+#else
+        int32_t mx=0, my=0; bool click=false;
+#endif
+
+        neo::gui::begin_frame();
+        using namespace neo::gui;
+
+        // Desktop background
+        fill_rect({0, 0, sw, sh}, {0x00, 0x80, 0x80, 0xFF}); // Teal
+
+        draw_windows_frame(100, 80, 440, 320, "NeoBench OS Setup");
+
+        // Wizard content area
+        fill_rect({110, 110, 420, 240}, colors::WHITE);
+        draw_line(110, 110, 530, 110, {0x80, 0x80, 0x80, 0xFF});
+        draw_line(110, 110, 110, 350, {0x80, 0x80, 0x80, 0xFF});
+
+        if (g_state == InstallState::Welcome) {
+            draw_text(130, 130, "Welcome to the NeoBench Installation Wizard.", colors::BLACK);
+            draw_text(130, 160, "This program will install NeoBench Unix Kernel", colors::BLACK, FontSize::Small);
+            draw_text(130, 175, "onto your Amiga's hard drive.", colors::BLACK, FontSize::Small);
+            
+            draw_button(440, 360, 80, 24, "Next >", false, false);
+            if (click && mx >= 440 && mx <= 520 && my >= 360 && my <= 384) g_state = InstallState::DiskSelect;
+
+        } else if (g_state == InstallState::DiskSelect) {
+            draw_text(130, 130, "Select Destination Disk:", colors::BLACK);
+            fill_rect({130, 150, 380, 100}, {0xF0, 0xF0, 0xF0, 0xFF});
+            draw_rect({130, 150, 380, 100}, colors::BLACK);
+            draw_text(140, 160, g_target_drive, colors::BLACK, FontSize::Small);
+            draw_text(140, 180, "Size: 512 MB (IDE Master)", {0x40, 0x40, 0x40, 0xFF}, FontSize::Small);
+
+            draw_button(440, 360, 80, 24, "Install", false, false);
+            if (click && mx >= 440 && mx <= 520 && my >= 360 && my <= 384) RunInstallLogic();
+
+        } else if (g_state == InstallState::Formatting || g_state == InstallState::Copying) {
+            draw_text(130, 130, "Installing NeoBench...", colors::BLACK);
+            draw_text(130, 160, g_status_msg, colors::BLACK, FontSize::Small);
+            
+            // Progress bar
+            draw_rect({130, 200, 380, 20}, colors::BLACK);
+            fill_rect({131, 201, (uint32_t)(378 * g_progress), 18}, {0x00, 0x00, 0x80, 0xFF});
+
+        } else if (g_state == InstallState::Success) {
+            draw_text(130, 130, "Installation Complete!", colors::BLACK);
+            draw_text(130, 160, "NeoBench is now installed and ready to boot.", colors::BLACK, FontSize::Small);
+            draw_button(440, 360, 80, 24, "Finish", false, false);
+            if (click && mx >= 440 && mx <= 520 && my >= 360 && my <= 384) {
+                // Reset/Reboot
+            }
+        }
+
+        neo::gui::end_frame();
+    }
+#ifndef __KERNEL__
+    return 0;
+#endif
+}

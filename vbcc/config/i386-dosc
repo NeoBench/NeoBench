@@ -1,0 +1,12 @@
+-safe-fp
+-elf
+-cc=vbcci386 -quiet -I"$VBCC"/targets/i386-dos/include %s -o= %s %s -O=%ld
+-ccv=vbcci386 -I"$VBCC"/targets/i386-dos/include %s -o= %s %s -O=%ld
+-as=vasmx86_std -Felf -quiet -nowarn=62 %s -o %s
+-asv=vasmx86_std -Felf -nowarn=62 %s -o %s
+-rm=rm %s
+-rmv=rm %s
+-ld=vlink -Cvbccelf -brawbin1 -T"$VBCC"/targets/i386-dos/vlink.cmd -L"$VBCC"/targets/i386-dos/lib "$VBCC"/targets/i386-dos/lib/startup.o %s %s -lvc -o %s -e __cstart
+-ldv=vlink -v -Cvbccelf -brawbin1 -T"$VBCC"/targets/i386-dos/vlink.cmd -L"$VBCC"/targets/i386-dos/lib "$VBCC"/targets/i386-dos/lib/startup.o %s %s -lvc -o %s -e __cstart
+-l2=vlink -brawbin1 -T"$VBCC"/targets/i386-dos/vlink.cmd -L"$VBCC"/targets/i386-dos/lib %s %s -o %s -e __cstart
+-l2v=vlink -v -brawbin1 -T"$VBCC"/targets/i386-dos/vlink.cmd -L"$VBCC"/targets/i386-dos/lib %s %s -o %s -e __cstart

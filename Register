@@ -1,0 +1,5 @@
+static disk_t primary_disk = {
+    .sector_size = 512,
+    .total_sectors = 0,
+    .read = ata_read
+};

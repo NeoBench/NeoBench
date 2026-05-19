@@ -1,0 +1,8 @@
+CC = g++
+CFLAGS = -O2 -Wall -std=c++17 -I.
+
+format: format.cpp
+	$(CC) $(CFLAGS) -o bin/format format.cpp
+
+clean:
+	rm -f bin/format

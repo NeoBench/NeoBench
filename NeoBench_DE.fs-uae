@@ -1,0 +1,13 @@
+config_description=NeoBench Linux Desktop Environment
+cpu_type=68040
+fpu=true
+mmu=true
+chipset=aga
+chipmem_size=2
+fastmem_size=64
+kickstart_rom_file=Kickstart_v3.2_A4000.rom
+hard_drive_0=/home/lordp/NeoBench_Linux_DE
+hard_drive_1=/home/lordp/Projects/linux_m68k.hdf
+gfx_width=1024
+gfx_height=768
+gfx_windowed=1

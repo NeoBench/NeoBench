@@ -1,0 +1,6 @@
+typedef struct {
+    const char* name;
+    const char* kernel_path;
+    const char* args;
+    unsigned int load_addr;
+} boot_entry_t;

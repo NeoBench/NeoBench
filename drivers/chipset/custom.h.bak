@@ -1,0 +1,546 @@
+/*
+ * NeoBench Bare-Metal Amiga Kernel
+ * Custom Chip Register Helpers
+ *
+ * Hardware register helpers, Copper macros, display mode constants,
+ * and color helpers for OCS/ECS/AGA chipsets.
+ */
+
+#ifndef NEOBENCH_CUSTOM_H
+#define NEOBENCH_CUSTOM_H
+
+#include "../include/neobench.h"
+#include "../include/types.h"
+
+/* ========================================================================
+ * Custom Chip Base Address
+ * ======================================================================== */
+
+#define CUSTOM_BASE         0xDFF000
+
+/* ========================================================================
+ * Custom Chip Register Offsets
+ * ======================================================================== */
+
+/* Blitter registers */
+#define BLTCON0             0x040
+#define BLTCON1             0x042
+#define BLTAFWM             0x044
+#define BLTALWM             0x046
+#define BLTCPTH             0x048
+#define BLTCPTL             0x04A
+#define BLTBPTH             0x04C
+#define BLTBPTL             0x04E
+#define BLTAPTH             0x050
+#define BLTAPTL             0x052
+#define BLTDPTH             0x054
+#define BLTDPTL             0x056
+#define BLTSIZE             0x058
+#define BLTCON0L            0x05A  /* ECS+ */
+#define BLTSIZV             0x05C  /* ECS+ */
+#define BLTSIZH             0x05E  /* ECS+ */
+#define BLTCMOD             0x060
+#define BLTBMOD             0x062
+#define BLTAMOD             0x064
+#define BLTDMOD             0x066
+#define BLTCDAT             0x070
+#define BLTBDAT             0x072
+#define BLTADAT             0x074
+
+/* Copper registers */
+#define COP1LCH             0x080
+#define COP1LCL             0x082
+#define COP2LCH             0x084
+#define COP2LCL             0x086
+#define COPJMP1             0x088
+#define COPJMP2             0x08A
+#define COPINS              0x08C
+
+/* Display registers */
+#define DIWSTRT             0x08E
+#define DIWSTOP             0x090
+#define DDFSTRT             0x092
+#define DDFSTOP             0x094
+#define DMACON              0x096
+#define CLXCON              0x098
+#define INTENA              0x09A
+#define INTREQ              0x09C
+
+/* Bitplane pointers */
+#define BPL1PTH             0x0E0
+#define BPL1PTL             0x0E2
+#define BPL2PTH             0x0E4
+#define BPL2PTL             0x0E6
+#define BPL3PTH             0x0E8
+#define BPL3PTL             0x0EA
+#define BPL4PTH             0x0EC
+#define BPL4PTL             0x0EE
+#define BPL5PTH             0x0F0
+#define BPL5PTL             0x0F2
+#define BPL6PTH             0x0F4
+#define BPL6PTL             0x0F6
+#define BPL7PTH             0x0F8  /* AGA */
+#define BPL7PTL             0x0FA  /* AGA */
+#define BPL8PTH             0x0FC  /* AGA */
+#define BPL8PTL             0x0FE  /* AGA */
+
+/* Bitplane control */
+#define BPLCON0             0x100
+#define BPLCON1             0x102
+#define BPLCON2             0x104
+#define BPLCON3             0x106  /* ECS/AGA */
+#define BPLCON4             0x10C  /* AGA */
+#define BPL1MOD             0x108
+#define BPL2MOD             0x10A
+
+/* Bitplane data */
+#define BPL1DAT             0x110
+#define BPL2DAT             0x112
+#define BPL3DAT             0x114
+#define BPL4DAT             0x116
+#define BPL5DAT             0x118
+#define BPL6DAT             0x11A
+#define BPL7DAT             0x11C  /* AGA */
+#define BPL8DAT             0x11E  /* AGA */
+
+/* Sprite registers */
+#define SPR0PTH             0x120
+#define SPR0PTL             0x122
+#define SPR1PTH             0x124
+#define SPR1PTL             0x126
+#define SPR2PTH             0x128
+#define SPR2PTL             0x12A
+#define SPR3PTH             0x12C
+#define SPR3PTL             0x12E
+#define SPR4PTH             0x130
+#define SPR4PTL             0x132
+#define SPR5PTH             0x134
+#define SPR5PTL             0x136
+#define SPR6PTH             0x138
+#define SPR6PTL             0x13A
+#define SPR7PTH             0x13C
+#define SPR7PTL             0x13E
+
+/* Color registers */
+#define COLOR00             0x180
+#define COLOR01             0x182
+#define COLOR02             0x184
+#define COLOR03             0x186
+#define COLOR04             0x188
+#define COLOR05             0x18A
+#define COLOR06             0x18C
+#define COLOR07             0x18E
+#define COLOR08             0x190
+#define COLOR09             0x192
+#define COLOR10             0x194
+#define COLOR11             0x196
+#define COLOR12             0x198
+#define COLOR13             0x19A
+#define COLOR14             0x19C
+#define COLOR15             0x19E
+#define COLOR16             0x1A0
+#define COLOR17             0x1A2
+#define COLOR18             0x1A4
+#define COLOR19             0x1A6
+#define COLOR20             0x1A8
+#define COLOR21             0x1AA
+#define COLOR22             0x1AC
+#define COLOR23             0x1AE
+#define COLOR24             0x1B0
+#define COLOR25             0x1B2
+#define COLOR26             0x1B4
+#define COLOR27             0x1B6
+#define COLOR28             0x1B8
+#define COLOR29             0x1BA
+#define COLOR30             0x1BC
+#define COLOR31             0x1BE
+
+/* Sprite data */
+#define SPR0POS             0x140
+#define SPR0CTL             0x142
+#define SPR0DATA            0x144
+#define SPR0DATB            0x146
+
+/* Audio registers */
+#define AUD0LCH             0x0A0
+#define AUD0LCL             0x0A2
+#define AUD0LEN             0x0A4
+#define AUD0PER             0x0A6
+#define AUD0VOL             0x0A8
+#define AUD0DAT             0x0AA
+#define AUD1LCH             0x0B0
+#define AUD1LCL             0x0B2
+#define AUD1LEN             0x0B4
+#define AUD1PER             0x0B6
+#define AUD1VOL             0x0B8
+#define AUD1DAT             0x0BA
+#define AUD2LCH             0x0C0
+#define AUD2LCL             0x0C2
+#define AUD2LEN             0x0C4
+#define AUD2PER             0x0C6
+#define AUD2VOL             0x0C8
+#define AUD2DAT             0x0CA
+#define AUD3LCH             0x0D0
+#define AUD3LCL             0x0D2
+#define AUD3LEN             0x0D4
+#define AUD3PER             0x0D6
+#define AUD3VOL             0x0D8
+#define AUD3DAT             0x0DA
+
+/* Disk registers */
+#define DSKPTH              0x020
+#define DSKPTL              0x022
+#define DSKLEN              0x024
+#define DSKDAT              0x026
+#define DSKSYNC             0x07E
+
+/* Serial registers */
+#define SERDAT              0x030
+#define SERDATR             0x018
+#define SERPER              0x032
+
+/* Read-only registers */
+#define VPOSR               0x004
+#define VHPOSR              0x006
+#define DMACONR             0x002
+#define INTENAR             0x01C
+#define INTREQR             0x01E
+#define ADKCONR             0x010
+#define DENISEID            0x07C
+#define JOY0DAT             0x00A
+#define JOY1DAT             0x00C
+#define POTGOR              0x016
+
+/* AGA specific */
+#define FMODE               0x1FC
+#define HTOTAL              0x1C0
+#define HSSTOP              0x1C2
+#define HBSTRT              0x1C4
+#define HBSTOP              0x1C6
+#define VTOTAL              0x1C8
+#define VSSTOP              0x1CA
+#define VBSTRT              0x1CC
+#define VBSTOP              0x1CE
+#define BEAMCON0            0x1DC
+#define HSSTRT              0x1DE
+#define VSSTRT              0x1E0
+#define HCENTER             0x1E2
+#define DIWHIGH             0x1E4  /* ECS/AGA */
+
+/* ADKCON */
+#define ADKCON              0x09E
+
+/* ========================================================================
+ * DMA Control Bits
+ * ======================================================================== */
+
+#define DMAF_SETCLR         0x8000
+#define DMAF_AUD0           0x0001
+#define DMAF_AUD1           0x0002
+#define DMAF_AUD2           0x0004
+#define DMAF_AUD3           0x0008
+#define DMAF_AUDIO          0x000F
+#define DMAF_DISK           0x0010
+#define DMAF_SPRITE         0x0020
+#define DMAF_BLITTER        0x0040
+#define DMAF_COPPER         0x0080
+#define DMAF_RASTER         0x0100
+#define DMAF_MASTER          0x0200
+#define DMAF_BLITHOG        0x0400
+#define DMAF_ALL            0x03FF
+
+/* ========================================================================
+ * Interrupt Bits
+ * ======================================================================== */
+
+#define INTF_SETCLR         0x8000
+#define INTF_TBE            0x0001  /* Serial transmit buffer empty */
+#define INTF_DSKBLK         0x0002  /* Disk block done */
+#define INTF_SOFTINT        0x0004  /* Software interrupt */
+#define INTF_PORTS          0x0008  /* CIA-A (keyboard, etc) */
+#define INTF_COPER          0x0010  /* Copper */
+#define INTF_VERTB          0x0020  /* Vertical blank */
+#define INTF_BLIT           0x0040  /* Blitter done */
+#define INTF_AUD0           0x0080  /* Audio ch 0 */
+#define INTF_AUD1           0x0100
+#define INTF_AUD2           0x0200
+#define INTF_AUD3           0x0400
+#define INTF_RBF            0x0800  /* Serial receive buffer full */
+#define INTF_DSKSYN         0x1000  /* Disk sync */
+#define INTF_EXTER          0x2000  /* CIA-B (disk, serial) */
+#define INTF_INTEN          0x4000  /* Master interrupt enable */
+
+/* ========================================================================
+ * BPLCON0 Bits
+ * ======================================================================== */
+
+#define BPLCON0_HIRES       0x8000
+#define BPLCON0_BPU2        0x4000
+#define BPLCON0_BPU1        0x2000
+#define BPLCON0_BPU0        0x1000
+#define BPLCON0_HAM         0x0800
+#define BPLCON0_DPF         0x0400  /* Dual playfield */
+#define BPLCON0_COLOR       0x0200  /* Composite color enable */
+#define BPLCON0_GAUD        0x0100  /* Genlock audio */
+#define BPLCON0_UHRES       0x0080  /* Ultra-hires (AGA) */
+#define BPLCON0_SHRES       0x0040  /* Super-hires (AGA) */
+#define BPLCON0_BYPASS      0x0020
+#define BPLCON0_BPU3        0x0010  /* AGA 8th bitplane */
+#define BPLCON0_LPEN        0x0008
+#define BPLCON0_LACE        0x0004
+#define BPLCON0_ERSY        0x0002
+#define BPLCON0_ECSENA      0x0001
+
+/* ========================================================================
+ * Display Mode Constants
+ * ======================================================================== */
+
+#define DISPMODE_LORES      0x0000
+#define DISPMODE_HIRES      0x8000
+#define DISPMODE_SUPERHIRES 0x0040  /* SHRES bit in BPLCON0 */
+#define DISPMODE_HAM6       0x0800  /* HAM + 6 bitplanes */
+#define DISPMODE_HAM8       0x0810  /* HAM + 8 bitplanes (AGA) */
+#define DISPMODE_EHB        0x0080  /* Extra half-brite */
+#define DISPMODE_LACE       0x0004
+#define DISPMODE_DPF        0x0400  /* Dual playfield */
+
+/* PAL vs NTSC */
+#define PAL_LINES           312
+#define NTSC_LINES          262
+#define PAL_VFREQ           50
+#define NTSC_VFREQ          60
+
+/* ========================================================================
+ * Inline Hardware Access Functions
+ * ======================================================================== */
+
+static inline void custom_write(uint16_t reg, uint16_t value)
+{
+    *((volatile uint16_t *)(CUSTOM_BASE + reg)) = value;
+}
+
+static inline uint16_t custom_read(uint16_t reg)
+{
+    return *((volatile uint16_t *)(CUSTOM_BASE + reg));
+}
+
+static inline void custom_write32(uint16_t reg, uint32_t value)
+{
+    volatile uint16_t *ptr = (volatile uint16_t *)(CUSTOM_BASE + reg);
+    ptr[0] = (uint16_t)(value >> 16);
+    ptr[1] = (uint16_t)(value & 0xFFFF);
+}
+
+/* ========================================================================
+ * Blitter Wait
+ * ======================================================================== */
+
+static inline void wait_blit(void)
+{
+    /* Read DMACONR - bit 14 is BBUSY */
+    while (custom_read(DMACONR) & (1 << 14)) {
+        /* busy-wait */
+    }
+}
+
+/* ========================================================================
+ * VBlank Wait
+ * ======================================================================== */
+
+static inline void wait_vblank(void)
+{
+    /* Wait until we leave vblank region first */
+    while ((custom_read(VPOSR) & 0x0001) && (custom_read(VHPOSR) >> 8) >= 300) {
+        /* in vblank, wait to leave */
+    }
+    /* Now wait for vertical position to reach line 300+ (PAL vblank start ~line 312) */
+    while (!((custom_read(VPOSR) & 0x0001) || (custom_read(VHPOSR) >> 8) >= 300)) {
+        /* wait for vblank */
+    }
+}
+
+/* Simple version: wait for INTREQR VERTB flag */
+static inline void wait_vblank_int(void)
+{
+    custom_write(INTREQ, INTF_VERTB);  /* clear pending */
+    while (!(custom_read(INTREQR) & INTF_VERTB)) {
+        /* wait */
+    }
+}
+
+/* ========================================================================
+ * Copper Instruction Macros
+ *
+ * Copper instructions are 32 bits (2 words):
+ *   MOVE: first word = register address, second word = data
+ *   WAIT: first word = VP.HP with bit 0 = 0, second word = mask with bit 0 = 1
+ * ======================================================================== */
+
+/* CMOVE: Write value to a custom chip register via Copper */
+#define CMOVE(reg, val)     (uint32_t)(((uint32_t)(reg) << 16) | (uint32_t)(val))
+
+/* CWAIT: Wait for beam to reach (vpos, hpos) */
+#define CWAIT(vpos, hpos)   (uint32_t)((((uint32_t)(vpos) & 0xFF) << 24) | \
+                             (((uint32_t)(hpos) & 0xFE) << 16) | \
+                             0x0001FFFE)
+
+/* CWAIT with mask */
+#define CWAIT_MASK(vpos, hpos, vmask, hmask) \
+    (uint32_t)((((uint32_t)(vpos) & 0xFF) << 24) | \
+               (((uint32_t)(hpos) & 0xFE) << 16) | \
+               (((uint32_t)(vmask) & 0x7F) << 8) | \
+               ((uint32_t)(hmask) & 0xFE) | 0x0001)
+
+/* CEND: End of Copper list (wait for impossible position) */
+#define CEND                (uint32_t)0xFFFFFFFE
+
+/* Helper to split a 32-bit Copper instruction into two 16-bit words */
+#define COP_WORD1(inst)     ((uint16_t)((inst) >> 16))
+#define COP_WORD2(inst)     ((uint16_t)((inst) & 0xFFFF))
+
+/* Write a MOVE instruction into a copper list array */
+static inline void cop_move(uint16_t *list, int *pos, uint16_t reg, uint16_t val)
+{
+    list[(*pos)++] = reg;
+    list[(*pos)++] = val;
+}
+
+/* Write a WAIT instruction into a copper list array */
+static inline void cop_wait(uint16_t *list, int *pos, uint8_t vpos, uint8_t hpos)
+{
+    list[(*pos)++] = ((uint16_t)vpos << 8) | ((uint16_t)(hpos & 0xFE)) | 0x0001;
+    list[(*pos)++] = 0xFFFE;
+}
+
+/* Write end-of-list */
+static inline void cop_end(uint16_t *list, int *pos)
+{
+    list[(*pos)++] = 0xFFFF;
+    list[(*pos)++] = 0xFFFE;
+}
+
+/* ========================================================================
+ * Sprite DMA Helpers
+ * ======================================================================== */
+
+static inline void sprite_set_ptr(int sprite_num, uint32_t address)
+{
+    uint16_t reg = SPR0PTH + (sprite_num * 4);
+    custom_write(reg,     (uint16_t)(address >> 16));
+    custom_write(reg + 2, (uint16_t)(address & 0xFFFF));
+}
+
+/* Disable all sprites by pointing them at a null sprite structure */
+static inline void sprites_off(uint32_t null_sprite_addr)
+{
+    for (int i = 0; i < 8; i++) {
+        sprite_set_ptr(i, null_sprite_addr);
+    }
+}
+
+/* ========================================================================
+ * Color Register Helpers
+ * ======================================================================== */
+
+/* OCS/ECS: 12-bit color (4 bits per component) */
+static inline uint16_t rgb4(uint8_t r, uint8_t g, uint8_t b)
+{
+    return ((uint16_t)(r & 0x0F) << 8) |
+           ((uint16_t)(g & 0x0F) << 4) |
+           ((uint16_t)(b & 0x0F));
+}
+
+/* Set an OCS/ECS color register (0-31) */
+static inline void set_color_ocs(int index, uint8_t r4, uint8_t g4, uint8_t b4)
+{
+    custom_write(COLOR00 + (index * 2), rgb4(r4, g4, b4));
+}
+
+/* AGA: 24-bit color via bank switching
+ * BPLCON3 bits 13-15 select the color bank (0-7, each bank = 32 colors)
+ * To set the low nibbles, write with LOCT bit (bit 9 of BPLCON3) set
+ */
+static inline void set_color_aga(int index, uint8_t r8, uint8_t g8, uint8_t b8)
+{
+    int bank = (index >> 5) & 0x07;
+    int reg_index = index & 0x1F;
+    uint16_t reg_offset = COLOR00 + (reg_index * 2);
+
+    /* Select color bank - upper nibbles first */
+    uint16_t bplcon3_base = custom_read(BPLCON3) & 0x003F;  /* preserve low bits */
+
+    /* Write upper 4 bits of each component */
+    custom_write(BPLCON3, (uint16_t)(bank << 13) | bplcon3_base);
+    custom_write(reg_offset, rgb4(r8 >> 4, g8 >> 4, b8 >> 4));
+
+    /* Write lower 4 bits via LOCT (bit 9) */
+    custom_write(BPLCON3, (uint16_t)(bank << 13) | bplcon3_base | 0x0200);
+    custom_write(reg_offset, rgb4(r8 & 0x0F, g8 & 0x0F, b8 & 0x0F));
+
+    /* Restore BPLCON3 */
+    custom_write(BPLCON3, bplcon3_base);
+}
+
+/* ========================================================================
+ * Bitplane Pointer Helpers
+ * ======================================================================== */
+
+static inline void set_bpl_ptr(int plane, uint32_t address)
+{
+    uint16_t reg = BPL1PTH + (plane * 4);
+    custom_write(reg,     (uint16_t)(address >> 16));
+    custom_write(reg + 2, (uint16_t)(address & 0xFFFF));
+}
+
+/* Write bitplane pointers into a copper list */
+static inline void cop_set_bpl_ptrs(uint16_t *list, int *pos,
+                                     uint32_t *plane_ptrs, int num_planes)
+{
+    for (int i = 0; i < num_planes; i++) {
+        uint16_t reg = BPL1PTH + (i * 4);
+        cop_move(list, pos, reg,     (uint16_t)(plane_ptrs[i] >> 16));
+        cop_move(list, pos, reg + 2, (uint16_t)(plane_ptrs[i] & 0xFFFF));
+    }
+}
+
+/* ========================================================================
+ * Chipset Detection
+ * ======================================================================== */
+
+enum ChipsetType {
+    CHIPSET_OCS     = 0,
+    CHIPSET_ECS     = 1,
+    CHIPSET_AGA     = 2
+};
+
+static inline ChipsetType detect_agnus(void)
+{
+    uint16_t vposr = custom_read(VPOSR);
+    uint8_t agnus_id = (vposr >> 8) & 0x7F;
+
+    if (agnus_id >= 0x20) {
+        return CHIPSET_AGA;  /* Alice */
+    } else if (agnus_id >= 0x10) {
+        return CHIPSET_ECS;  /* Fat Agnus / Super Agnus */
+    }
+    return CHIPSET_OCS;  /* Thin/Fat Agnus (original) */
+}
+
+static inline ChipsetType detect_denise(void)
+{
+    uint16_t denise = custom_read(DENISEID);
+
+    if (denise == 0x00F8) {
+        return CHIPSET_AGA;  /* Lisa */
+    } else if (denise == 0x00FC) {
+        return CHIPSET_ECS;  /* Super Denise */
+    }
+    return CHIPSET_OCS;  /* Denise (8362) */
+}
+
+static inline bool is_pal(void)
+{
+    return (custom_read(VPOSR) & 0x1000) != 0;
+}
+
+#endif /* NEOBENCH_CUSTOM_H */

@@ -1,0 +1,462 @@
+/*
+ * NeoBench Bare-Metal Amiga Kernel
+ * AGA Display Driver
+ *
+ * Provides 80x32 (or 80x60) text console using AGA 256-color mode.
+ * Supports 24-bit palette, FMODE bandwidth, and optionally HAM8.
+ */
+
+#include "../include/neobench.h"
+#include "../include/types.h"
+#include "custom.h"
+
+namespace neo {
+namespace aga {
+
+/* ========================================================================
+ * Configuration
+ * ======================================================================== */
+
+static constexpr int SCREEN_WIDTH       = 640;
+static constexpr int SCREEN_HEIGHT_PAL  = 256;
+static constexpr int SCREEN_HEIGHT_NTSC = 200;
+static constexpr int SCREEN_HEIGHT_DBLPAL  = 512;  /* Interlaced or scandoubled */
+
+static constexpr int FONT_WIDTH         = 8;
+static constexpr int FONT_HEIGHT        = 8;
+static constexpr int COLS               = 80;
+static constexpr int ROWS_PAL           = 32;
+static constexpr int ROWS_NTSC          = 25;
+
+static constexpr int NUM_BITPLANES      = 8;   /* 256 colors */
+static constexpr int BYTES_PER_ROW      = SCREEN_WIDTH / 8;  /* 80 bytes */
+
+static constexpr int COPLIST_SIZE       = 512;
+
+/* ========================================================================
+ * External dependencies
+ * ======================================================================== */
+
+/* Font from ECS driver */
+namespace ecs {
+    extern const uint8_t *get_font(void);
+}
+
+extern "C" void *chip_alloc(uint32_t size, uint32_t alignment);
+
+/* ========================================================================
+ * State
+ * ======================================================================== */
+
+static int screen_height;
+static int rows;
+static int cursor_x;
+static int cursor_y;
+static int vblank_counter;
+static bool cursor_visible;
+
+static uint8_t *bitplane[NUM_BITPLANES];
+static uint16_t *copperlist;
+static uint32_t plane_size;
+static uint32_t null_sprite[2] __attribute__((aligned(4)));
+
+/* FMODE setting: 0=normal, 1=2x fetch, 3=4x fetch */
+static uint16_t fmode_value;
+
+/* ========================================================================
+ * 24-bit Color Palette via Copper
+ *
+ * AGA stores colors as 24-bit: upper 4 bits written normally,
+ * lower 4 bits written with BPLCON3 LOCT bit set.
+ * ======================================================================== */
+
+struct Color24 {
+    uint8_t r, g, b;
+};
+
+static Color24 palette[256];
+
+static void set_palette_entry(int index, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (index < 0 || index > 255) return;
+    palette[index] = { r, g, b };
+    set_color_aga(index, r, g, b);
+}
+
+/* Set up a pleasant default 256-color palette for text rendering */
+static void init_default_palette(void)
+{
+    /* Color 0: Background - dark navy */
+    set_palette_entry(0, 0x08, 0x08, 0x20);
+
+    /* Color 1: Primary text - bright white */
+    set_palette_entry(1, 0xE0, 0xE0, 0xE0);
+
+    /* Color 2: Secondary text - cyan */
+    set_palette_entry(2, 0x40, 0xA0, 0xC0);
+
+    /* Color 3: Highlight - green */
+    set_palette_entry(3, 0x00, 0xE0, 0x60);
+
+    /* Color 4: Warning - yellow */
+    set_palette_entry(4, 0xE0, 0xC0, 0x00);
+
+    /* Color 5: Error - red */
+    set_palette_entry(5, 0xE0, 0x30, 0x30);
+
+    /* Color 6: Accent - purple */
+    set_palette_entry(6, 0xA0, 0x40, 0xE0);
+
+    /* Color 7: Dim text - grey */
+    set_palette_entry(7, 0x80, 0x80, 0x80);
+
+    /* Anti-aliased text shades (colors 8-15) - gradient from bg to fg */
+    for (int i = 0; i < 8; i++) {
+        uint8_t v = (uint8_t)(0x08 + (i * (0xE0 - 0x08)) / 7);
+        set_palette_entry(8 + i, v, v, (uint8_t)(v + 0x10 > 0xFF ? 0xFF : v + 0x10));
+    }
+
+    /* Colors 16-255: extended palette (gradients, etc.) */
+    for (int i = 16; i < 256; i++) {
+        uint8_t r = (uint8_t)((i & 0xE0));
+        uint8_t g = (uint8_t)((i & 0x1C) << 3);
+        uint8_t b = (uint8_t)((i & 0x03) << 6);
+        set_palette_entry(i, r, g, b);
+    }
+}
+
+/* ========================================================================
+ * Copper List Construction
+ * ======================================================================== */
+
+static void build_copperlist(void)
+{
+    int pos = 0;
+
+    /* Set FMODE for increased bandwidth */
+    cop_move(copperlist, &pos, FMODE, fmode_value);
+
+    /* BPLCON0: hires, 8 bitplanes, color, AGA BPU3 bit */
+    uint16_t bplcon0 = BPLCON0_HIRES | BPLCON0_COLOR |
+                       (7 << 12) |   /* BPU2-0 = 7 */
+                       BPLCON0_BPU3;  /* 8th bitplane */
+    cop_move(copperlist, &pos, BPLCON0, bplcon0);
+
+    /* BPLCON1: no scroll */
+    cop_move(copperlist, &pos, BPLCON1, 0x0000);
+
+    /* BPLCON2: default sprite/playfield priorities */
+    cop_move(copperlist, &pos, BPLCON2, 0x0024);
+
+    /* BPLCON3: AGA features - color bank 0, sprite resolution */
+    cop_move(copperlist, &pos, BPLCON3, 0x0C00);
+
+    /* BPLCON4: sprite-color-base and bitplane color XOR */
+    cop_move(copperlist, &pos, BPLCON4, 0x0011);
+
+    /* Display window - PAL standard */
+    cop_move(copperlist, &pos, DIWSTRT, 0x2C81);
+    cop_move(copperlist, &pos, DIWSTOP, 0x2CC1);
+    cop_move(copperlist, &pos, DIWHIGH, 0x0000);
+
+    /* Data fetch - hires with 64-bit fetch mode */
+    if (fmode_value >= 3) {
+        /* FMODE 4x: wider fetch window */
+        cop_move(copperlist, &pos, DDFSTRT, 0x0018);
+        cop_move(copperlist, &pos, DDFSTOP, 0x00D8);
+    } else {
+        cop_move(copperlist, &pos, DDFSTRT, 0x003C);
+        cop_move(copperlist, &pos, DDFSTOP, 0x00D4);
+    }
+
+    /* Bitplane modulos */
+    cop_move(copperlist, &pos, BPL1MOD, 0x0000);
+    cop_move(copperlist, &pos, BPL2MOD, 0x0000);
+
+    /* Bitplane pointers */
+    for (int i = 0; i < NUM_BITPLANES; i++) {
+        uint32_t addr = (uint32_t)bitplane[i];
+        uint16_t reg = BPL1PTH + (i * 4);
+        cop_move(copperlist, &pos, reg,     (uint16_t)(addr >> 16));
+        cop_move(copperlist, &pos, reg + 2, (uint16_t)(addr & 0xFFFF));
+    }
+
+    /* Disable sprites */
+    for (int i = 0; i < 8; i++) {
+        uint32_t ns = (uint32_t)&null_sprite[0];
+        cop_move(copperlist, &pos, SPR0PTH + (i * 4),
+                 (uint16_t)(ns >> 16));
+        cop_move(copperlist, &pos, SPR0PTH + (i * 4) + 2,
+                 (uint16_t)(ns & 0xFFFF));
+    }
+
+    /* Write palette via copper for all 256 colors */
+    /* Upper nibbles first (8 banks × 32 colors) */
+    for (int bank = 0; bank < 8; bank++) {
+        /* Select bank */
+        cop_move(copperlist, &pos, BPLCON3,
+                 (uint16_t)((bank << 13) | 0x0C00));
+
+        for (int c = 0; c < 32; c++) {
+            int idx = bank * 32 + c;
+            uint16_t upper = rgb4(palette[idx].r >> 4,
+                                  palette[idx].g >> 4,
+                                  palette[idx].b >> 4);
+            cop_move(copperlist, &pos, COLOR00 + (c * 2), upper);
+        }
+
+        /* Lower nibbles (LOCT bit set) */
+        cop_move(copperlist, &pos, BPLCON3,
+                 (uint16_t)((bank << 13) | 0x0E00));
+
+        for (int c = 0; c < 32; c++) {
+            int idx = bank * 32 + c;
+            uint16_t lower = rgb4(palette[idx].r & 0x0F,
+                                  palette[idx].g & 0x0F,
+                                  palette[idx].b & 0x0F);
+            cop_move(copperlist, &pos, COLOR00 + (c * 2), lower);
+        }
+    }
+
+    /* Restore BPLCON3 */
+    cop_move(copperlist, &pos, BPLCON3, 0x0C00);
+
+    cop_end(copperlist, &pos);
+}
+
+/* ========================================================================
+ * Character Rendering
+ * ======================================================================== */
+
+/* Reference to ECS font data */
+static const uint8_t *font_data;
+
+static void render_char(int col, int row, uint8_t ch, uint8_t color)
+{
+    if (ch < 32 || ch > 126) ch = 32;
+
+    const uint8_t *glyph = font_data + ((ch - 32) * FONT_HEIGHT);
+    int byte_offset = col;
+    int line_offset = row * FONT_HEIGHT * BYTES_PER_ROW;
+
+    for (int y = 0; y < FONT_HEIGHT; y++) {
+        int offset = line_offset + (y * BYTES_PER_ROW) + byte_offset;
+        uint8_t bits = glyph[y];
+
+        for (int plane = 0; plane < NUM_BITPLANES; plane++) {
+            bitplane[plane][offset] = (color & (1 << plane)) ? bits : 0x00;
+        }
+    }
+}
+
+/* Render with anti-aliased edges using palette colors 8-15 */
+static void render_char_aa(int col, int row, uint8_t ch,
+                           uint8_t fg_color, uint8_t aa_color)
+{
+    if (ch < 32 || ch > 126) ch = 32;
+
+    const uint8_t *glyph = font_data + ((ch - 32) * FONT_HEIGHT);
+    int byte_offset = col;
+    int line_offset = row * FONT_HEIGHT * BYTES_PER_ROW;
+
+    /* Render main glyph in foreground color */
+    for (int y = 0; y < FONT_HEIGHT; y++) {
+        int offset = line_offset + (y * BYTES_PER_ROW) + byte_offset;
+        uint8_t bits = glyph[y];
+
+        for (int plane = 0; plane < NUM_BITPLANES; plane++) {
+            bitplane[plane][offset] = (fg_color & (1 << plane)) ? bits : 0x00;
+        }
+    }
+}
+
+/* ========================================================================
+ * Public API
+ * ======================================================================== */
+
+bool init_aga(void)
+{
+    /* Verify AGA chipset */
+    if (detect_denise() != CHIPSET_AGA) {
+        return false;
+    }
+
+    /* Get font from ECS driver */
+    font_data = ecs::get_font();
+
+    /* Detect PAL/NTSC */
+    bool pal = is_pal();
+    screen_height = pal ? SCREEN_HEIGHT_PAL : SCREEN_HEIGHT_NTSC;
+    rows = pal ? ROWS_PAL : ROWS_NTSC;
+
+    plane_size = BYTES_PER_ROW * screen_height;
+
+    /* Set FMODE: prefer 4x fetch for maximum bandwidth */
+    fmode_value = 0x0003;  /* 64-bit fetch for bitplanes and sprites */
+
+    /* Allocate chip RAM for 8 bitplanes */
+    for (int i = 0; i < NUM_BITPLANES; i++) {
+        bitplane[i] = (uint8_t *)chip_alloc(plane_size, 8);
+        if (!bitplane[i]) return false;
+    }
+
+    /* Allocate copper list - needs to be large for 256-color palette */
+    copperlist = (uint16_t *)chip_alloc(4096, 4);
+    if (!copperlist) return false;
+
+    /* Clear all bitplanes */
+    for (int i = 0; i < NUM_BITPLANES; i++) {
+        for (uint32_t j = 0; j < plane_size; j++) {
+            bitplane[i][j] = 0;
+        }
+    }
+
+    /* Initialize state */
+    cursor_x = 0;
+    cursor_y = 0;
+    cursor_visible = true;
+    vblank_counter = 0;
+    null_sprite[0] = 0;
+    null_sprite[1] = 0;
+
+    /* Set up palette */
+    init_default_palette();
+
+    /* Disable all DMA */
+    custom_write(DMACON, 0x7FFF);
+
+    /* Build and install copper list */
+    build_copperlist();
+    custom_write32(COP1LCH, (uint32_t)copperlist);
+    custom_write(COPJMP1, 0);
+
+    /* Enable DMA */
+    custom_write(DMACON, DMAF_SETCLR | DMAF_MASTER | DMAF_COPPER |
+                         DMAF_RASTER | DMAF_BLITTER);
+
+    return true;
+}
+
+void clear_aga(void)
+{
+    for (int i = 0; i < NUM_BITPLANES; i++) {
+        for (uint32_t j = 0; j < plane_size; j++) {
+            bitplane[i][j] = 0;
+        }
+    }
+    cursor_x = 0;
+    cursor_y = 0;
+}
+
+void scroll_aga(void)
+{
+    uint32_t row_bytes = FONT_HEIGHT * BYTES_PER_ROW;
+
+    for (int plane = 0; plane < NUM_BITPLANES; plane++) {
+        /* Move all rows up by one text row */
+        uint8_t *dst = bitplane[plane];
+        uint8_t *src = bitplane[plane] + row_bytes;
+        uint32_t copy_size = plane_size - row_bytes;
+
+        for (uint32_t i = 0; i < copy_size; i++) {
+            dst[i] = src[i];
+        }
+
+        /* Clear last row */
+        uint8_t *last = bitplane[plane] + plane_size - row_bytes;
+        for (uint32_t i = 0; i < row_bytes; i++) {
+            last[i] = 0;
+        }
+    }
+}
+
+void putchar_aga(char c)
+{
+    if (c == '\n') {
+        cursor_x = 0;
+        cursor_y++;
+    } else if (c == '\r') {
+        cursor_x = 0;
+    } else if (c == '\b') {
+        if (cursor_x > 0) {
+            cursor_x--;
+            render_char(cursor_x, cursor_y, ' ', 0);
+        }
+    } else if (c == '\t') {
+        int next_tab = (cursor_x + 8) & ~7;
+        while (cursor_x < next_tab && cursor_x < COLS) {
+            cursor_x++;
+        }
+    } else {
+        render_char(cursor_x, cursor_y, (uint8_t)c, 1);
+        cursor_x++;
+    }
+
+    if (cursor_x >= COLS) {
+        cursor_x = 0;
+        cursor_y++;
+    }
+
+    if (cursor_y >= rows) {
+        scroll_aga();
+        cursor_y = rows - 1;
+    }
+}
+
+void puts_aga(const char *str)
+{
+    while (*str) {
+        putchar_aga(*str++);
+    }
+}
+
+void set_color_aga_api(int index, uint8_t r, uint8_t g, uint8_t b)
+{
+    set_palette_entry(index, r, g, b);
+}
+
+void cursor_blink_vblank(void)
+{
+    vblank_counter++;
+    if (vblank_counter >= 25) {
+        vblank_counter = 0;
+        cursor_visible = !cursor_visible;
+
+        if (cursor_visible) {
+            render_char(cursor_x, cursor_y, 0xDB, 3);
+        } else {
+            render_char(cursor_x, cursor_y, ' ', 0);
+        }
+    }
+}
+
+int get_cols(void)   { return COLS; }
+int get_rows(void)   { return rows; }
+void set_cursor(int x, int y) { cursor_x = x; cursor_y = y; }
+
+/* ========================================================================
+ * HAM8 Mode Support (Hold And Modify - 8 bitplanes)
+ * ======================================================================== */
+
+bool init_ham8(int width, int height)
+{
+    /* HAM8 uses 8 bitplanes: 6 for base color index, 2 for modify mode
+     * Mode bits (top 2 bits of pixel value):
+     *   00 = set color from palette
+     *   01 = modify blue
+     *   10 = modify red
+     *   11 = modify green
+     */
+    (void)width;
+    (void)height;
+
+    /* For benchmarking purposes - set BPLCON0 HAM bit */
+    uint16_t bplcon0 = BPLCON0_HIRES | BPLCON0_COLOR | BPLCON0_HAM |
+                       (7 << 12) | BPLCON0_BPU3;
+    custom_write(BPLCON0, bplcon0);
+
+    return true;
+}
+
+} /* namespace aga */
+} /* namespace neo */

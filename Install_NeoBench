@@ -1,0 +1,16 @@
+.KEY UNIT,DEV
+.DEFAULT UNIT "1"
+.DEFAULT DEV "UDH0:"
+
+echo "NeoBench Full System Installation"
+echo "---------------------------------"
+echo "1. Configuring Hardware RDB (Unit <UNIT>)..."
+NeoSetup_Amiga <UNIT>
+
+echo "2. Installing Denise Kernel and Bootloader to <DEV>..."
+; Use the v7.0 autodetect installer which is named NeoInstall_Amiga
+NeoInstall_Amiga <DEV> kernel/kernel.bin bootblock.bin
+
+echo "---------------------------------"
+echo "INSTALLATION COMPLETE."
+echo "Please reboot your Amiga now."

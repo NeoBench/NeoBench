@@ -1,0 +1,12 @@
+-cc=vbcc6502 -I"$VBCC"/targets/6502-pet/include -quiet -cbmascii -mainargs -avoid-bank-switch %s -o= %s %s -O=%ld
+-ccv=vbcc6502 -I"$VBCC"/targets/6502-pet/include -cbmascii -mainargs -avoid-bank-switch %s -o= %s %s -O=%ld
+-unsigned-char
+-mask-opt
+-as=vasm6502_oldstyle -quiet -nowarn=62 -opt-branch -Fvobj %s -o %s -ldots
+-asv=vasm6502_oldstyle -nowarn=62 -Fvobj -opt-branch %s -o %s -ldots
+-rm=rm %s
+-rmv=rm %s
+-ld=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-pet/vlinkr.cmd -L"$VBCC"/targets/6502-pet/lib "$VBCC"/targets/6502-pet/lib/startupr.o %s %s -o %s -lvc
+-ldv=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-pet/vlinkr.cmd -L"$VBCC"/targets/6502-pet/lib "$VBCC"/targets/6502-pet/lib/startupr.o %s %s  -o %s -lvc -Mmapfile
+-l2=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-pet/vlinkr.cmd -L"$VBCC"/targets/6502-pet/lib %s %s -o %s
+-l2v=vlink -m -b cbmprg -Cvbcc -T"$VBCC"/targets/6502-pet/vlinkr.cmd -L"$VBCC"/targets/6502-pet/lib %s %s -o %s -Mmapfile

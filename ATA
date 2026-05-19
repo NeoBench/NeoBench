@@ -1,0 +1,39 @@
+#include "disk.h"
+
+#define ATA_DATA 0x1F0
+#define ATA_STATUS 0x1F7
+
+static void io_wait()
+{
+    for (int i = 0; i < 4000; i++) asm volatile("nop");
+}
+
+int ata_read(unsigned int lba, unsigned int count, void* buffer)
+{
+    unsigned short* buf = (unsigned short*)buffer;
+
+    for (unsigned int i = 0; i < count; i++)
+    {
+        unsigned int sector = lba + i;
+
+        asm volatile(
+            "outb %0, %1"
+            :
+            : "a"(0x20), "Nd"(ATA_STATUS)
+        );
+
+        io_wait();
+
+        for (int j = 0; j < 256; j++)
+        {
+            asm volatile("inw %1, %0"
+                : "=a"(buf[j])
+                : "Nd"(ATA_DATA)
+            );
+        }
+
+        buf += 256;
+    }
+
+    return 0;
+}

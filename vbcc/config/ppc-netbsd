@@ -1,0 +1,23 @@
+-elf
+-no-regnames
+-no-multiple-ccs
+-madd
+-no-align-args
+-c99
+-use-commons
+-cc=vbccppc -quiet %s -o= %s %s -O=%ld -I"$VBCC"/targets/ppc-netbsd/include
+-ccv=vbccppc %s -o= %s %s -O=%ld -I"$VBCC"/targets/ppc-netbsd/include
+-as=vasmppc_std -quiet -Felf -opt-branch -no-regnames %s -o %s
+-asv=vasmppc_std -Felf -opt-branch -no-regnames %s -o %s
+-isc=vscppc -quiet %s %s
+-iscv=vscppc %s %s
+-rm=rm -f %s
+-rmv=rm %s
+-ld=vlink -belf32ppcbe -nostdlib -T"$VBCC"/targets/ppc-netbsd/lib/script -L"$VBCC"/targets/ppc-netbsd/lib "$VBCC"/targets/ppc-netbsd/lib/startup.o %s %s -lvc -o %s
+-l2=vlink -belf32ppcbe -nostdlib -T"$VBCC"/targets/ppc-netbsd/lib/script -L"$VBCC"/targets/ppc-netbsd/lib %s %s -o %s
+-ldv=vlink -belf32ppcbe -t -nostdlib -T"$VBCC"/targets/ppc-netbsd/lib/script -L"$VBCC"/targets/ppc-netbsd/lib "$VBCC"/targets/ppc-netbsd/lib/startup.o %s %s -lvc -o %s
+-l2v=vlink -belf32ppcbe -t -nostdlib -T"$VBCC"/targets/ppc-netbsd/lib/script -L"$VBCC"/targets/ppc-netbsd/lib %s %s -o %s
+-ldnodb=-s -x
+-ul=-l%s
+-cf=-F%s
+-ml=1000

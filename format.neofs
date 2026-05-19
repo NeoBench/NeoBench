@@ -1,0 +1,574 @@
+ * NeoBench Native Filesystem Formatter
+ * utilities/format.neofs.cpp
+ */
+
+#include "../include/neobench.h"
+#include "../include/types.h"
+#include <cstring>
+
+namespace neo {
+namespace neofs {
+
+// Ensure structures are identical to the driver specification
+#pragma pack(push, 1)
+struct NeoTime {
+    uint32_t seconds;
+    uint32_t nanoseconds;
+};
+
+struct Superblock {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t block_size;
+    uint32_t total_blocks;
+    uint32_t free_blocks;
+    uint32_t total_inodes;
+    uint32_t free_inodes;
+    uint32_t inode_bitmap_start;
+    uint32_t inode_bitmap_blocks;
+    uint32_t block_bitmap_start;
+    uint32_t block_bitmap_blocks;
+    uint32_t inode_table_start;
+    uint32_t inode_table_blocks;
+    uint32_t data_start;
+    uint32_t journal_blocks;
+    uint32_t journal_head;
+    uint32_t journal_tail;
+    uint32_t journal_txn_id;
+    uint32_t mount_count;
+    uint32_t max_mount_count;
+    uint32_t state;
+    uint32_t last_check_time;
+    uint32_t last_mount_time;
+    uint32_t write_time;
+    char     volume_name[32];
+    uint32_t features_compat;
+    uint32_t features_incompat;
+    uint32_t features_ro_compat;
+    uint8_t  uuid[16];
+    uint32_t crc32c;
+    uint8_t  padding[372]; // Pad perfectly to 512 bytes
+};
+
+struct NeoFS_Inode {
+    uint16_t mode;
+    uint16_t uid;
+    uint16_t gid;
+    uint16_t links_count;
+    uint64_t size;
+    NeoTime  atime;
+    NeoTime  mtime;
+    NeoTime  ctime;
+    uint32_t flags;
+    uint8_t  payload[128]; // Inline data workspace
+    uint32_t generation;
+    uint32_t crc32c;
+    uint8_t  padding[88];  // Pad perfectly to 256 bytes
+};
+
+struct DirEntry {
+    uint32_t inode_num;
+    uint8_t  type_code;
+    uint8_t  name_len;
+    char     name[26];     // Inline flat sizing constraint for 32-byte alignment
+};
+#pragma pack(pop)
+
+// Mock hardware disk interface representation 
+class RawStorageDevice {
+public:
+    virtual uint64_t GetTotalSectors() = 0;
+    virtual bool WriteBlocks(uint32_t block_index, uint32_t count, const uint8_t* buffer) = 0;
+};
+
+// Castagnoli CRC32C software implementation matching driver specification
+uint32_t CalculateCRC32C(const uint8_t* data, size_t length) {
+    uint32_t crc = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (int b = 0; b < 8; ++b) {
+            if (crc & 1) crc = (crc >> 1) ^ 0x82F63B78UL;
+            else crc >>= 1;
+        }
+    }
+    return ~crc;
+}
+
+bool FormatVolume(RawStorageDevice* device, const char* volumeLabel) {
+    uint64_t total_sectors = device->GetTotalSectors();
+    uint32_t total_blocks = total_sectors / 8; // 8 sectors per 4KB block
+
+    if (total_blocks < 64) {
+        // Volume is too small to build metadata boundaries
+        return false;
+    }
+
+    // 1. Calculate Geometries dynamically
+    uint32_t target_inodes = 2048; // Standard balance for Amiga storage partitions
+    uint32_t inode_bitmap_blks = 1;
+    uint32_t block_bitmap_blks = (total_blocks + 32767) / 32768;
+    uint32_t inode_table_blks = (target_inodes * 256) / 4096;
+    uint32_t journal_blks = 32; 
+
+    uint32_t meta_data_end = 3 + inode_bitmap_blks + block_bitmap_blks + inode_table_blks + journal_blks;
+    
+    // 2. Initialize clear tracking page buffer (4KB size context)
+    alignas(4096) uint8_t block_buffer[4096];
+    std::memset(block_buffer, 0, 4096);
+
+    // 3. Construct and write Superblock structure
+    Superblock* sb = reinterpret_cast<Superblock*>(block_buffer);
+    sb->magic = 0x4E454F46;        // "NEOF"
+    sb->version = 0x00010000;      // v1.0.0
+    sb->block_size = 4096;
+    sb->total_blocks = total_blocks;
+    sb->inode_bitmap_start = 2;
+    sb->inode_bitmap_blocks = inode_bitmap_blks;
+    sb->block_bitmap_start = 3;
+    sb->block_bitmap_blocks = block_bitmap_blks;
+    sb->inode_table_start = 3 + block_bitmap_blks;
+    sb->inode_table_blocks = inode_table_blks;
+    sb->data_start = meta_data_end;
+    sb->journal_blocks = journal_blks;
+    sb->state = 0;                 // Safe clean flag status
+    std::strncpy(sb->volume_name, volumeLabel, 31);
+    
+    // Set validation checksum across the structure
+    sb->crc32c = CalculateCRC32C(block_buffer, 508);
+
+    // Commit to Block 0 (Primary) and Block 1 (Mirror)
+    if (!device->WriteBlocks(0, 1, block_buffer) || !device->WriteBlocks(1, 1, block_buffer)) {
+        return false;
+    }
+
+    // 4. Initialize Inode Allocation Bitmap (Block 2)
+    std::memset(block_buffer, 0, 4096);
+    // Flag first 4 inodes as system-reserved: Root(1), Journal(2), BadBlocks(3), ExtentOverflow(4)
+    block_buffer[0] = 0xF0; 
+    if (!device->WriteBlocks(2, 1, block_buffer)) return false;
+
+    // 5. Initialize Block Allocation Bitmap (Block 3+)
+    std::memset(block_buffer, 0, 4096);
+    for (uint32_t i = 0; i < meta_data_end; ++i) {
+        uint32_t byte_idx = i / 8;
+        uint32_t bit_idx = 7 - (i % 8);
+        block_buffer[byte_idx] |= (1 << bit_idx);
+    }
+    if (!device->WriteBlocks(3, block_bitmap_blks, block_buffer)) return false;
+
+    // 6. Build and inject Root Directory structure (Inode 1)
+    std::memset(block_buffer, 0, 4096);
+    NeoFS_Inode* root_inode = reinterpret_cast<NeoFS_Inode*>(block_buffer);
+    root_inode->mode = 0x41ED;      // Directory flag format + default execution flag privileges
+    root_inode->links_count = 2;
+    root_inode->flags = 0x00000001; // NFS_FL_INLINE container state enabled
+    
+    // Map initial folders sequentially using the flat O(n) array layout into inline data
+    uint8_t* payload_ptr = root_inode->payload;
+    const char* default_dirs[] = { "s", "system", "drivers", "apps", "programs", "Temp" };
+    uint32_t custom_inode_tracker = 8; // First free user safe entry point context
+
+    for (const char* dir_name : default_dirs) {
+        DirEntry* cpp
+
+/*
+ * NeoBench Native Filesystem Formatter
+ * utilities/format.neofs.cpp
+ */
+
+#include "../include/neobench.h"
+#include "../include/types.h"
+#include <cstring>
+
+namespace neo {
+namespace neofs {
+
+// Ensure structures are identical to the driver specification
+#pragma pack(push, 1)
+struct NeoTime {
+    uint32_t seconds;
+    uint32_t nanoseconds;
+};
+
+struct Superblock {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t block_size;
+    uint32_t total_blocks;
+    uint32_t free_blocks;
+    uint32_t total_inodes;
+    uint32_t free_inodes;
+    uint32_t inode_bitmap_start;
+    uint32_t inode_bitmap_blocks;
+    uint32_t block_bitmap_start;
+    uint32_t block_bitmap_blocks;
+    uint32_t inode_table_start;
+    uint32_t inode_table_blocks;
+    uint32_t data_start;
+    uint32_t journal_blocks;
+    uint32_t journal_head;
+    uint32_t journal_tail;
+    uint32_t journal_txn_id;
+    uint32_t mount_count;
+    uint32_t max_mount_count;
+    uint32_t state;
+    uint32_t last_check_time;
+    uint32_t last_mount_time;
+    uint32_t write_time;
+    char     volume_name[32];
+    uint32_t features_compat;
+    uint32_t features_incompat;
+    uint32_t features_ro_compat;
+    uint8_t  uuid[16];
+    uint32_t crc32c;
+    uint8_t  padding[372]; // Pad perfectly to 512 bytes
+};
+
+struct NeoFS_Inode {
+    uint16_t mode;
+    uint16_t uid;
+    uint16_t gid;
+    uint16_t links_count;
+    uint64_t size;
+    NeoTime  atime;
+    NeoTime  mtime;
+    NeoTime  ctime;
+    uint32_t flags;
+    uint8_t  payload[128]; // Inline data workspace
+    uint32_t generation;
+    uint32_t crc32c;
+    uint8_t  padding[88];  // Pad perfectly to 256 bytes
+};
+
+struct DirEntry {
+    uint32_t inode_num;
+    uint8_t  type_code;
+    uint8_t  name_len;
+    char     name[26];     // Inline flat sizing constraint for 32-byte alignment
+};
+#pragma pack(pop)
+
+// Mock hardware disk interface representation 
+class RawStorageDevice {
+public:
+    virtual uint64_t GetTotalSectors() = 0;
+    virtual bool WriteBlocks(uint32_t block_index, uint32_t count, const uint8_t* buffer) = 0;
+};
+
+// Castagnoli CRC32C software implementation matching driver specification
+uint32_t CalculateCRC32C(const uint8_t* data, size_t length) {
+    uint32_t crc = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (int b = 0; b < 8; ++b) {
+            if (crc & 1) crc = (crc >> 1) ^ 0x82F63B78UL;
+            else crc >>= 1;
+        }
+    }
+    return ~crc;
+}
+
+bool FormatVolume(RawStorageDevice* device, const char* volumeLabel) {
+    uint64_t total_sectors = device->GetTotalSectors();
+    uint32_t total_blocks = total_sectors / 8; // 8 sectors per 4KB block
+
+    if (total_blocks < 64) {
+        // Volume is too small to build metadata boundaries
+        return false;
+    }
+
+    // 1. Calculate Geometries dynamically
+    uint32_t target_inodes = 2048; // Standard balance for Amiga storage partitions
+    uint32_t inode_bitmap_blks = 1;
+    uint32_t block_bitmap_blks = (total_blocks + 32767) / 32768;
+    uint32_t inode_table_blks = (target_inodes * 256) / 4096;
+    uint32_t journal_blks = 32; 
+
+    uint32_t meta_data_end = 3 + inode_bitmap_blks + block_bitmap_blks + inode_table_blks + journal_blks;
+    
+    // 2. Initialize clear tracking page buffer (4KB size context)
+    alignas(4096) uint8_t block_buffer[4096];
+    std::memset(block_buffer, 0, 4096);
+
+    // 3. Construct and write Superblock structure
+    Superblock* sb = reinterpret_cast<Superblock*>(block_buffer);
+    sb->magic = 0x4E454F46;        // "NEOF"
+    sb->version = 0x00010000;      // v1.0.0
+    sb->block_size = 4096;
+    sb->total_blocks = total_blocks;
+    sb->inode_bitmap_start = 2;
+    sb->inode_bitmap_blocks = inode_bitmap_blks;
+    sb->block_bitmap_start = 3;
+    sb->block_bitmap_blocks = block_bitmap_blks;
+    sb->inode_table_start = 3 + block_bitmap_blks;
+    sb->inode_table_blocks = inode_table_blks;
+    sb->data_start = meta_data_end;
+    sb->journal_blocks = journal_blks;
+    sb->state = 0;                 // Safe clean flag status
+    std::strncpy(sb->volume_name, volumeLabel, 31);
+    
+    // Set validation checksum across the structure
+    sb->crc32c = CalculateCRC32C(block_buffer, 508);
+
+    // Commit to Block 0 (Primary) and Block 1 (Mirror)
+    if (!device->WriteBlocks(0, 1, block_buffer) || !device->WriteBlocks(1, 1, block_buffer)) {
+        return false;
+    }
+
+    // 4. Initialize Inode Allocation Bitmap (Block 2)
+    std::memset(block_buffer, 0, 4096);
+    // Flag first 4 inodes as system-reserved: Root(1), Journal(2), BadBlocks(3), ExtentOverflow(4)
+    block_buffer[0] = 0xF0; 
+    if (!device->WriteBlocks(2, 1, block_buffer)) return false;
+
+    // 5. Initialize Block Allocation Bitmap (Block 3+)
+    std::memset(block_buffer, 0, 4096);
+    for (uint32_t i = 0; i < meta_data_end; ++i) {
+        uint32_t byte_idx = i / 8;
+        uint32_t bcpp
+
+/*
+ * NeoBench Native Filesystem Formatter
+ * utilities/format.neofs.cpp
+ */
+
+#include "../include/neobench.h"
+#include "../include/types.h"
+#include <cstring>
+
+namespace neo {
+namespace neofs {
+
+// Ensure structures are identical to the driver specification
+#pragma pack(push, 1)
+struct NeoTime {
+    uint32_t seconds;
+    uint32_t nanoseconds;
+};
+
+struct Superblock {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t block_size;
+    uint32_t total_blocks;
+    uint32_t free_blocks;
+    uint32_t total_inodes;
+    uint32_t free_inodes;
+    uint32_t inode_bitmap_start;
+    uint32_t inode_bitmap_blocks;
+    uint32_t block_bitmap_start;
+    uint32_t block_bitmap_blocks;
+    uint32_t inode_table_start;
+    uint32_t inode_table_blocks;
+    uint32_t data_start;
+    uint32_t journal_blocks;
+    uint32_t journal_head;
+    uint32_t journal_tail;
+    uint32_t journal_txn_id;
+    uint32_t mount_count;
+    uint32_t max_mount_count;
+    uint32_t state;
+    uint32_t last_check_time;
+    uint32_t last_mount_time;
+    uint32_t write_time;
+    char     volume_name[32];
+    uint32_t features_compat;
+    uint32_t features_incompat;
+    uint32_t features_ro_compat;
+    uint8_t  uuid[16];
+    uint32_t crc32c;
+    uint8_t  padding[372]; // Pad perfectly to 512 bytes
+};
+
+struct NeoFS_Inode {
+    uint16_t mode;
+    uint16_t uid;
+    uint16_t gid;
+    uint16_t links_count;
+    uint64_t size;
+    NeoTime  atime;
+    NeoTime  mtime;
+    NeoTime  ctime;
+    uint32_t flags;
+    uint8_t  payload[128]; // Inline data workspace
+    uint32_t generation;
+    uint32_t crc32c;
+    uint8_t  padding[88];  // Pad perfectly to 256 bytes
+};
+
+struct DirEntry {
+    uint32_t inode_num;
+    uint8_t  type_code;
+    uint8_t  name_len;
+    char     name[26];     // Inline flat sizing constraint for 32-byte alignment
+};
+#pragma pack(pop)
+
+// Mock hardware disk interface representation 
+class RawStorageDevice {
+public:
+    virtual uint64_t GetTotalSectors() = 0;
+    virtual bool WriteBlocks(uint32_t block_index, uint32_t count, const uint8_t* buffer) = 0;
+};
+
+// Castagnoli CRC32C software implementation matching driver specification
+uint32_t CalculateCRC32C(const uint8_t* data, size_t length) {
+    uint32_t crc = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (int b = 0; b < 8; ++b) {
+            if (crc & 1) crc = (crc >> 1) ^ 0x82F63B78UL;
+            else crc >>= 1;
+        }
+    }
+    return ~crc;
+}
+
+bool FormatVolume(RawStorageDevice* device, const char* volumeLabel) {
+    uint64_t total_sectors = device->GetTotalSectors();
+    uint32_t total_blocks = total_sectors / 8; // 8 sectors per 4KB block
+
+    if (total_blocks < 64) {
+        // Volume is too small to build metadata boundaries
+        return false;
+    }
+
+    // 1. Calculate Geometries dynamically
+    uint32_t target_inodes = 2048; // Standard balance for Amiga storage partitions
+    uint32_t inode_bitmap_blks = 1;
+    uint32_t block_bitmap_blks = (total_blocks + 32767) / 32768;
+    uint32_t inode_table_blks = (target_inodes * 256) / 4096;
+    uint32_t journal_blks = 32; 
+
+    uint32_t meta_data_end = 3 + inode_bitmap_blks + block_bitmap_blks + inode_table_blks + journal_blks;
+    
+    // 2. Initialize clear tracking page buffer (4KB size context)
+    alignas(4096) uint8_t block_buffer[4096];
+    std::memset(block_buffer, 0, 4096);
+
+    // 3. Construct and write Superblock structure
+    Superblock* sb = reinterpret_cast<Superblock*>(block_buffer);
+    sb->magic = 0x4E454F46;        // "NEOF"
+    sb->version = 0x00010000;      // v1.0.0
+    sb->block_size = 4096;
+    sb->total_blocks = total_blocks;
+    sb->inode_bitmap_start = 2;
+    sb->inode_bitmap_blocks = inode_bitmap_blks;
+    sb->block_bitmap_start = 3;
+    sb->block_bitmap_blocks = block_bitmap_blks;
+    sb->inode_table_start = 3 + block_bitmap_blks;
+    sb->inode_table_blocks = inode_table_blks;
+    sb->data_start = meta_data_end;
+    sb->journal_blocks = journal_blks;
+    sb->state = 0;                 // Safe clean flag status
+    std::strncpy(sb->volume_name, volumeLabel, 31);
+    
+    // Set validation checksum across the structure
+    sb->crc32c = CalculateCRC32C(block_buffer, 508);
+
+    // Commit to Block 0 (Primary) and Block 1 (Mirror)
+    if (!device->WriteBlocks(0, 1, block_buffer) || !device->WriteBlocks(1, 1, block_buffer)) {
+        return false;
+    }
+
+    // 4. Initialize Inode Allocation Bitmap (Block 2)
+    std::memset(block_buffer, 0, 4096);
+    // Flag first 4 inodes as system-reserved: Root(1), Journal(2), BadBlocks(3), ExtentOverflow(4)
+    block_buffer[0] = 0xF0; 
+    if (!device->WriteBlocks(2, 1, block_buffer)) return false;
+
+    // 5. Initialize Block Allocation Bitmap (Block 3+)
+    std::memset(block_buffer, 0, 4096);
+    for (uint32_t i = 0; i < meta_data_end; ++i) {
+        uint32_t byte_idx = i / 8;
+        uint32_t bit_idx = 7 - (i % 8);
+        block_buffer[byte_idx] |= (1 << bit_idx);
+    }
+    if (!device->WriteBlocks(3, block_bitmap_blks, block_buffer)) return false;
+
+    // 6. Build and inject Root Directory structure (Inode 1)
+    std::memset(block_buffer, 0, 4096);
+    NeoFS_Inode* root_inode = reinterpret_cast<NeoFS_Inode*>(block_buffer);
+    root_inode->mode = 0x41ED;      // Directory flag format + default execution flag privileges
+    root_inode->links_count = 2;
+    root_inode->flags = 0x00000001; // NFS_FL_INLINE container state enabled
+    
+    // Map initial folders sequentially using the flat O(n) array layout into inline data
+    uint8_t* payload_ptr = root_inode->payload;
+    const char* default_dirs[] = { "s", "system", "drivers", "apps", "programs", "Temp" };
+    uint32_t custom_inode_tracker = 8; // First free user safe entry point context
+
+    for (const char* dir_name : default_dirs) {
+        DirEntry* entry = reinterpret_cast<DirEntry*>(payload_ptr);
+        entry->inode_num = custom_inode_tracker++;
+        entry->type_code = 4; // DT_DIR layout representation
+        entry->name_len = std::strlen(dir_name);
+        std::strncpy(entry->name, dir_name, 25);
+        payload_ptr += sizeof(DirEntry);
+    }
+    
+    root_inode->size = payload_ptr - root_inode->payload;
+    root_inode->crc32c = CalculateCRC32C(block_buffer, 252);
+
+    // Commit root inode safely to head of the designated table block address range
+    if (!device->WriteBlocks(sb->inode_table_start, 1, block_buffer)) return false;
+
+    return true;
+}
+
+} // namespace neofs
+} // namespace neoit_idx = 7 - (i % 8);
+        block_buffer[byte_idx] |= (1 << bit_idx);
+    }
+    if (!device->WriteBlocks(3, block_bitmap_blks, block_buffer)) return false;
+
+    // 6. Build and inject Root Directory structure (Inode 1)
+    std::memset(block_buffer, 0, 4096);
+    NeoFS_Inode* root_inode = reinterpret_cast<NeoFS_Inode*>(block_buffer);
+    root_inode->mode = 0x41ED;      // Directory flag format + default execution flag privileges
+    root_inode->links_count = 2;
+    root_inode->flags = 0x00000001; // NFS_FL_INLINE container state enabled
+    
+    // Map initial folders sequentially using the flat O(n) array layout into inline data
+    uint8_t* payload_ptr = root_inode->payload;
+    const char* default_dirs[] = { "s", "system", "drivers", "apps", "programs", "Temp" };
+    uint32_t custom_inode_tracker = 8; // First free user safe entry point context
+
+    for (const char* dir_name : default_dirs) {
+        DirEntry* entry = reinterpret_cast<DirEntry*>(payload_ptr);
+        entry->inode_num = custom_inode_tracker++;
+        entry->type_code = 4; // DT_DIR layout representation
+        entry->name_len = std::strlen(dir_name);
+        std::strncpy(entry->name, dir_name, 25);
+        payload_ptr += sizeof(DirEntry);
+    }
+    
+    root_inode->size = payload_ptr - root_inode->payload;
+    root_inode->crc32c = CalculateCRC32C(block_buffer, 252);
+
+    // Commit root inode safely to head of the designated table block address range
+    if (!device->WriteBlocks(sb->inode_table_start, 1, block_buffer)) return false;
+
+    return true;
+}
+
+} // namespace neofs
+} // namespace neoentry = reinterpret_cast<DirEntry*>(payload_ptr);
+        entry->inode_num = custom_inode_tracker++;
+        entry->type_code = 4; // DT_DIR layout representation
+        entry->name_len = std::strlen(dir_name);
+        std::strncpy(entry->name, dir_name, 25);
+        payload_ptr += sizeof(DirEntry);
+    }
+    
+    root_inode->size = payload_ptr - root_inode->payload;
+    root_inode->crc32c = CalculateCRC32C(block_buffer, 252);
+
+    // Commit root inode safely to head of the designated table block address range
+    if (!device->WriteBlocks(sb->inode_table_start, 1, block_buffer)) return false;
+
+    return true;
+}
+
+} // namespace neofs
+} // namespace neo

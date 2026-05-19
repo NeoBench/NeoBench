@@ -1,0 +1,287 @@
+/*
+ * NeoBench Graphical Filesystem Formatter Tool
+ * gui_format.cpp - Refined Bare-Metal Installer
+ */
+
+#include "include/neobench.h"
+#include "include/gui.h"
+
+#ifdef __KERNEL__
+#include "drivers/storage/ide.cpp"
+#include "fs/neofs.cpp"
+using namespace neo::ide;
+#else
+#include <iostream>
+#include <string>
+#include <fstream>
+#include <vector>
+#include <cstring>
+#endif
+
+/* Modern UI State Machine */
+enum class InstallState {
+    Welcome,
+    Configuration,
+    Installing,
+    Success,
+    Fail
+};
+
+static InstallState g_state = InstallState::Welcome;
+static float g_progress = 0.0f;
+static const char* g_status_msg = "Ready to begin installation.";
+
+/* Bare-metal friendly logging */
+#ifdef __KERNEL__
+#define LOG_MAX 12
+#define STR_MAX 64
+static char g_logs[LOG_MAX][STR_MAX];
+static int g_log_count = 0;
+
+void add_log(const char* msg) {
+    g_status_msg = msg;
+    if (g_log_count < LOG_MAX) {
+        std::strncpy(g_logs[g_log_count++], msg, STR_MAX - 1);
+    } else {
+        for (int i = 0; i < LOG_MAX - 1; i++) std::strcpy(g_logs[i], g_logs[i+1]);
+        std::strncpy(g_logs[LOG_MAX - 1], msg, STR_MAX - 1);
+    }
+}
+#else
+std::vector<std::string> g_host_logs;
+void add_log(const char* msg) { g_host_logs.push_back(msg); g_status_msg = msg; }
+#endif
+
+/* Hardware Helper Wrapper */
+bool RawWriteBlock(uint32_t block, const void* buf) {
+#ifdef __KERNEL__
+    /* NeoFS uses 4KB blocks. IDE uses 512B sectors. */
+    return write_sectors(0, block * 8, 8, buf);
+#else
+    extern std::fstream g_disk;
+    g_disk.seekp(static_cast<uint64_t>(block) * 4096);
+    g_disk.write(reinterpret_cast<const char*>(buf), 4096);
+    return g_disk.good();
+#endif
+}
+
+/* Modern Drawers */
+void draw_modern_icon(int x, int y) {
+    using namespace neo::gui;
+    Rect r = {x, y, 64, 64};
+    Color c1 = {0x00, 0xAA, 0xFF, 0xFF};
+    Color c2 = {0x00, 0x44, 0x88, 0xFF};
+    draw_gradient_rect(r, c1, c2);
+    draw_rounded_rect(r, 8, colors::WHITE);
+    
+    // Draw a stylized drive/install icon
+    fill_rect({x+12, y+40, 40, 12}, colors::WHITE);
+    fill_rect({x+28, y+12, 8, 28}, colors::WHITE);
+    draw_line(x+20, y+28, x+32, y+40, colors::WHITE);
+    draw_line(x+44, y+28, x+32, y+40, colors::WHITE);
+}
+
+void draw_progress_bar(int x, int y, int w, int h, float p) {
+    using namespace neo::gui;
+    Rect bg = {x, y, (uint32_t)w, (uint32_t)h};
+    Rect fg = {x, y, (uint32_t)(w * p), (uint32_t)h};
+    fill_rect(bg, {0x10, 0x10, 0x15, 0xFF});
+    fill_rect(fg, colors::NEOGREEN);
+    draw_rect(bg, {0x80, 0x80, 0x90, 0xFF});
+}
+
+uint32_t ComputeCRC32C(const uint8_t* data, size_t length) {
+    uint32_t crc = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (int b = 0; b < 8; ++b) {
+            if (crc & 1) crc = (crc >> 1) ^ 0x82F63B78UL;
+            else crc >>= 1;
+        }
+    }
+    return ~crc; 
+}
+
+/* Logic */
+void PerformInstallation() {
+    g_state = InstallState::Installing;
+    g_progress = 0.05f;
+    add_log("Initializing installation...");
+    
+#ifdef __KERNEL__
+    if (!init()) { g_state = InstallState::Fail; add_log("IDE Controller Error."); return; }
+#endif
+    
+    g_progress = 0.15f;
+    add_log("Validating drive geometry...");
+    
+    uint32_t total_sectors = 0;
+#ifdef __KERNEL__
+    auto info = get_drive_info(0);
+    if (!info) { g_state = InstallState::Fail; add_log("No drive detected."); return; }
+    total_sectors = info->total_sectors;
+#else
+    extern std::fstream g_disk;
+    g_disk.seekg(0, std::ios::end);
+    total_sectors = g_disk.tellg() / 512;
+#endif
+
+    uint32_t fs_start_block = 256; // 1MB offset
+    uint32_t fs_blocks = (total_sectors / 8) - fs_start_block;
+
+    g_progress = 0.3f;
+    add_log("Constructing Superblock...");
+    
+    alignas(4096) uint8_t page[4096];
+    std::memset(page, 0, 4096);
+    auto* sb = reinterpret_cast<neo::neofs::Superblock*>(page);
+    
+    sb->magic = 0x4E454F46;        // "NEOF"
+    sb->version = 0x00010000;      // 1.0.0
+    sb->block_size = 4096;
+    sb->total_blocks = fs_blocks;
+    sb->free_blocks = fs_blocks - 1024; // Placeholder
+    sb->total_inodes = 4096;
+    sb->free_inodes = 4096 - 16;
+    sb->inode_bitmap_start = 2;
+    sb->inode_bitmap_blocks = 1;
+    sb->block_bitmap_start = 3;
+    sb->block_bitmap_blocks = (fs_blocks + 32767) / 32768;
+    sb->inode_table_start = 4;
+    sb->inode_table_blocks = 256; // 4096 inodes * 256 bytes / 4096 block size
+    sb->data_start = sb->inode_table_start + sb->inode_table_blocks + 32;
+    std::strncpy(sb->volume_name, "NeoBench", 31);
+    
+    // Checksum (cast to match ComputeCRC32C signature)
+    sb->crc32 = 0;
+    sb->crc32 = ComputeCRC32C(page, 512 - 4); // Superblock struct is first 512 bytes
+
+    if (!RawWriteBlock(fs_start_block, page)) { g_state = InstallState::Fail; return; }
+    add_log("Superblock successfully committed.");
+
+    g_progress = 0.5f;
+    add_log("Zeroing Inode table...");
+    std::memset(page, 0, 4096);
+    for(uint32_t i = 0; i < 4; i++) {
+        if (!RawWriteBlock(fs_start_block + 4 + i, page)) { g_state = InstallState::Fail; return; }
+    }
+
+    g_progress = 0.7f;
+    add_log("Creating root directory entries...");
+    
+    /* [Inode 1] - Root Directory */
+    alignas(4096) uint8_t inode_page[4096];
+    std::memset(inode_page, 0, 4096);
+    auto* root_inode = reinterpret_cast<neo::neofs::Inode*>(inode_page);
+    root_inode->mode = 0x41ED; // drwxr-xr-x
+    root_inode->link_count = 2;
+    root_inode->flags = 1; // NFS_FL_INLINE
+    
+    /* Populate inline directory data */
+    auto* de = reinterpret_cast<neo::neofs::DirEntry*>(root_inode->data.inline_data);
+    
+    auto add_de = [&](uint32_t inode, uint8_t type, const char* name, int& offset) {
+        auto* entry = reinterpret_cast<neo::neofs::DirEntry*>(&root_inode->data.inline_data[offset]);
+        entry->inode = inode;
+        entry->file_type = type;
+        entry->name_len = std::strlen(name);
+        entry->rec_len = (sizeof(neo::neofs::DirEntry) + entry->name_len + 3) & ~3;
+        std::memcpy(entry->name, name, entry->name_len);
+        offset += entry->rec_len;
+    };
+
+    int de_offset = 0;
+    add_de(1, 4, ".", de_offset);      // Current
+    add_de(1, 4, "..", de_offset);     // Parent
+    add_de(8, 4, "bin", de_offset);    // Unix /bin
+    add_de(9, 4, "etc", de_offset);    // Unix /etc
+    add_de(10, 4, "usr", de_offset);   // Unix /usr
+    add_de(11, 4, "home", de_offset);  // Unix /home
+    add_de(12, 4, "var", de_offset);   // Unix /var
+    add_de(13, 4, "root", de_offset);  // Unix /root
+    add_de(14, 4, "dev", de_offset);   // Unix /dev
+    add_de(15, 4, "proc", de_offset);  // Unix /proc
+    
+    root_inode->size = de_offset;
+    root_inode->crc32 = ComputeCRC32C(inode_page, 256 - 4);
+    
+    if (!RawWriteBlock(fs_start_block + 4, inode_page)) { g_state = InstallState::Fail; return; }
+
+    g_progress = 1.0f;
+    add_log("NeoBench OS Installation Complete!");
+    g_state = InstallState::Success;
+}
+
+#ifdef __KERNEL__
+extern "C" void kernel_main(uint32 cpu_type, uint32 chip_ram, uint32 fast_base, uint32 fast_size, uint32 fpu) {
+#else
+std::fstream g_disk;
+int main(int argc, char** argv) {
+#endif
+    uint32_t screen_w = 640;
+    uint32_t screen_h = 480;
+
+#ifdef __KERNEL__
+    neo::gui::init(neo::gui::GfxMode::GFX_AGA);
+    neo::mouse::init(screen_w, screen_h);
+#endif
+
+    while (true) {
+#ifdef __KERNEL__
+        neo::mouse::update();
+        int32_t mx, my;
+        neo::mouse::get_position(&mx, &my);
+        bool clicked = neo::mouse::left_pressed();
+#else
+        int32_t mx = 320, my = 240; bool clicked = false;
+#endif
+
+        neo::gui::begin_frame();
+        using namespace neo::gui;
+        
+        Rect screen_r = {0, 0, screen_w, screen_h};
+        draw_gradient_rect(screen_r, {0x08, 0x08, 0x15, 0xFF}, {0x18, 0x18, 0x28, 0xFF});
+
+        Rect win = {80, 60, 480, 360};
+        fill_rounded_rect(win, 12, {0x20, 0x20, 0x25, 0xE0});
+        draw_rounded_rect(win, 12, {0x50, 0x50, 0x65, 0xFF});
+
+        draw_modern_icon(100, 80);
+        draw_text(180, 95, "NeoBench Installation Wizard", colors::WHITE);
+        draw_line(100, 155, 540, 155, {0x40, 0x40, 0x50, 0xFF});
+
+        if (g_state == InstallState::Welcome) {
+            draw_text(110, 180, "Ready to install NeoBench 1.0 to your hard drive.", colors::WHITE);
+            draw_text(110, 205, "Target Device: Primary IDE Master (Disk 0)", colors::NEOCYAN);
+            draw_text(110, 220, "Filesystem: NeoFS 1.0.0 (High Performance)", colors::NEOCYAN);
+            
+            Rect btn = {200, 340, 240, 45};
+            bool hover = btn.contains(mx, my);
+            fill_rounded_rect(btn, 6, hover ? colors::NEOGREEN : colors::NEOCYAN);
+            draw_text(240, 355, "INSTALL NOW", colors::NEODARK);
+            if (clicked && hover) PerformInstallation();
+
+        } else if (g_state == InstallState::Installing) {
+            draw_text(110, 180, "Installing...", colors::WHITE);
+            draw_progress_bar(110, 220, 420, 25, g_progress);
+            draw_text(110, 260, g_status_msg, colors::NEOCYAN, FontSize::Small);
+
+        } else if (g_state == InstallState::Success) {
+            draw_text(110, 180, "Success! The installation finished correctly.", colors::NEOGREEN);
+            draw_text(110, 210, "You can now reboot and start using NeoBench.", colors::WHITE);
+            
+            Rect btn = {200, 340, 240, 45};
+            fill_rounded_rect(btn, 6, colors::NEOCYAN);
+            draw_text(260, 355, "REBOOT", colors::NEODARK);
+            if (clicked && btn.contains(mx, my)) {
+                volatile uint16* reset = (volatile uint16*)0xDFF096;
+                *reset = 0x7FFF;
+            }
+        }
+
+        neo::gui::end_frame();
+    }
+#ifndef __KERNEL__
+    return 0;
+#endif
+}

@@ -1,0 +1,16 @@
+void load_kernel(const char* path)
+{
+    (void)path;
+
+    /* v0 placeholder:
+       In real version:
+       - read disk sector
+       - parse filesystem
+       - or preload via firmware
+    */
+
+    unsigned char* dest = (unsigned char*)0x100000;
+
+    for (int i = 0; i < 1024 * 1024; i++)
+        dest[i] = 0x90;  // NOP sled placeholder
+}

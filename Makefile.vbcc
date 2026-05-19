@@ -1,0 +1,91 @@
+export VBCC ?= /home/lordp/NeoBench
+export PATH := $(VBCC)/bin:$(PATH)
+VC   = $(VBCC)/bin/vc +aos68k
+VLINK = $(VBCC)/bin/vlink
+VASM = $(VBCC)/bin/vasmm68k_mot
+CFLAGS = -c99 -O2 -Iinclude -Idrivers/chipset -D__KERNEL__ -D__VBCC__
+ASFLAGS = -Fhunk -m68030
+
+BUILD    ?= build
+OBJS = $(BUILD)/start.o $(BUILD)/kernel.o $(BUILD)/memory.o $(BUILD)/rtg.o $(BUILD)/zorro.o \
+       $(BUILD)/bootscreen.o $(BUILD)/string.o $(BUILD)/printf.o $(BUILD)/gui_core.o \
+       $(BUILD)/globals.o $(BUILD)/nb_shell.o $(BUILD)/interrupts.o $(BUILD)/timer.o \
+       $(BUILD)/int_support.o $(BUILD)/ide.o $(BUILD)/keyboard.o
+
+all: $(BUILD)/neobench $(BUILD)/neobench.bin
+
+$(BUILD)/neobench: $(OBJS)
+	@mkdir -p $(BUILD)
+	$(VLINK) -bamigahunk -x -Bstatic -Cvbcc -nostdlib -T linker.ld -e _start $(OBJS) -L$(VBCC)/targets/m68k-amigaos/lib -lvc -o $@
+
+$(BUILD)/neobench.bin: $(OBJS)
+	@mkdir -p $(BUILD)
+	$(VLINK) -brawbin1 -x -Bstatic -Cvbcc -nostdlib -T linker.ld -e _start $(OBJS) -L$(VBCC)/targets/m68k-amigaos/lib -lvc -o $@
+
+$(BUILD)/start.o: boot/start.S
+	@mkdir -p $(BUILD)
+	$(VASM) $(ASFLAGS) $< -o $@
+
+$(BUILD)/int_support.o: kernel/hal/int_support.S
+	@mkdir -p $(BUILD)
+	$(VASM) $(ASFLAGS) $< -o $@
+
+$(BUILD)/kernel.o: kernel/kernel.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/memory.o: kernel/memory.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/rtg.o: drivers/chipset/rtg.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/zorro.o: drivers/chipset/zorro.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/bootscreen.o: kernel/bootscreen.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/string.o: lib/string.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/printf.o: lib/printf.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/gui_core.o: kernel/gui_core.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/globals.o: kernel/globals.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/nb_shell.o: Shell/nb_shell.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/interrupts.o: kernel/interrupts.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+$(BUILD)/timer.o: kernel/timer.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ide.o: drivers/storage/ide.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/keyboard.o: drivers/input/keyboard.c
+	@mkdir -p $(BUILD)
+	$(VC) $(CFLAGS) -c $< -o $@
+
+hdf: $(BUILD)/neobench.bin
+	@echo "Creating bootable HDF..."
+	python3 make_rdb.py
+	$(VASM) -Fbin bootblock_mot.S -o $(BUILD)/bootblock.bin
+	dd if=/dev/zero of=$(BUILD)/neobench.hdf bs=512 count=65536
+	dd if=$(BUILD)/rdb.bin of=$(BUILD)/neobench.hdf conv=notrunc
+	# Write bootblock to Sector 1008 (Start of DH0)
+	dd if=$(BUILD)/bootblock.bin of=$(BUILD)/neobench.hdf bs=512 seek=1008 conv=notrunc
+	# Write kernel to Sector 1010 (Immediately after bootblock)
+	dd if=$(BUILD)/neobench.bin of=$(BUILD)/neobench.hdf bs=512 seek=1010 conv=notrunc
+	@echo "HDF created: $(BUILD)/neobench.hdf"
+
+clean:
+	rm -rf $(BUILD)

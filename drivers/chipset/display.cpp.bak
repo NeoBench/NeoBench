@@ -1,0 +1,414 @@
+/*
+ * NeoBench Bare-Metal Amiga Kernel
+ * Display Abstraction Layer
+ *
+ * Auto-detects chipset (OCS/ECS/AGA) and probes for RTG cards,
+ * then routes all display calls to the best available driver.
+ */
+
+#include "../include/neobench.h"
+#include "../include/types.h"
+#include "custom.h"
+
+/* Forward declarations for sub-drivers */
+namespace neo {
+namespace ecs {
+    bool init_ecs(void);
+    void clear_ecs(void);
+    void putchar_ecs(char c);
+    void puts_ecs(const char *str);
+    void scroll_ecs(void);
+    void set_color_ecs(int index, uint8_t r, uint8_t g, uint8_t b);
+    int  get_cols(void);
+    int  get_rows(void);
+    void set_cursor(int x, int y);
+    int  get_cursor_x(void);
+    int  get_cursor_y(void);
+    void cursor_blink_vblank(void);
+}
+namespace aga {
+    bool init_aga(void);
+    void clear_aga(void);
+    void putchar_aga(char c);
+    void puts_aga(const char *str);
+    void scroll_aga(void);
+    void set_color_aga_api(int index, uint8_t r, uint8_t g, uint8_t b);
+    int  get_cols(void);
+    int  get_rows(void);
+    void set_cursor(int x, int y);
+    void cursor_blink_vblank(void);
+}
+namespace rtg {
+    bool probe_rtg(void);
+    bool init_rtg(void);
+    void clear_rtg(void);
+    void putchar_rtg(char c);
+    void puts_rtg(const char *str);
+    void scroll_rtg(void);
+    void set_color_rtg(int index, uint8_t r, uint8_t g, uint8_t b);
+    int  get_cols(void);
+    int  get_rows(void);
+    void set_cursor(int x, int y);
+    const char *get_card_name(void);
+}
+}
+
+namespace neo {
+namespace display {
+
+/* ========================================================================
+ * Display Backend Selection
+ * ======================================================================== */
+
+enum DisplayBackend {
+    BACKEND_NONE = 0,
+    BACKEND_ECS,
+    BACKEND_AGA,
+    BACKEND_RTG
+};
+
+static DisplayBackend active_backend = BACKEND_NONE;
+static ChipsetType detected_chipset = CHIPSET_OCS;
+static bool has_rtg = false;
+
+/* ========================================================================
+ * Chipset Detection
+ * ======================================================================== */
+
+ChipsetType detect_chipset(void)
+{
+    /* Check Agnus/Alice via VPOSR */
+    ChipsetType agnus = detect_agnus();
+
+    /* Check Denise/Lisa via DENISEID */
+    ChipsetType denise = detect_denise();
+
+    /* Use the minimum of the two (both must support the level) */
+    detected_chipset = (agnus < denise) ? agnus : denise;
+
+    /* Probe for RTG card */
+    has_rtg = rtg::probe_rtg();
+
+    return detected_chipset;
+}
+
+/* ========================================================================
+ * Unified Display API
+ * ======================================================================== */
+
+bool init(void)
+{
+    /* Detect what we have */
+    detect_chipset();
+
+    /* Prefer RTG if available, then AGA, then ECS/OCS */
+    if (has_rtg) {
+        if (rtg::init_rtg()) {
+            active_backend = BACKEND_RTG;
+            return true;
+        }
+    }
+
+    if (detected_chipset == CHIPSET_AGA) {
+        if (aga::init_aga()) {
+            active_backend = BACKEND_AGA;
+            return true;
+        }
+    }
+
+    /* Fall back to ECS/OCS */
+    if (ecs::init_ecs()) {
+        active_backend = BACKEND_ECS;
+        return true;
+    }
+
+    return false;
+}
+
+void clear(void)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: ecs::clear_ecs(); break;
+        case BACKEND_AGA: aga::clear_aga(); break;
+        case BACKEND_RTG: rtg::clear_rtg(); break;
+        default: break;
+    }
+}
+
+void putchar(char c)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: ecs::putchar_ecs(c); break;
+        case BACKEND_AGA: aga::putchar_aga(c); break;
+        case BACKEND_RTG: rtg::putchar_rtg(c); break;
+        default: break;
+    }
+}
+
+void puts(const char *str)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: ecs::puts_ecs(str); break;
+        case BACKEND_AGA: aga::puts_aga(str); break;
+        case BACKEND_RTG: rtg::puts_rtg(str); break;
+        default: break;
+    }
+}
+
+void scroll(void)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: ecs::scroll_ecs(); break;
+        case BACKEND_AGA: aga::scroll_aga(); break;
+        case BACKEND_RTG: rtg::scroll_rtg(); break;
+        default: break;
+    }
+}
+
+void set_color(int index, uint8_t r, uint8_t g, uint8_t b)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: ecs::set_color_ecs(index, r, g, b); break;
+        case BACKEND_AGA: aga::set_color_aga_api(index, r, g, b); break;
+        case BACKEND_RTG: rtg::set_color_rtg(index, r, g, b); break;
+        default: break;
+    }
+}
+
+void set_cursor(int x, int y)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: ecs::set_cursor(x, y); break;
+        case BACKEND_AGA: aga::set_cursor(x, y); break;
+        case BACKEND_RTG: rtg::set_cursor(x, y); break;
+        default: break;
+    }
+}
+
+int get_cols(void)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: return ecs::get_cols();
+        case BACKEND_AGA: return aga::get_cols();
+        case BACKEND_RTG: return rtg::get_cols();
+        default: return 80;
+    }
+}
+
+int get_rows(void)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: return ecs::get_rows();
+        case BACKEND_AGA: return aga::get_rows();
+        case BACKEND_RTG: return rtg::get_rows();
+        default: return 25;
+    }
+}
+
+/* ========================================================================
+ * printf - Minimal implementation for kernel use
+ * ======================================================================== */
+
+static void print_uint(uint32_t val, int base, int min_width, char pad)
+{
+    char buf[12];
+    int pos = 0;
+
+    if (val == 0) {
+        buf[pos++] = '0';
+    } else {
+        while (val > 0) {
+            int digit = val % base;
+            buf[pos++] = (digit < 10) ? ('0' + digit) : ('A' + digit - 10);
+            val /= base;
+        }
+    }
+
+    /* Pad */
+    while (pos < min_width) {
+        putchar(pad);
+        min_width--;
+    }
+
+    /* Output in reverse */
+    while (pos > 0) {
+        putchar(buf[--pos]);
+    }
+}
+
+void printf(const char *fmt, ...)
+{
+    __builtin_va_list args;
+    __builtin_va_start(args, fmt);
+
+    while (*fmt) {
+        if (*fmt == '%') {
+            fmt++;
+            char pad = ' ';
+            int width = 0;
+
+            if (*fmt == '0') {
+                pad = '0';
+                fmt++;
+            }
+
+            while (*fmt >= '0' && *fmt <= '9') {
+                width = width * 10 + (*fmt - '0');
+                fmt++;
+            }
+
+            switch (*fmt) {
+                case 'd': {
+                    int32_t val = __builtin_va_arg(args, int32_t);
+                    if (val < 0) {
+                        putchar('-');
+                        val = -val;
+                        if (width > 0) width--;
+                    }
+                    print_uint((uint32_t)val, 10, width, pad);
+                    break;
+                }
+                case 'u': {
+                    uint32_t val = __builtin_va_arg(args, uint32_t);
+                    print_uint(val, 10, width, pad);
+                    break;
+                }
+                case 'x':
+                case 'X': {
+                    uint32_t val = __builtin_va_arg(args, uint32_t);
+                    print_uint(val, 16, width, pad);
+                    break;
+                }
+                case 's': {
+                    const char *s = __builtin_va_arg(args, const char *);
+                    if (!s) s = "(null)";
+                    puts(s);
+                    break;
+                }
+                case 'c': {
+                    char c = (char)__builtin_va_arg(args, int);
+                    putchar(c);
+                    break;
+                }
+                case '%':
+                    putchar('%');
+                    break;
+                default:
+                    putchar('%');
+                    putchar(*fmt);
+                    break;
+            }
+        } else {
+            putchar(*fmt);
+        }
+        fmt++;
+    }
+
+    __builtin_va_end(args);
+}
+
+/* ========================================================================
+ * Boot Message Formatting
+ *
+ * Outputs systemd-style boot messages:
+ *   [  OK  ] Starting subsystem...
+ *   [FAILED] Starting subsystem...
+ *   [ INFO ] Message
+ * ======================================================================== */
+
+void boot_msg(int status, const char *subsystem, const char *message)
+{
+    /* Status strings */
+    const char *status_str;
+    int status_color;
+
+    switch (status) {
+        case 0:  /* OK */
+            status_str = "  OK  ";
+            status_color = 3;  /* green */
+            break;
+        case 1:  /* FAILED */
+            status_str = "FAILED";
+            status_color = 5;  /* red (or color 1 on ECS) */
+            break;
+        case 2:  /* INFO */
+            status_str = " INFO ";
+            status_color = 2;  /* cyan */
+            break;
+        case 3:  /* WARN */
+            status_str = " WARN ";
+            status_color = 4;  /* yellow */
+            break;
+        default:
+            status_str = " ???? ";
+            status_color = 1;
+            break;
+    }
+
+    /* Print: [STATUS] Starting subsystem... message */
+    putchar('[');
+    /* For colored output on AGA/RTG we could switch colors here */
+    (void)status_color;
+    puts(status_str);
+    putchar(']');
+    putchar(' ');
+
+    if (subsystem) {
+        puts(subsystem);
+        puts(": ");
+    }
+
+    if (message) {
+        puts(message);
+    }
+
+    putchar('\n');
+}
+
+/* Convenience wrappers */
+void boot_ok(const char *subsystem, const char *message)
+{
+    boot_msg(0, subsystem, message);
+}
+
+void boot_fail(const char *subsystem, const char *message)
+{
+    boot_msg(1, subsystem, message);
+}
+
+void boot_info(const char *subsystem, const char *message)
+{
+    boot_msg(2, subsystem, message);
+}
+
+void boot_warn(const char *subsystem, const char *message)
+{
+    boot_msg(3, subsystem, message);
+}
+
+/* ========================================================================
+ * VBlank handler (called from interrupt)
+ * ======================================================================== */
+
+void vblank_handler(void)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: ecs::cursor_blink_vblank(); break;
+        case BACKEND_AGA: aga::cursor_blink_vblank(); break;
+        default: break;
+    }
+}
+
+/* Return current backend info */
+const char *get_backend_name(void)
+{
+    switch (active_backend) {
+        case BACKEND_ECS: return "OCS/ECS Native";
+        case BACKEND_AGA: return "AGA Native";
+        case BACKEND_RTG: return rtg::get_card_name();
+        default: return "None";
+    }
+}
+
+} /* namespace display */
+} /* namespace neo */

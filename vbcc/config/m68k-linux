@@ -1,0 +1,10 @@
+-cc=vbccm68k -quiet -I"$VBCC"/targets/m68k-linux/include %s -o= %s %s -O=%ld
+-ccv=vbccm68k -I"$VBCC"/targets/m68k-linux/include %s -o= %s %s -O=%ld
+-as=vasmm68k_mot -Felf -nowarn=62 -quiet %s -o %s -ldots
+-asv=vasmm68k_mot -Felf -nowarn=62 %s -o %s -ldots
+-rm=rm %s
+-rmv=rm %s
+-ld=vlink -m -Cvbcc -belf32m68k -T"$VBCC"/targets/m68k-linux/vlink.cmd -L"$VBCC"/targets/m68k-linux/lib "$VBCC"/targets/m68k-linux/lib/startup.o %s %s -lvc -o %s -e __main
+-ldv=vlink -m -Cvbcc -t  -belf32m68k -T"$VBCC"/targets/m68k-linux/vlink.cmd -L"$VBCC"/targets/m68k-linux/lib "$VBCC"/targets/m68k-linux/lib/startup.o %s %s -lvc -o %s -e __main -Mmapfile
+-l2=vlink -m -belf32m68k -T"$VBCC"/targets/m68k-linux/vlink.cmd -L"$VBCC"/targets/m68k-linux/lib %s %s -o %s -e __main
+-l2v=vlink -m -t -belf32m68k -T"$VBCC"/targets/m68k-linux/vlink.cmd -L"$VBCC"/targets/m68k-linux/lib %s %s -o %s -e __main -Mmapfile

@@ -1,0 +1,42 @@
+kinclude config.mk
+
+.PHONY: all kernel drivers apps link clean
+
+KERNEL_SRC := $(shell find kernel -name "*.cpp")
+DRIVER_SRC := $(shell find drivers -name "*.cpp")
+APP_SRC    := $(shell find apps -name "*.cpp")
+
+KERNEL_OBJ := $(patsubst kernel/%.cpp,$(OBJ)/kernel_%.o,$(KERNEL_SRC))
+DRIVER_OBJ := $(patsubst drivers/%.cpp,$(OBJ)/driver_%.o,$(DRIVER_SRC))
+APP_OBJ    := $(patsubst apps/%.cpp,$(OBJ)/app_%.o,$(APP_SRC))
+
+ALL_OBJ := $(KERNEL_OBJ) $(DRIVER_OBJ) $(APP_OBJ)
+
+all: dirs kernel drivers apps link
+
+dirs:
+	mkdir -p $(OBJ) $(BUILD)
+
+kernel: $(KERNEL_OBJ)
+drivers: $(DRIVER_OBJ)
+apps: $(APP_OBJ)
+
+$(OBJ)/kernel_%.o: kernel/%.cpp
+	$(CC) $(CFLAGS) $< -o $@
+
+$(OBJ)/driver_%.o: drivers/%.cpp
+	$(CC) $(CFLAGS) $< -o $@
+
+$(OBJ)/app_%.o: apps/%.cpp
+	$(CC) $(CFLAGS) $< -o $@
+
+link:
+	vlink $(LDFLAGS) \
+	    $(VBCC)/targets/m68k-amigaos/lib/startup.o \
+	    $(ALL_OBJ) \
+	    -L$(LIBDIR) \
+	    $(LIBS) \
+	    -o $(BUILD)/neobench
+
+clean:
+	rm -rf $(BUILD)

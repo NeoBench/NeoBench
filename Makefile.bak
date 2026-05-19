@@ -1,0 +1,19 @@
+CC = g++
+CFLAGS = -O2 -Wall -std=c++17 -m32 -I. -Iinclude -Idrivers -Idrivers/chipset -Ikernel -include include/gui_bridge.h
+
+all: format ls.neofs cat.neofs gui_format
+
+format: format.cpp
+	$(CC) $(CFLAGS) -o format format.cpp
+
+ls.neofs: ls.neofs.cpp
+	$(CC) $(CFLAGS) -o ls.neofs ls.neofs.cpp
+
+cat.neofs: cat.neofs.cpp
+	$(CC) $(CFLAGS) -o cat.neofs cat.neofs.cpp
+
+gui_format: gui_format.cpp kernel/gui_core.cpp drivers/input/mouse.cpp kernel/memory.cpp
+	$(CC) $(CFLAGS) -o gui_format gui_format.cpp kernel/gui_core.cpp drivers/input/mouse.cpp kernel/memory.cpp
+
+clean:
+	rm -f format ls.neofs cat.neofs gui_format
