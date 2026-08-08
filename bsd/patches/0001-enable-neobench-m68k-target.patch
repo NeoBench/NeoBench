@@ -1,24 +1,15 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: NeoBench <neobench@users.noreply.github.com>
-Date: Sat, 8 Aug 2026 00:00:00 +0000
-Subject: [PATCH] build: reserve m68k/NeoBench target in stable/15
-
-Reserve m68k as a NeoBench target in the FreeBSD source build system. This
-patch is intentionally only the first build hook; the machine-dependent
-sources supplied by NeoBench must be installed before a kernel can build.
-
----
- Makefile.inc1 | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
-
+diff --git a/Makefile.inc1 b/Makefile.inc1
 --- a/Makefile.inc1
 +++ b/Makefile.inc1
-@@ -136,5 +136,6 @@ KNOWN_ARCHES?=	aarch64/arm64 \
+@@ -147,9 +147,10 @@ TARGET_TRIPLE?=	${TARGET_ARCH:S/amd64/x86_64/}-${TARGET_TRIPLE_ABI}-freebsd${OS_REVISION}
+ KNOWN_ARCHES?=	aarch64/arm64 \
+ 		amd64 \
+ 		armv7/arm \
+ 		i386 \
  		powerpc \
  		powerpc64/powerpc \
  		powerpc64le/powerpc \
+ 		powerpcspe/powerpc \
 -		riscv64/riscv
 +		riscv64/riscv \
 +		m68k/m68k
--- 
-2.0.0
