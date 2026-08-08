@@ -20,4 +20,5 @@ sources supplied by NeoBench must be installed before a kernel can build.
 -\t\triscv64/riscv
 +\t\triscv64/riscv \\
 +\t\tm68k/m68k
-*** End Patch
+-- 
+2.0.0
