@@ -15,10 +15,26 @@ else
     git -C "$FREEBSD" reset --hard "origin/$BRANCH"
 fi
 
-printf '%s\n' 'NeoBench: applying FreeBSD build integration'
-git -C "$FREEBSD" apply "$BSD/patches/0001-enable-neobench-m68k-target.patch"
+printf '%s\n' 'NeoBench: enabling m68k build target'
 
-# Keep the NeoBench MD sources in the project tree.  The FreeBSD source tree
+# Do not depend on line numbers or a brittle unified patch here.  FreeBSD's
+# stable/15 Makefile.inc1 can change around the architecture list.  Insert the
+# NeoBench target immediately after riscv64/riscv when it is not already there.
+MAKEFILE="$FREEBSD/Makefile.inc1"
+if ! grep -Eq '^[[:space:]]*m68k/m68k([[:space:]]|\\|$)' "$MAKEFILE"; then
+    awk '
+        /riscv64\/riscv/ && !done {
+            print $0 " \\\";
+            print "\t\tm68k/m68k";
+            done=1;
+            next;
+        }
+        { print }
+    ' "$MAKEFILE" > "$MAKEFILE.neobench"
+    mv "$MAKEFILE.neobench" "$MAKEFILE"
+fi
+
+# Keep the NeoBench MD sources in the project tree. The FreeBSD source tree
 # receives a generated copy for the current build; it is never committed back
 # into the upstream checkout.
 mkdir -p "$FREEBSD/sys/m68k/neobench"
