@@ -1,0 +1,11 @@
+
+# Generated NeoBench filesystem images
+images/*.nbfs
+images/*.img
+images/*.iso
+
+# Generated NeoBench/NBFS disk images
+images/*.img
+images/*.nbfs
+tools/nbfs/mkfs/*.img
+tools/nbfs/mkfs/*.nbfs

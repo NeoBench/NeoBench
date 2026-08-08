@@ -1,0 +1,4 @@
+/*
+ * panic.c
+ * NeoLoader
+ */

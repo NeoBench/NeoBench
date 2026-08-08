@@ -1,0 +1,16 @@
+#ifndef NBFS_FS_INODE_H
+#define NBFS_FS_INODE_H
+
+#include <stdint.h>
+#include <stdio.h>
+
+#include <nbfs/nbfs.h>
+
+uint64_t nbfs_alloc_inode(void);
+
+int nbfs_write_inode(
+    FILE *fp,
+    uint64_t inode_number,
+    const nbfs_inode_t *inode);
+
+#endif
