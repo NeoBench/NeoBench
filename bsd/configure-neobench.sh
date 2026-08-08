@@ -24,7 +24,7 @@ MAKEFILE="$FREEBSD/Makefile.inc1"
 if ! grep -Eq '^[[:space:]]*m68k/m68k([[:space:]]|\\|$)' "$MAKEFILE"; then
     awk '
         /riscv64\/riscv/ && !done {
-            print $0 " \\\";
+            printf "%s %c\n", $0, 92;
             print "\t\tm68k/m68k";
             done=1;
             next;
