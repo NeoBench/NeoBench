@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: NeoBench <neobench@users.noreply.github.com>
+Date: Sat, 8 Aug 2026 00:00:00 +0000
+Subject: [PATCH] build: reserve m68k/NeoBench target in stable/15
+
+This patch is the first build-system hook for the NeoBench 68060 port. It
+intentionally does not claim that the upstream FreeBSD tree has native m68k
+support; the machine-dependent sources supplied by NeoBench must be installed
+before the kernel target can be built.
+
+---
+ Makefile.inc1 | 1 +
+ 1 file changed, 1 insertion(+)
+
+--- a/Makefile.inc1
++++ b/Makefile.inc1
+@@ -132,6 +132,7 @@ TARGET_TRIPLE?=${TARGET_ARCH:S/amd64/x86_64/}-${TARGET_TRIPLE_ABI}-freebsd${OS_REVISION}
+ KNOWN_ARCHES?=\taarch64/arm64 \\
+ \t\tamd64 \\
+ \t\tarmv7/arm \\
+ \t\ti386 \\
+ \t\tpowerpc \\
+ \t\tpowerpc64/powerpc \\
+ \t\tpowerpc64le/powerpc \\
+-\t\triscv64/riscv
++\t\triscv64/riscv \\
++\t\tm68k/m68k
+ 
+*** End Patch
