@@ -8,6 +8,7 @@
 #include "fs/inode.h"
 #include "fs/rootdir.h"
 #include "fs/directory.h"
+#include "fs/verify.h"
 
 int mkfs_create(const char *image)
 {
@@ -35,7 +36,8 @@ int mkfs_create(const char *image)
     /*
      * 2. Create root inode.
      *
-     * This allocates the first DATA block (324).
+     * This allocates the first data block:
+     * NBFS_DATA_START (324).
      */
     if (nbfs_create_root_inode(fp) != 0)
     {
@@ -47,7 +49,7 @@ int mkfs_create(const char *image)
     /*
      * 3. Write block bitmap.
      *
-     * This now includes:
+     * Includes:
      *   - reserved blocks 0-323
      *   - allocated root directory block 324
      */
@@ -59,14 +61,34 @@ int mkfs_create(const char *image)
     }
 
     /*
-     * 4. Superblock.
+     * 4. Write superblock.
      *
-     * Written after root allocation so free_blocks
-     * reflects the actual filesystem state.
+     * This is done after root allocation so
+     * free_blocks reflects the actual image state.
      */
     if (nbfs_write_superblock(fp) != 0)
     {
         puts("Failed to write superblock.");
+        fclose(fp);
+        return 1;
+    }
+
+    /*
+     * 5. Write root directory.
+     */
+    if (nbfs_write_root_directory(fp, NBFS_DATA_START) != 0)
+    {
+        puts("Failed to write root directory.");
+        fclose(fp);
+        return 1;
+    }
+
+    /*
+     * 6. Verify the completed filesystem.
+     */
+    if (nbfs_verify_image(fp) != 0)
+    {
+        puts("NBFS filesystem verification failed.");
         fclose(fp);
         return 1;
     }

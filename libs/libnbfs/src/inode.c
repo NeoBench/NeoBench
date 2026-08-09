@@ -79,32 +79,3 @@ int nbfs_write_inode(
 
     return 0;
 }
-
-
-
-int nbfs_allocate_inode(
-    nbfs_context_t *ctx,
-    uint64_t *inode)
-{
-    static uint64_t next_inode = 2;
-
-    if (!ctx || !inode)
-        return -1;
-
-
-    *inode = next_inode++;
-
-    return 0;
-}
-
-
-
-int nbfs_free_inode(
-    nbfs_context_t *ctx,
-    uint64_t inode)
-{
-    (void)ctx;
-    (void)inode;
-
-    return 0;
-}
