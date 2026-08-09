@@ -1,3 +1,13 @@
+/*
+ * libnbfs.h
+ * NeoBench Filesystem Library
+ *
+ * Copyright (c) 2026 NeoBench Project
+ * All rights reserved.
+ *
+ * Public API for the NeoBench NBFS filesystem library.
+ */
+
 #ifndef LIBNBFS_H
 #define LIBNBFS_H
 
@@ -129,6 +139,16 @@ int nbfs_create_directory(
     nbfs_context_t *ctx,
     uint64_t parent_inode,
     const char *name);
+
+int nbfs_delete_directory(
+    nbfs_context_t *ctx,
+    uint64_t inode);
+
+int nbfs_rename(
+    nbfs_context_t *ctx,
+    uint64_t parent_inode,
+    const char *old_name,
+    const char *new_name);
 
 int nbfs_lookup(
     nbfs_context_t *ctx,
