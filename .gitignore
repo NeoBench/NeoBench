@@ -63,3 +63,6 @@ out/
 *~
 *.swp
 *.swo
+
+# FreeBSD build output
+bsd/obj/
