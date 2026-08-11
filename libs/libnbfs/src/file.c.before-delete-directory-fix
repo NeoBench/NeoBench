@@ -1393,11 +1393,12 @@ int nbfs_delete_directory(
     if (!ctx)
         return -1;
 
-    /* Root directory cannot be deleted. */
+    /*
+     * Root directory cannot be deleted.
+     */
     if (inode_number <= NBFS_ROOT_INODE)
         return -1;
 
-    /* Read and validate target inode. */
     if (nbfs_read_inode(
             ctx,
             inode_number,
@@ -1411,12 +1412,21 @@ int nbfs_delete_directory(
         return -1;
 
     /*
-     * Directory must contain only . and ..
+     * Directory must be empty apart from . and ..
      */
-    if (directory_is_empty(ctx, &inode) != 1)
-        return -1;
+    {
+        int empty =
+            directory_is_empty(
+                ctx,
+                &inode);
 
-    /* Find the parent directory. */
+        if (empty != 1)
+            return -1;
+    }
+
+    /*
+     * Find parent.
+     */
     if (find_parent_directory(
             ctx,
             inode_number,
@@ -1429,22 +1439,13 @@ int nbfs_delete_directory(
             &parent) != 0)
         return -1;
 
-    if (parent.mode != NBFS_MODE_DIRECTORY)
-        return -1;
-
     /*
-     * Remove the child entry from the parent directory.
-     *
-     * NBFS directory entries are variable length, so walk
-     * using record_length rather than assuming fixed entries.
+     * Remove the directory entry from parent by inode.
      */
     {
         uint8_t block[NBFS_DEFAULT_BLOCK_SIZE];
         uint64_t offset = 0;
         int found = 0;
-
-        if (parent.extents[0].block_count == 0)
-            return -1;
 
         if (nbfs_read_block(
                 ctx,
@@ -1456,7 +1457,8 @@ int nbfs_delete_directory(
                NBFS_DEFAULT_BLOCK_SIZE)
         {
             nbfs_directory_entry_t *entry =
-                (nbfs_directory_entry_t *)(block + offset);
+                (nbfs_directory_entry_t *)
+                    (block + offset);
 
             if (entry->record_length == 0)
                 break;
@@ -1479,7 +1481,9 @@ int nbfs_delete_directory(
                         ctx,
                         parent.extents[0].start_block,
                         block) != 0)
+                {
                     return -1;
+                }
 
                 found = 1;
                 break;
@@ -1492,8 +1496,12 @@ int nbfs_delete_directory(
             return -1;
     }
 
-    /* Release all blocks owned by the directory. */
-    if (file_free_extents(ctx, &inode) != 0)
+    /*
+     * Release directory data blocks.
+     */
+    if (file_free_extents(
+            ctx,
+            &inode) != 0)
         return -1;
 
     memset(
@@ -1504,19 +1512,22 @@ int nbfs_delete_directory(
     inode.size = 0;
     inode.links = 0;
 
-    /* Persist the now-free inode contents before releasing it. */
     if (nbfs_write_inode(
             ctx,
             &inode) != 0)
         return -1;
 
-    /* Release the inode bitmap allocation. */
+    /*
+     * Release inode allocation.
+     */
     if (nbfs_free_inode(
             ctx,
             inode_number) != 0)
         return -1;
 
-    /* The parent loses one child-directory link. */
+    /*
+     * Remove the child-directory link from its parent.
+     */
     if (parent.links > 0)
         parent.links--;
 
