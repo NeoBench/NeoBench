@@ -105,6 +105,37 @@ static int check_path(
     return 0;
 }
 
+static int check_path_rejected(
+    nbfs_context_t *ctx,
+    uint64_t start_inode,
+    const char *path)
+{
+    uint64_t inode = 0;
+    int rc;
+
+    rc = nbfs_resolve_path(
+        ctx,
+        start_inode,
+        path,
+        &inode);
+
+    if (rc == 0)
+    {
+        printf(
+            "FAIL: \"%s\" unexpectedly resolved to inode %llu\n",
+            path,
+            (unsigned long long)inode);
+
+        return 1;
+    }
+
+    printf(
+        "PASS: \"%s\" correctly rejected\n",
+        path);
+
+    return 0;
+}
+
 int main(void)
 {
     nbfs_context_t *ctx;
@@ -448,6 +479,30 @@ int main(void)
             subdir,
             "..",
             docs) != 0)
+    {
+        nbfs_close(ctx);
+        return 1;
+    }
+
+    /*
+     * Regular files cannot be traversed as directories.
+     *
+     * "." and ".." must therefore be rejected when the
+     * starting inode is a regular file.
+     */
+    if (check_path_rejected(
+            ctx,
+            readme,
+            ".") != 0)
+    {
+        nbfs_close(ctx);
+        return 1;
+    }
+
+    if (check_path_rejected(
+            ctx,
+            readme,
+            "..") != 0)
     {
         nbfs_close(ctx);
         return 1;

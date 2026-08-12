@@ -57,8 +57,29 @@ static int path_lookup_component(
     const char *component,
     uint64_t *next)
 {
+    nbfs_inode_t inode;
+
     if (!ctx || !component || !next)
         return -1;
+
+    /*
+     * "." and ".." are directory operations.
+     *
+     * Do not allow a regular file to masquerade as a
+     * directory merely because the component is "." or "..".
+     */
+    if (nbfs_read_inode(
+            ctx,
+            current,
+            &inode) != 0)
+    {
+        return -1;
+    }
+
+    if (inode.mode != NBFS_MODE_DIRECTORY)
+    {
+        return -1;
+    }
 
     if (component[0] == '\0')
     {
