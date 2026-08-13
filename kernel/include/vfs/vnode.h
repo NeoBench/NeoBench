@@ -1,16 +1,16 @@
-#ifndef VFS_VNODE_H
-#define VFS_VNODE_H
+#ifndef NEOBENCH_VFS_VNODE_H
+#define NEOBENCH_VFS_VNODE_H
 
 #include <stdint.h>
 
 typedef uint64_t vfs_ino_t;
 
+struct vfs_filesystem;
+
 typedef enum {
     VFS_VNODE_REG = 1,
     VFS_VNODE_DIR = 2
 } vfs_vnode_type_t;
-
-struct vfs_filesystem;
 
 typedef struct vfs_vnode {
     vfs_ino_t ino;

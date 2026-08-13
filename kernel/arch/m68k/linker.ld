@@ -1,39 +1,37 @@
 ENTRY(_start)
 
+PHDRS
+{
+    kernel PT_LOAD FLAGS(7);
+}
+
 SECTIONS
 {
+    . = 0x1000;
 
-. = 0x1000;
+    .text :
+    {
+        KEEP(*(.text))
+        *(.text*)
+    } :kernel
 
+    .rodata :
+    {
+        *(.rodata*)
+    } :kernel
 
-.text :
-{
-    KEEP(*(.text))
-    *(.text*)
-}
+    .data :
+    {
+        *(.data*)
+    } :kernel
 
+    .bss :
+    {
+        _bss_start = .;
 
-.rodata :
-{
-    *(.rodata*)
-}
+        *(.bss*)
+        *(COMMON)
 
-
-.data :
-{
-    *(.data*)
-}
-
-
-.bss :
-{
-    _bss_start = .;
-
-    *(.bss*)
-    *(COMMON)
-
-    _bss_end = .;
-}
-
-
+        _bss_end = .;
+    } :kernel
 }
