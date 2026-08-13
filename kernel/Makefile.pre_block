@@ -17,8 +17,6 @@ KERNEL_OBJS = \
 	init/kernel_main.o \
 	init/console.o \
 	init/banner.o \
-	fs/block.o \
-	fs/nbfs/nbfs.o \
 	fs/vfs/vfs.o \
 	fs/vfs/vnode.o \
 	fs/vfs/file.o \
@@ -39,7 +37,7 @@ arch/m68k/%.o: arch/m68k/%.S
 init/%.o: init/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-fs/%.o: fs/%.c
+fs/vfs/%.o: fs/vfs/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
