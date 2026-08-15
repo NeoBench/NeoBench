@@ -5,10 +5,10 @@
 #include "filesystem.h"
 #include "vnode.h"
 #include "path.h"
-
+#include "vfs/nbfs_vfs.h"
 #include "libnbfs.h"
 
-#define TEST_IMAGE "../../../../images/test-path-resolution.nbfs"
+#define TEST_IMAGE "../../../images/test-path-resolution.nbfs"
 
 static int fail(const char *msg)
 {
@@ -20,14 +20,16 @@ int main(void)
 {
     nbfs_context_t *ctx;
     vfs_filesystem_t fs;
-    vfs_vnode_t root;
-    vfs_vnode_t integration;
-    vfs_vnode_t hello;
-    vfs_path_t root_path;
-    vfs_path_t integration_path;
 
-    printf("NeoBench NBFS VFS nested lookup test\n");
-    printf("====================================\n");
+    vfs_vnode_t root;
+    vfs_vnode_t docs;
+    vfs_vnode_t readme;
+
+    vfs_path_t root_path;
+    vfs_path_t docs_path;
+
+    printf("NeoBench NBFS VFS lookup test\n");
+    printf("=============================\n");
 
     ctx = nbfs_open(TEST_IMAGE);
 
@@ -47,13 +49,16 @@ int main(void)
     }
 
     /*
-     * The VFS filesystem currently carries the NBFS context
-     * through private_data.
+     * Connect the NBFS implementation to the generic VFS.
      */
     fs.private_data = ctx;
+    fs.lookup = vfs_nbfs_lookup;
 
     printf("PASS: VFS filesystem initialized\n");
 
+    /*
+     * Root inode 1.
+     */
     if (vfs_vnode_init(
             &root,
             &fs,
@@ -67,7 +72,9 @@ int main(void)
 
     printf("PASS: root vnode initialized\n");
 
-    if (vfs_path_init(&root_path, &root) != 0)
+    if (vfs_path_init(
+            &root_path,
+            &root) != 0)
     {
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
@@ -78,100 +85,136 @@ int main(void)
     printf("PASS: root path initialized\n");
 
     /*
-     * VFS lookup:
+     * Root directory:
      *
-     *     / -> integration
+     * /
+     * └── docs       inode 2
      */
     if (vfs_lookup(
             &root_path,
-            "integration",
-            &integration) != 0)
+            "docs",
+            &docs) != 0)
     {
         vfs_path_destroy(&root_path);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("VFS lookup /integration");
+        return fail("VFS lookup /docs");
     }
 
     printf(
-        "PASS: VFS /integration -> inode %llu\n",
-        (unsigned long long)integration.ino);
+        "PASS: VFS /docs -> inode %llu\n",
+        (unsigned long long)docs.ino);
 
-    if (integration.type != VFS_VNODE_DIR)
+    if (docs.ino != 2)
     {
+        vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
-        vfs_vnode_put(&integration);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("/integration is not VFS_VNODE_DIR");
+        return fail("/docs inode is not 2");
     }
 
-    printf("PASS: /integration is a directory\n");
+    printf("PASS: /docs inode = 2\n");
+
+    if (docs.type != VFS_VNODE_DIR)
+    {
+        vfs_vnode_put(&docs);
+        vfs_path_destroy(&root_path);
+        vfs_vnode_put(&root);
+        vfs_filesystem_destroy(&fs);
+        nbfs_close(ctx);
+        return fail("/docs is not a directory");
+    }
+
+    printf("PASS: /docs is a directory\n");
 
     /*
-     * Turn /integration into a VFS path.
+     * Turn /docs into a VFS path.
      */
     if (vfs_path_init(
-            &integration_path,
-            &integration) != 0)
+            &docs_path,
+            &docs) != 0)
     {
+        vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
-        vfs_vnode_put(&integration);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("integration path init");
+        return fail("docs path init");
     }
 
+    printf("PASS: /docs path initialized\n");
+
     /*
-     * Nested VFS lookup:
+     * Nested lookup:
      *
-     *     /integration -> hello.txt
+     * /docs/readme.txt
+     *
+     * readme.txt = inode 3
      */
     if (vfs_lookup(
-            &integration_path,
-            "hello.txt",
-            &hello) != 0)
+            &docs_path,
+            "readme.txt",
+            &readme) != 0)
     {
-        vfs_path_destroy(&integration_path);
+        vfs_path_destroy(&docs_path);
+        vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
-        vfs_vnode_put(&integration);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("VFS lookup /integration/hello.txt");
+        return fail("VFS lookup /docs/readme.txt");
     }
 
     printf(
-        "PASS: VFS /integration/hello.txt -> inode %llu\n",
-        (unsigned long long)hello.ino);
+        "PASS: VFS /docs/readme.txt -> inode %llu\n",
+        (unsigned long long)readme.ino);
 
-    if (hello.type != VFS_VNODE_REG)
+    if (readme.ino != 3)
     {
-        vfs_vnode_put(&hello);
-        vfs_path_destroy(&integration_path);
+        vfs_vnode_put(&readme);
+        vfs_path_destroy(&docs_path);
+        vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
-        vfs_vnode_put(&integration);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("hello.txt is not VFS_VNODE_REG");
+        return fail("readme.txt inode is not 3");
     }
 
-    printf("PASS: /integration/hello.txt is a regular file\n");
+    printf("PASS: readme.txt inode = 3\n");
 
-    vfs_vnode_put(&hello);
-    vfs_path_destroy(&integration_path);
+    if (readme.type != VFS_VNODE_REG)
+    {
+        vfs_vnode_put(&readme);
+        vfs_path_destroy(&docs_path);
+        vfs_vnode_put(&docs);
+        vfs_path_destroy(&root_path);
+        vfs_vnode_put(&root);
+        vfs_filesystem_destroy(&fs);
+        nbfs_close(ctx);
+        return fail("readme.txt is not a regular file");
+    }
+
+    printf("PASS: /docs/readme.txt is a regular file\n");
+
+    /*
+     * Cleanup.
+     */
+    vfs_vnode_put(&readme);
+
+    vfs_path_destroy(&docs_path);
+    vfs_vnode_put(&docs);
+
     vfs_path_destroy(&root_path);
-    vfs_vnode_put(&integration);
     vfs_vnode_put(&root);
 
     vfs_filesystem_destroy(&fs);
     nbfs_close(ctx);
 
-    printf("\nNeoBench NBFS VFS nested lookup test: OK\n");
+    printf("\nNeoBench NBFS VFS lookup test: OK\n");
     printf("RESULT: PASS\n");
 
     return 0;

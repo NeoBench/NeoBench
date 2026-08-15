@@ -10,7 +10,7 @@
 
 #include "libnbfs.h"
 
-#define TEST_IMAGE "../../../../images/test-verified.nbfs"
+#define TEST_IMAGE "../../../images/test-path-resolution.nbfs"
 
 static int fail(const char *msg)
 {
@@ -25,7 +25,7 @@ int main(void)
 
     vfs_filesystem_t fs;
     vfs_vnode_t root;
-    vfs_vnode_t integration;
+    vfs_vnode_t docs;
     vfs_dentry_t dentry;
 
     printf("NeoBench NBFS VFS dentry lookup test\n");
@@ -42,24 +42,24 @@ int main(void)
     printf("PASS: NBFS image opened\n");
 
     /*
-     * Resolve /integration through NBFS.
+     * Resolve /docs through NBFS.
      */
-    if (nbfs_lookup(ctx, 1, "integration", &inode) != 0)
+    if (nbfs_lookup(ctx, 1, "docs", &inode) != 0)
     {
         nbfs_close(ctx);
-        return fail("lookup of integration failed");
+        return fail("lookup of docs failed");
     }
 
-    printf("PASS: NBFS lookup integration -> inode %llu\n",
+    printf("PASS: NBFS lookup docs -> inode %llu\n",
            (unsigned long long)inode);
 
     if (inode != 2)
     {
         nbfs_close(ctx);
-        return fail("integration inode is not 2");
+        return fail("docs inode is not 2");
     }
 
-    printf("PASS: integration inode = 2\n");
+    printf("PASS: docs inode = 2\n");
 
     /*
      * Initialise the VFS filesystem.
@@ -93,10 +93,10 @@ int main(void)
     printf("PASS: NBFS root inode mapped to VFS vnode\n");
 
     /*
-     * Map NBFS integration inode 2 into a VFS vnode.
+     * Map NBFS docs inode 2 into a VFS vnode.
      */
     if (vfs_vnode_init(
-            &integration,
+            &docs,
             &fs,
             inode,
             VFS_VNODE_DIR) != 0)
@@ -104,27 +104,27 @@ int main(void)
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("integration vnode init");
+        return fail("docs vnode init");
     }
 
-    printf("PASS: integration inode mapped to VFS vnode\n");
+    printf("PASS: docs inode mapped to VFS vnode\n");
 
     /*
      * Create the VFS dentry:
      *
      *     root vnode
      *          |
-     *       integration
+     *       docs
      *          |
-     *     integration vnode
+     *     docs vnode
      */
     if (vfs_dentry_init(
             &dentry,
-            "integration",
+            "docs",
             &root,
-            &integration) != 0)
+            &docs) != 0)
     {
-        vfs_vnode_put(&integration);
+        vfs_vnode_put(&docs);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
@@ -136,17 +136,17 @@ int main(void)
     /*
      * Verify the dentry name.
      */
-    if (strcmp(dentry.name, "integration") != 0)
+    if (strcmp(dentry.name, "docs") != 0)
     {
         vfs_dentry_put(&dentry);
-        vfs_vnode_put(&integration);
+        vfs_vnode_put(&docs);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
         return fail("dentry name is incorrect");
     }
 
-    printf("PASS: dentry name is integration\n");
+    printf("PASS: dentry name is docs\n");
 
     /*
      * Verify the dentry parent.
@@ -154,7 +154,7 @@ int main(void)
     if (dentry.parent != &root)
     {
         vfs_dentry_put(&dentry);
-        vfs_vnode_put(&integration);
+        vfs_vnode_put(&docs);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
@@ -166,17 +166,17 @@ int main(void)
     /*
      * Verify the dentry target vnode.
      */
-    if (dentry.vnode != &integration)
+    if (dentry.vnode != &docs)
     {
         vfs_dentry_put(&dentry);
-        vfs_vnode_put(&integration);
+        vfs_vnode_put(&docs);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("dentry vnode is not integration vnode");
+        return fail("dentry vnode is not docs vnode");
     }
 
-    printf("PASS: dentry points to integration vnode\n");
+    printf("PASS: dentry points to docs vnode\n");
 
     /*
      * A newly-created dentry owns one reference to itself.
@@ -184,7 +184,7 @@ int main(void)
     if (dentry.refcount != 1)
     {
         vfs_dentry_put(&dentry);
-        vfs_vnode_put(&integration);
+        vfs_vnode_put(&docs);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
@@ -197,7 +197,7 @@ int main(void)
      * Cleanup.
      */
     vfs_dentry_put(&dentry);
-    vfs_vnode_put(&integration);
+    vfs_vnode_put(&docs);
     vfs_vnode_put(&root);
     vfs_filesystem_destroy(&fs);
     nbfs_close(ctx);

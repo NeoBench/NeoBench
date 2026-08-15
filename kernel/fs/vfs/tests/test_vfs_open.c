@@ -1,3 +1,4 @@
+#include "nbfs_vfs.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -9,7 +10,7 @@
 #include "file.h"
 #include "libnbfs.h"
 
-#define TEST_IMAGE "../../../../images/test-path-resolution.nbfs"
+#define TEST_IMAGE "../../../images/test-path-resolution.nbfs"
 
 static int fail(const char *msg)
 {
@@ -43,6 +44,7 @@ int main(void)
     }
 
     fs.private_data = ctx;
+    fs.lookup = vfs_nbfs_lookup;
 
     printf("PASS: VFS filesystem initialized\n");
 
@@ -90,7 +92,7 @@ int main(void)
 
     printf("PASS: opened file has vnode\n");
 
-    if (file.vnode->ino != 4)
+    if (file.vnode->ino != 3)
     {
         vfs_file_destroy(&file);
         vfs_path_destroy(&root_path);

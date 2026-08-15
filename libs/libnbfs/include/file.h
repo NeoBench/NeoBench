@@ -1,3 +1,4 @@
+#include <stdint.h>
 #ifndef NBFS_FILE_H
 #define NBFS_FILE_H
 
@@ -17,6 +18,7 @@ int nbfs_write_file(
 int nbfs_read_file(
     nbfs_context_t *ctx,
     uint64_t inode,
+    uint64_t offset,
     void *buffer,
     uint64_t size);
 

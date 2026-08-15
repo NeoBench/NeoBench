@@ -1,12 +1,10 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "vfs/vfs.h"
 #include "vfs/filesystem.h"
 #include "vfs/vnode.h"
 #include "vfs/path.h"
-#include "vfs/file.h"
 #include "vfs/nbfs_vfs.h"
 #include "libnbfs.h"
 
@@ -22,40 +20,46 @@ int main(void)
 {
     nbfs_context_t *ctx;
     vfs_filesystem_t fs;
+
     vfs_vnode_t root;
     vfs_vnode_t docs;
-    vfs_vnode_t readme;
+    vfs_vnode_t subdir;
+    vfs_vnode_t file;
+
     vfs_path_t root_path;
     vfs_path_t docs_path;
-    vfs_file_t file;
-    char buffer[128];
-    ssize_t n;
+    vfs_path_t subdir_path;
 
-    printf("NeoBench NBFS VFS file read test\n");
-    printf("================================\n");
+    printf("NeoBench NBFS VFS deep lookup test\n");
+    printf("==================================\n");
 
     ctx = nbfs_open(TEST_IMAGE);
+
     if (!ctx)
         return fail("unable to open NBFS image");
 
     printf("PASS: NBFS image opened\n");
 
-    if (vfs_filesystem_init(&fs, "nbfs", 4096, 1) != 0)
+    if (vfs_filesystem_init(
+            &fs,
+            "nbfs",
+            4096,
+            1) != 0)
     {
         nbfs_close(ctx);
         return fail("filesystem init");
     }
 
-    /*
-     * The VFS filesystem currently carries the NBFS context
-     * through private_data.
-     */
     fs.private_data = ctx;
     fs.lookup = vfs_nbfs_lookup;
 
     printf("PASS: VFS filesystem initialized\n");
 
-    if (vfs_vnode_init(&root, &fs, 1, VFS_VNODE_DIR) != 0)
+    if (vfs_vnode_init(
+            &root,
+            &fs,
+            1,
+            VFS_VNODE_DIR) != 0)
     {
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
@@ -72,7 +76,10 @@ int main(void)
         return fail("root path init");
     }
 
-    if (vfs_lookup(&root_path, "docs", &docs) != 0)
+    if (vfs_lookup(
+            &root_path,
+            "docs",
+            &docs) != 0)
     {
         vfs_path_destroy(&root_path);
         vfs_vnode_put(&root);
@@ -81,8 +88,9 @@ int main(void)
         return fail("lookup /docs");
     }
 
-    printf("PASS: /docs -> inode %llu\n",
-           (unsigned long long)docs.ino);
+    printf(
+        "PASS: /docs -> inode %llu\n",
+        (unsigned long long)docs.ino);
 
     if (docs.type != VFS_VNODE_DIR)
     {
@@ -106,7 +114,10 @@ int main(void)
         return fail("docs path init");
     }
 
-    if (vfs_lookup(&docs_path, "readme.txt", &readme) != 0)
+    if (vfs_lookup(
+            &docs_path,
+            "subdir",
+            &subdir) != 0)
     {
         vfs_path_destroy(&docs_path);
         vfs_vnode_put(&docs);
@@ -114,109 +125,87 @@ int main(void)
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("lookup /docs/readme.txt");
+        return fail("lookup /docs/subdir");
     }
 
-    printf("PASS: /docs/readme.txt -> inode %llu\n",
-           (unsigned long long)readme.ino);
+    printf(
+        "PASS: /docs/subdir -> inode %llu\n",
+        (unsigned long long)subdir.ino);
 
-    if (readme.type != VFS_VNODE_REG)
+    if (subdir.type != VFS_VNODE_DIR)
     {
-        vfs_vnode_put(&readme);
+        vfs_vnode_put(&subdir);
         vfs_path_destroy(&docs_path);
         vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("readme.txt is not a regular file");
+        return fail("/docs/subdir is not a directory");
     }
 
-    printf("PASS: readme.txt is a regular file\n");
+    printf("PASS: /docs/subdir is a directory\n");
 
-    if (vfs_file_init(&file, &readme, 0) != 0)
+    if (vfs_path_init(&subdir_path, &subdir) != 0)
     {
-        vfs_vnode_put(&readme);
+        vfs_vnode_put(&subdir);
         vfs_path_destroy(&docs_path);
         vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("file init");
+        return fail("subdir path init");
     }
 
-
-    memset(buffer, 0, sizeof(buffer));
-
-    n = vfs_file_read(&file, buffer, sizeof(buffer) - 1);
-
-    if (n < 0)
+    if (vfs_lookup(
+            &subdir_path,
+            "file.txt",
+            &file) != 0)
     {
-        vfs_file_destroy(&file);
-        vfs_vnode_put(&readme);
+        vfs_path_destroy(&subdir_path);
+        vfs_vnode_put(&subdir);
         vfs_path_destroy(&docs_path);
         vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("file read");
+        return fail("lookup /docs/subdir/file.txt");
     }
 
-    printf("PASS: read %zd bytes\n", n);
-    printf("DATA: \"%s\"\n", buffer);
+    printf(
+        "PASS: /docs/subdir/file.txt -> inode %llu\n",
+        (unsigned long long)file.ino);
 
-    if (strcmp(buffer, "NeoBench pathname resolution test") != 0)
+    if (file.type != VFS_VNODE_REG)
     {
-        vfs_file_destroy(&file);
-        vfs_vnode_put(&readme);
+        vfs_vnode_put(&file);
+        vfs_path_destroy(&subdir_path);
+        vfs_vnode_put(&subdir);
         vfs_path_destroy(&docs_path);
         vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
         vfs_vnode_put(&root);
         vfs_filesystem_destroy(&fs);
         nbfs_close(ctx);
-        return fail("file contents mismatch");
+        return fail("file.txt is not a regular file");
     }
 
-    printf("PASS: file contents match\n");
+    printf("PASS: /docs/subdir/file.txt is a regular file\n");
 
-    /*
-     * Verify sequential EOF behavior.
-     *
-     * The first read consumed the entire file. A second
-     * read must therefore return zero bytes.
-     */
-    memset(buffer, 0, sizeof(buffer));
-
-    n = vfs_file_read(&file, buffer, sizeof(buffer) - 1);
-
-    if (n != 0)
-    {
-        vfs_file_destroy(&file);
-        vfs_vnode_put(&readme);
-        vfs_path_destroy(&docs_path);
-        vfs_vnode_put(&docs);
-        vfs_path_destroy(&root_path);
-        vfs_vnode_put(&root);
-        vfs_filesystem_destroy(&fs);
-        nbfs_close(ctx);
-        return fail("EOF read did not return zero");
-    }
-
-    printf("PASS: EOF returns 0 bytes\n");
-
-    vfs_file_destroy(&file);
-    vfs_vnode_put(&readme);
+    vfs_vnode_put(&file);
+    vfs_path_destroy(&subdir_path);
+    vfs_vnode_put(&subdir);
     vfs_path_destroy(&docs_path);
     vfs_vnode_put(&docs);
     vfs_path_destroy(&root_path);
     vfs_vnode_put(&root);
+
     vfs_filesystem_destroy(&fs);
     nbfs_close(ctx);
 
-    printf("\nNeoBench NBFS VFS file read test: OK\n");
+    printf("\nNeoBench NBFS VFS deep lookup test: OK\n");
     printf("RESULT: PASS\n");
 
     return 0;

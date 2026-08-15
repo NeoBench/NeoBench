@@ -189,6 +189,7 @@ int main(void)
     if (nbfs_read_file(
             ctx,
             file_inode,
+            0,
             buffer,
             sizeof(buffer)) != 0)
     {
@@ -260,6 +261,7 @@ int main(void)
     if (nbfs_read_file(
             ctx,
             file_inode,
+            0,
             buffer,
             sizeof(buffer)) != 0)
     {

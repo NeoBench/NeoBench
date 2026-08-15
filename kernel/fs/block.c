@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "block/device.h"
 
 int block_device_init(

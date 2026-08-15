@@ -66,3 +66,11 @@ out/
 
 # FreeBSD build output
 bsd/obj/
+
+# FreeBSD integration checkout/build output
+/bsd/freebsd-src/
+/bsd/obj/
+/bsd/obj-*/
+/bsd/freebsd-src/
+/*.o
+*.elf

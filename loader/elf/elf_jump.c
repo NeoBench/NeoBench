@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "elf_jump.h"
 
 void elf_jump(uint32_t entry, const nb_bootinfo_t *boot)

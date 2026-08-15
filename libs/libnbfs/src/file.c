@@ -1142,12 +1142,14 @@ int nbfs_write_file(
 int nbfs_read_file(
     nbfs_context_t *ctx,
     uint64_t inode_number,
+    uint64_t offset,
     void *buffer,
     uint64_t size)
 {
     nbfs_inode_t inode;
     uint64_t remaining;
     uint64_t copied = 0;
+    uint64_t file_position;
     unsigned int extent;
 
     if (!ctx)
@@ -1168,14 +1170,30 @@ int nbfs_read_file(
     if (inode.mode != NBFS_MODE_FILE)
         return -1;
 
-    if (size > inode.size)
+    /*
+     * The requested offset must be inside the file.
+     */
+    if (offset > inode.size)
         return -1;
 
+    /*
+     * A zero-length read at EOF is valid.
+     */
     if (size == 0)
         return 0;
 
-    remaining = size;
+    /*
+     * Do not permit reads beyond EOF.
+     */
+    if (size > inode.size - offset)
+        return -1;
 
+    remaining = size;
+    file_position = offset;
+
+    /*
+     * NBFS v1 currently stores one filesystem block per extent.
+     */
     for (extent = 0;
          extent < NBFS_EXTENTS_PER_INODE &&
          remaining != 0;
@@ -1184,13 +1202,37 @@ int nbfs_read_file(
         uint8_t block_buffer[
             NBFS_DEFAULT_BLOCK_SIZE];
 
+        uint64_t extent_start;
+        uint64_t block_offset;
         uint64_t to_copy;
 
         if (inode.extents[extent].block_count == 0)
-            return -1;
+            break;
 
         if (inode.extents[extent].block_count != 1)
             return -1;
+
+        extent_start =
+            (uint64_t)extent *
+            NBFS_DEFAULT_BLOCK_SIZE;
+
+        /*
+         * The requested file position is beyond this extent.
+         */
+        if (file_position >=
+            extent_start + NBFS_DEFAULT_BLOCK_SIZE)
+        {
+            continue;
+        }
+
+        /*
+         * Calculate the byte offset within this block.
+         */
+        if (file_position > extent_start)
+            block_offset =
+                file_position - extent_start;
+        else
+            block_offset = 0;
 
         if (nbfs_read_block(
                 ctx,
@@ -1200,27 +1242,25 @@ int nbfs_read_file(
             return -1;
         }
 
-        to_copy = remaining;
+        to_copy =
+            NBFS_DEFAULT_BLOCK_SIZE -
+            block_offset;
 
-        if (to_copy >
-            NBFS_DEFAULT_BLOCK_SIZE)
-        {
-            to_copy =
-                NBFS_DEFAULT_BLOCK_SIZE;
-        }
+        if (to_copy > remaining)
+            to_copy = remaining;
 
         memcpy(
             (uint8_t *)buffer + copied,
-            block_buffer,
+            block_buffer + block_offset,
             (size_t)to_copy);
 
         copied += to_copy;
         remaining -= to_copy;
+        file_position += to_copy;
     }
 
     return remaining == 0 ? 0 : -1;
 }
-
 
 /*
  * --------------------------------------------------------------------------

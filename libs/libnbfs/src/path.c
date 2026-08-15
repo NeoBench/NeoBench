@@ -1,3 +1,4 @@
+#include <stddef.h>
 /*
  * path.c
  * NeoBench libNBFS

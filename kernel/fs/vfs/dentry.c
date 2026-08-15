@@ -1,6 +1,7 @@
+#include <stddef.h>
 #include <string.h>
 
-#include "include/dentry.h"
+#include "vfs/dentry.h"
 
 int vfs_dentry_init(
     vfs_dentry_t *dentry,

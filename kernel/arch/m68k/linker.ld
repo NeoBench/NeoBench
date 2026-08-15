@@ -2,7 +2,8 @@ ENTRY(_start)
 
 PHDRS
 {
-    kernel PT_LOAD FLAGS(7);
+    text PT_LOAD FLAGS(5);
+    data PT_LOAD FLAGS(6);
 }
 
 SECTIONS
@@ -13,25 +14,32 @@ SECTIONS
     {
         KEEP(*(.text))
         *(.text*)
-    } :kernel
+    } :text
 
     .rodata :
     {
         *(.rodata*)
-    } :kernel
+    } :text
 
     .data :
     {
+        . = ALIGN(4);
         *(.data*)
-    } :kernel
+    } :data
 
-    .bss :
+    .bss (NOLOAD) :
     {
+        . = ALIGN(4);
+
         _bss_start = .;
 
         *(.bss*)
         *(COMMON)
 
         _bss_end = .;
-    } :kernel
+    } :data
+
+    . = ALIGN(4);
+
+    _kernel_end = .;
 }

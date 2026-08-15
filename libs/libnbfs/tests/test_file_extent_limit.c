@@ -199,6 +199,7 @@ int main(void)
     if (nbfs_read_file(
             ctx,
             inode_number,
+            0,
             read_buffer,
             GOOD_SIZE) != 0)
     {
@@ -250,6 +251,7 @@ int main(void)
     if (nbfs_read_file(
             ctx,
             inode_number,
+            0,
             read_buffer,
             GOOD_SIZE) != 0)
     {

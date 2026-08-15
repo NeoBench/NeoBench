@@ -1,10 +1,15 @@
 #include <stdio.h>
 
-#include "../include/vfs.h"
+#include "vfs/vfs.h"
+#include "vfs/filesystem.h"
+#include "vfs/vnode.h"
+#include "vfs/mount.h"
+#include "vfs/path.h"
+#include "vfs/dentry.h"
 
 static int fail(const char *msg)
 {
-    printf("FAIL: %s\n", msg);
+    fprintf(stderr, "FAIL: %s\n", msg);
     return 1;
 }
 

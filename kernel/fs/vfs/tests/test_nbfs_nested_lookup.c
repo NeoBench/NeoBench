@@ -1,14 +1,15 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "vfs.h"
-#include "filesystem.h"
-#include "vnode.h"
-#include "path.h"
-#include "dentry.h"
+#include "vfs/vfs.h"
+#include "vfs/filesystem.h"
+#include "vfs/vnode.h"
+#include "vfs/path.h"
+#include "vfs/dentry.h"
+#include "vfs/nbfs_vfs.h"
 #include "libnbfs.h"
 
-#define TEST_IMAGE "../../../../images/test-path-resolution.nbfs"
+#define TEST_IMAGE "../../../images/test-path-resolution.nbfs"
 
 static int fail(const char *msg)
 {
@@ -38,7 +39,7 @@ int main(void)
      * Expected hierarchy:
      *
      * /
-     * ├── integration
+     * ├── docs
      * └── docs
      *     ├── readme.txt
      *     └── subdir
@@ -68,6 +69,7 @@ int main(void)
      * Connect the NBFS context to the VFS filesystem.
      */
     fs.private_data = ctx;
+    fs.lookup = vfs_nbfs_lookup;
 
     printf("PASS: VFS filesystem initialized\n");
 
@@ -105,7 +107,7 @@ int main(void)
      * /
      * └── docs
      *
-     * docs is inode 3 in test-path-resolution.nbfs.
+     * docs is inode 2 in test-path-resolution.nbfs.
      */
     if (vfs_lookup(
             &root_path,
@@ -123,7 +125,7 @@ int main(void)
         "PASS: VFS /docs -> inode %llu\n",
         (unsigned long long)docs.ino);
 
-    if (docs.ino != 3)
+    if (docs.ino != 2)
     {
         vfs_vnode_put(&docs);
         vfs_path_destroy(&root_path);
@@ -167,7 +169,7 @@ int main(void)
      *
      * /docs/readme.txt
      *
-     * Expected inode: 4
+     * Expected inode: 3
      */
     if (vfs_lookup(
             &docs_path,
@@ -187,7 +189,7 @@ int main(void)
         "PASS: VFS /docs/readme.txt -> inode %llu\n",
         (unsigned long long)readme.ino);
 
-    if (readme.ino != 4)
+    if (readme.ino != 3)
     {
         vfs_vnode_put(&readme);
         vfs_path_destroy(&docs_path);

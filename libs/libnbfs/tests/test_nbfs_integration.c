@@ -63,7 +63,7 @@ int main(void)
 
     memset(buffer, 0, sizeof(buffer));
 
-    if (nbfs_read_file(ctx, file, buffer, strlen(data)) != 0)
+    if (nbfs_read_file(ctx, file, 0, buffer, strlen(data)) != 0)
         return fail("could not read integration file");
 
     if (memcmp(buffer, data, strlen(data)) != 0)
@@ -134,7 +134,7 @@ int main(void)
 
     memset(buffer, 0, sizeof(buffer));
 
-    if (nbfs_read_file(ctx, file, buffer, strlen(data)) != 0)
+    if (nbfs_read_file(ctx, file, 0, buffer, strlen(data)) != 0)
         return fail("persisted file read failed");
 
     if (memcmp(buffer, data, strlen(data)) != 0)

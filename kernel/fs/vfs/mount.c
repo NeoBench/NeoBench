@@ -1,4 +1,4 @@
-#include "include/mount.h"
+#include "vfs/mount.h"
 
 int vfs_mount_init(
     vfs_mount_t *mount,
@@ -13,8 +13,6 @@ int vfs_mount_init(
     mount->root = root;
     mount->mounted = 1;
 
-    fs->mount = mount;
-
     return 0;
 }
 
@@ -22,9 +20,6 @@ void vfs_mount_destroy(vfs_mount_t *mount)
 {
     if (!mount)
         return;
-
-    if (mount->fs)
-        mount->fs->mount = 0;
 
     mount->fs = 0;
     mount->root = 0;
