@@ -3,6 +3,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
+#define VFS_SEEK_SET 0
+#define VFS_SEEK_CUR 1
+#define VFS_SEEK_END 2
+
 #include <sys/types.h>
 
 #include "vfs/vnode.h"
@@ -36,6 +41,16 @@ int vfs_open(
     const char *path,
     uint32_t flags,
     vfs_file_t *file
+);
+
+int64_t vfs_file_seek(
+    vfs_file_t *file,
+    int64_t offset,
+    int whence
+);
+
+int64_t vfs_file_tell(
+    const vfs_file_t *file
 );
 
 #endif

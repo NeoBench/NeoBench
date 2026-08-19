@@ -6,40 +6,28 @@
 .extern _stack_top
 
 _start:
-    /*
-     * Establish the supervisor stack before calling C code.
-     */
+    /* Establish supervisor stack. */
     move.l  #_stack_top,%sp
 
-    /*
-     * Clear .bss.
-     */
+    /* Clear .bss. */
     lea     _bss_start,%a0
     lea     _bss_end,%a1
 
 clear_bss:
-    cmpa.l  %a1,%a0
-    bcc     bss_done
+    cmp.l   %a1,%a0
+    bcc.s   bss_done
 
     clr.l   (%a0)+
-    bra     clear_bss
+    bra.s   clear_bss
 
 bss_done:
-    /*
-     * Enter the C kernel.
-     */
+    /* Enter C kernel. */
     jsr     kernel_main
 
-/*
- * kernel_main() should never return.
- * If it does, halt permanently.
- */
 halt:
-    bra     halt
-
+    bra.s   halt
 
 .section .bss
-
 .align 4
 
 _stack:

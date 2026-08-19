@@ -7,7 +7,7 @@
 #include "vfs/file.h"
 #include "vfs/vnode.h"
 #include "vfs/filesystem.h"
-#include "libnbfs.h"
+#include "../../include/nbfs.h"
 
 int vfs_file_init(
     vfs_file_t *file,
@@ -49,7 +49,6 @@ ssize_t vfs_file_read(
     void *buffer,
     size_t size)
 {
-    nbfs_context_t *ctx;
     nbfs_inode_t inode;
     uint64_t remaining;
     uint64_t requested;
@@ -71,13 +70,8 @@ ssize_t vfs_file_read(
     if (!file->vnode->fs)
         return -1;
 
-    ctx = (nbfs_context_t *)file->vnode->fs->private_data;
-
-    if (!ctx)
-        return -1;
-
-    rc = nbfs_read_inode(
-        ctx,
+    rc = nbfs_kernel_read_inode(
+        file->vnode->fs,
         file->vnode->ino,
         &inode);
 
@@ -95,14 +89,14 @@ ssize_t vfs_file_read(
     if (requested > remaining)
         requested = remaining;
 
-    rc = nbfs_read_file(
-        ctx,
+    rc = (int)nbfs_kernel_read(
+        file->vnode->fs,
         file->vnode->ino,
         file->offset,
         buffer,
         requested);
 
-    if (rc != 0)
+    if (rc < 0 || (uint64_t)rc != requested)
         return -1;
 
     file->offset += requested;
@@ -228,4 +222,75 @@ int vfs_open(
     vfs_path_destroy(&current);
 
     return 0;
+}
+
+int64_t vfs_file_seek(
+    vfs_file_t *file,
+    int64_t offset,
+    int whence)
+{
+    nbfs_inode_t inode;
+    int64_t base;
+    int64_t new_offset;
+
+    if (!file || !file->vnode)
+        return -1;
+
+    switch (whence)
+    {
+        case VFS_SEEK_SET:
+            base = 0;
+            break;
+
+        case VFS_SEEK_CUR:
+            if (file->offset > INT64_MAX)
+                return -1;
+
+            base = (int64_t)file->offset;
+            break;
+
+        case VFS_SEEK_END:
+            if (!file->vnode->fs ||
+                !file->vnode->fs->private_data)
+                return -1;
+
+            if (nbfs_kernel_read_inode(
+                    file->vnode->fs,
+                    file->vnode->ino,
+                    &inode) != 0)
+                return -1;
+
+            if (inode.size > INT64_MAX)
+                return -1;
+
+            base = (int64_t)inode.size;
+            break;
+
+        default:
+            return -1;
+    }
+
+    if ((offset > 0 && base > INT64_MAX - offset) ||
+        (offset < 0 && base < INT64_MIN - offset))
+        return -1;
+
+    new_offset = base + offset;
+
+    if (new_offset < 0)
+        return -1;
+
+    file->offset = (uint64_t)new_offset;
+
+    return new_offset;
+}
+
+int64_t vfs_file_tell(const vfs_file_t *file)
+{
+    if (!file || !file->vnode)
+        return -1;
+
+    if (file->offset > INT64_MAX)
+        return -1;
+
+    return (int64_t)file->offset;
 }

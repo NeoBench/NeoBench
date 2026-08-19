@@ -26,7 +26,9 @@ TESTS = \
 	tests/test_nbfs_lookup \
 	tests/test_nbfs_nested_lookup \
 	tests/test_nbfs_dentry \
-	tests/test_nbfs_file_read
+	tests/test_nbfs_file_read \
+        tests/test_vfs_seek \
+        tests/test_vfs_tell
 
 all: $(TESTS)
 
@@ -88,3 +90,17 @@ clean:
 	rm -f $(TESTS)
 
 .PHONY: all test clean
+
+tests/test_vfs_seek: tests/test_vfs_seek.c $(OBJS) $(LIBNBFS)
+	$(CC) $(CFLAGS) \
+			tests/test_vfs_seek.c \
+			$(OBJS) \
+			$(LIBNBFS) \
+			-o $@
+
+tests/test_vfs_tell: tests/test_vfs_tell.c $(OBJS) $(LIBNBFS)
+	$(CC) $(CFLAGS) \
+			tests/test_vfs_tell.c \
+			$(OBJS) \
+			$(LIBNBFS) \
+			-o $@

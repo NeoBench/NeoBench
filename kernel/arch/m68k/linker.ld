@@ -1,45 +1,63 @@
+OUTPUT_FORMAT("elf32-m68k")
+OUTPUT_ARCH(m68k)
 ENTRY(_start)
 
 PHDRS
 {
-    text PT_LOAD FLAGS(5);
-    data PT_LOAD FLAGS(6);
+    text PT_LOAD FLAGS(5);     /* R + X */
+    data PT_LOAD FLAGS(6);     /* R + W */
 }
 
 SECTIONS
 {
-    . = 0x1000;
+    . = 0x00001000;
 
-    .text :
+    .text : ALIGN(4)
     {
-        KEEP(*(.text))
+        __text_start = .;
+
+        KEEP(*(.text.entry))
+        KEEP(*(.text.start))
         *(.text*)
-    } :text
-
-    .rodata :
-    {
         *(.rodata*)
+
+        . = ALIGN(4);
+        __text_end = .;
     } :text
 
-    .data :
+    .data : ALIGN(4)
     {
-        . = ALIGN(4);
+        __data_start = .;
         *(.data*)
+
+        . = ALIGN(4);
+        __data_end = .;
     } :data
 
-    .bss (NOLOAD) :
+    .bss (NOLOAD) : ALIGN(4)
     {
-        . = ALIGN(4);
-
         _bss_start = .;
+        __bss_start = .;
 
         *(.bss*)
         *(COMMON)
 
+        . = ALIGN(4);
+
         _bss_end = .;
+        __bss_end = .;
     } :data
 
-    . = ALIGN(4);
+    . = ALIGN(16);
 
     _kernel_end = .;
+    __kernel_end = .;
+
+    /DISCARD/ :
+    {
+        *(.comment)
+        *(.note*)
+        *(.eh_frame*)
+        *(.gnu*)
+    }
 }
