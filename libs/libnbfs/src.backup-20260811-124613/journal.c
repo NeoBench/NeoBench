@@ -1,0 +1,5 @@
+/*
+ * journal.c
+ * libnbfs
+ */
+

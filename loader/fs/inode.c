@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <nbfs/inode.h>
 #include "disk.h"
 #include <nbfs/layout.h>

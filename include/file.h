@@ -1,3 +1,4 @@
+#include <stdint.h>
 #ifndef NBFS_FILE_H
 #define NBFS_FILE_H
 

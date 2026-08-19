@@ -1,11 +1,76 @@
+# ============================================================
+# NeoBench generated filesystem images
+# ============================================================
 
-# Generated NeoBench filesystem images
-images/*.nbfs
-images/*.img
-images/*.iso
+images/*.img*
+images/*.nbfs*
+tools/nbfs/mkfs/*.img*
+tools/nbfs/mkfs/*.nbfs*
 
-# Generated NeoBench/NBFS disk images
-images/*.img
-images/*.nbfs
-tools/nbfs/mkfs/*.img
-tools/nbfs/mkfs/*.nbfs
+# ============================================================
+# FreeBSD integration checkout
+# ============================================================
+
+bsd/freebsd-src/
+
+# ============================================================
+# NeoBench audit output
+# ============================================================
+
+.audit/
+
+# ============================================================
+# NBFS generated test artifacts
+# ============================================================
+
+libs/libnbfs/tests/test_directory_delete
+libs/libnbfs/tests/test_directory_delete.nbfs
+libs/libnbfs/tests/test_directory_delete_nonempty
+libs/libnbfs/tests/test_directory_delete_nonempty.nbfs
+libs/libnbfs/tests/test_directory_files
+libs/libnbfs/tests/test_directory_lookup
+libs/libnbfs/tests/test_directory_nested
+libs/libnbfs/tests/test_file_create
+libs/libnbfs/tests/test_file_delete
+libs/libnbfs/tests/test_file_extent_limit
+libs/libnbfs/tests/test_file_io
+libs/libnbfs/tests/test_file_multiblock
+libs/libnbfs/tests/test_file_overwrite
+libs/libnbfs/tests/test_file_rename
+libs/libnbfs/tests/test_file_reuse
+libs/libnbfs/tests/test_filesystem
+libs/libnbfs/tests/test_inode_allocator
+libs/libnbfs/tests/test_nested_file_delete
+libs/libnbfs/tests/test_rename_safety
+
+# Generic NBFS test images
+libs/libnbfs/tests/*.nbfs
+
+# ============================================================
+# Build artifacts
+# ============================================================
+
+*.o
+*.a
+
+build/
+out/
+
+# ============================================================
+# Temporary/editor files
+# ============================================================
+
+*~
+*.swp
+*.swo
+
+# FreeBSD build output
+bsd/obj/
+
+# FreeBSD integration checkout/build output
+/bsd/freebsd-src/
+/bsd/obj/
+/bsd/obj-*/
+/bsd/freebsd-src/
+/*.o
+*.elf

@@ -1,0 +1,26 @@
+[config]
+
+# NeoBench FS-UAE development target
+
+amiga_model = A4000
+
+cpu_type = 68060
+
+chip_memory = 2
+fast_memory = 128
+zorro_iii_memory = 256
+
+# NeoBench development filesystem
+hard_drive_0 = /home/lordp/NeoBench/rootfs
+hard_drive_0_label = NEOBENCH
+
+# Windowed development mode
+fullscreen = 0
+window_width = 1024
+window_height = 768
+
+# Disable unnecessary extras for the first boot test
+floppy_drive_count = 0
+
+# Save emulator state/configuration separately
+save_states = 0

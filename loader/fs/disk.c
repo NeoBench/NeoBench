@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "disk.h"
 
 int disk_init(void)

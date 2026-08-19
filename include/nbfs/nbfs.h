@@ -24,6 +24,10 @@
 #define NBFS_BLOCK_SIZE_16K 16384
 
 #define NBFS_DEFAULT_BLOCK_SIZE NBFS_BLOCK_SIZE_4K
+#define NBFS_MAX_NAME_LENGTH 255
+
+#define NBFS_MODE_DIRECTORY 0x4000
+#define NBFS_MODE_FILE      0x8000
 
 /* -------------------------------------------------------------------------
  * Fixed block locations - layout v1

@@ -2,7 +2,7 @@
  * directory.c
  * NeoBench mkfs.nbfs
  *
- * NBFS root directory implementation.
+ * NBFS v1 directory creation.
  */
 
 #include <stdint.h>
@@ -14,160 +14,167 @@
 #include "layout.h"
 #include "fs/directory.h"
 
+#define NBFS_DIR_TYPE_FILE 1
+#define NBFS_DIR_TYPE_DIR  2
+
 /*
- * Fixed-size directory entry.
+ * Create one variable-length NBFS directory entry.
  *
- * The first 12 bytes match the NBFS on-disk directory-entry
- * header:
+ * On-disk format:
  *
  *   uint64_t inode
  *   uint16_t record_length
  *   uint8_t  name_length
  *   uint8_t  type
- *
- * The remaining bytes contain the filename.
+ *   char     name[name_length]
  */
-typedef struct
-{
-    uint64_t inode;
-    uint16_t record_length;
-    uint8_t  name_length;
-    uint8_t  type;
-    char     name[252];
-
-} nbfs_dirent_t;
-
-
-/*
- * Create one directory entry.
- */
-static void create_entry(
-    nbfs_dirent_t *entry,
+static size_t create_entry(
+    uint8_t *buffer,
+    size_t buffer_size,
     uint64_t inode,
-    const char *name
-)
+    const char *name,
+    uint8_t type)
 {
-    size_t length;
+    nbfs_directory_entry_t *entry;
+    size_t name_length;
+    size_t record_length;
 
-    memset(entry, 0, sizeof(*entry));
+    if (!buffer || !name)
+        return 0;
+
+    name_length = strlen(name);
+
+    if (name_length == 0 ||
+        name_length > NBFS_MAX_NAME_LENGTH)
+        return 0;
+
+    record_length =
+        sizeof(nbfs_directory_entry_t) +
+        name_length;
+
+    if (record_length > UINT16_MAX)
+        return 0;
+
+    if (record_length > buffer_size)
+        return 0;
+
+    entry =
+        (nbfs_directory_entry_t *)buffer;
+
+    memset(
+        entry,
+        0,
+        record_length);
 
     entry->inode = inode;
 
-    length = strlen(name);
-
-    if (length > sizeof(entry->name) - 1)
-        length = sizeof(entry->name) - 1;
-
-    entry->name_length = (uint8_t)length;
-
-    /*
-     * NBFS directory type 2 = directory.
-     */
-    entry->type = 2;
-
-    /*
-     * Every entry currently occupies the complete
-     * fixed-size directory record.
-     */
     entry->record_length =
-        (uint16_t)sizeof(nbfs_dirent_t);
+        (uint16_t)record_length;
+
+    entry->name_length =
+        (uint8_t)name_length;
+
+    entry->type = type;
 
     memcpy(
-        entry->name,
+        entry + 1,
         name,
-        length
-    );
+        name_length);
+
+    return record_length;
 }
 
 
 /*
- * Write the root directory to the data block supplied
- * by the filesystem allocator.
+ * Write the root directory to the supplied
+ * filesystem data block.
  */
 int nbfs_write_root_directory(
     FILE *fp,
-    uint64_t block
-)
+    uint64_t block)
 {
     uint8_t data[NBFS_DEFAULT_BLOCK_SIZE];
 
-    nbfs_dirent_t *entries;
+    size_t offset;
+    size_t length;
 
-    uint64_t offset;
+    uint64_t file_offset;
 
+    if (!fp)
+        return -1;
 
     /*
-     * A directory block must be a normal data block.
+     * Directory blocks must be in the data area.
      */
     if (block < NBFS_DATA_START)
         return -1;
 
-
     /*
-     * Clear the complete 4 KiB directory block.
+     * Start with a completely empty directory block.
      */
     memset(
         data,
         0,
-        sizeof(data)
-    );
+        sizeof(data));
 
+    offset = 0;
 
     /*
-     * The first two entries are:
-     *
-     *   .
-     *   ..
+     * "." -> root inode.
      */
-    entries =
-        (nbfs_dirent_t *)data;
-
-
-    create_entry(
-        &entries[0],
+    length = create_entry(
+        data + offset,
+        sizeof(data) - offset,
         1,
-        "."
-    );
+        ".",
+        NBFS_DIR_TYPE_DIR);
 
+    if (length == 0)
+        return -1;
 
-    create_entry(
-        &entries[1],
+    offset += length;
+
+    /*
+     * ".." -> root inode because root is its own parent.
+     */
+    length = create_entry(
+        data + offset,
+        sizeof(data) - offset,
         1,
-        ".."
-    );
+        "..",
+        NBFS_DIR_TYPE_DIR);
 
+    if (length == 0)
+        return -1;
+
+    offset += length;
 
     /*
      * Convert filesystem block number to byte offset.
      */
-    offset =
+    file_offset =
         block *
         (uint64_t)NBFS_DEFAULT_BLOCK_SIZE;
 
-
     if (fseek(
             fp,
-            (long)offset,
-            SEEK_SET
-        ) != 0)
+            (long)file_offset,
+            SEEK_SET) != 0)
     {
         return -1;
     }
 
-
     /*
-     * Write exactly one filesystem block.
+     * Write exactly one complete directory block.
      */
     if (fwrite(
             data,
             sizeof(data),
             1,
-            fp
-        ) != 1)
+            fp) != 1)
     {
         return -1;
     }
-
 
     fflush(fp);
 

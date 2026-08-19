@@ -1,0 +1,46 @@
+CC ?= gcc
+AR ?= ar
+
+SRC := $(wildcard src/*.c)
+OBJ := $(SRC:.c=.o)
+
+TARGET := build/libnbfs.a
+
+CFLAGS := \
+	-Wall \
+	-Wextra \
+	-std=c11 \
+	-O2 \
+	-Iinclude \
+	-I../../include \
+	-I../../shared/include
+
+LDFLAGS := -Lbuild
+LDLIBS := -lnbfs
+
+all: $(TARGET)
+
+$(TARGET): $(OBJ)
+	@mkdir -p build
+	$(AR) rcs $(TARGET) $(OBJ)
+
+src/%.o: src/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+tests:
+	@for src in tests/*.c; do \
+		if grep -Eq '^[[:space:]]*(int|void)[[:space:]]+main[[:space:]]*\(' "$$src"; then \
+			bin="$${src%.c}"; \
+			echo "BUILD: $$src -> $$bin"; \
+			$(CC) $(CFLAGS) "$$src" $(LDFLAGS) $(LDLIBS) -o "$$bin" || exit 1; \
+		else \
+			echo "SKIP:  $$src (no main)"; \
+		fi; \
+	done
+
+clean:
+	rm -rf build
+	rm -f src/*.o
+	find tests -maxdepth 1 -type f -executable -delete
+
+.PHONY: all tests clean

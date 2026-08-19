@@ -20,11 +20,20 @@ uint64_t nbfs_alloc_inode(void)
 {
     uint64_t inode = next_inode++;
 
-    if (inode >= 1024)
+    if (inode == 0 || inode > 1024)
         return UINT64_MAX;
 
-    inode_bitmap[inode / 8] |=
-        (uint8_t)(1u << (inode % 8));
+    /*
+     * Inode numbers are one-based:
+     *
+     * inode 1 -> bitmap bit 0
+     * inode 2 -> bitmap bit 1
+     * inode 3 -> bitmap bit 2
+     */
+    uint64_t bit = inode - 1;
+
+    inode_bitmap[bit / 8] |=
+        (uint8_t)(1u << (bit % 8));
 
     return inode;
 }

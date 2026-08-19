@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <nbfs/directory.h>
 
 int nbfs_lookup(

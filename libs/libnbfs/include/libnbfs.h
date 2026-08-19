@@ -1,3 +1,13 @@
+/*
+ * libnbfs.h
+ * NeoBench Filesystem Library
+ *
+ * Copyright (c) 2026 NeoBench Project
+ * All rights reserved.
+ *
+ * Public API for the NeoBench NBFS filesystem library.
+ */
+
 #ifndef LIBNBFS_H
 #define LIBNBFS_H
 
@@ -87,6 +97,12 @@ int nbfs_allocate_inode(
     nbfs_context_t *ctx,
     uint64_t *inode);
 
+int nbfs_resolve_path(
+    nbfs_context_t *ctx,
+    uint64_t start_inode,
+    const char *path,
+    uint64_t *result_inode);
+
 int nbfs_free_inode(
     nbfs_context_t *ctx,
     uint64_t inode);
@@ -118,6 +134,7 @@ int nbfs_write_file(
 int nbfs_read_file(
     nbfs_context_t *ctx,
     uint64_t inode,
+    uint64_t offset,
     void *buffer,
     uint64_t size);
 
@@ -130,11 +147,27 @@ int nbfs_create_directory(
     uint64_t parent_inode,
     const char *name);
 
+int nbfs_delete_directory(
+    nbfs_context_t *ctx,
+    uint64_t inode);
+
+int nbfs_rename(
+    nbfs_context_t *ctx,
+    uint64_t parent_inode,
+    const char *old_name,
+    const char *new_name);
+
 int nbfs_lookup(
     nbfs_context_t *ctx,
     uint64_t directory_inode,
     const char *name,
     uint64_t *inode);
+
+int nbfs_resolve_path(
+    nbfs_context_t *ctx,
+    uint64_t start_inode,
+    const char *path,
+    uint64_t *result_inode);
 
 /* --------------------------------------------------------------------------
  * Journal
