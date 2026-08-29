@@ -22,8 +22,13 @@ options		PRINTF_BUFR_SIZE=128
 options		INET
 options		INET6
 
-# Filesystem framework. NBFS is connected as a NeoBench VFS module.
+# Filesystem framework.
 options		VFS
+
+# NeoBench File System (NBFS).  Built-in read-only filesystem.
+# Provides root mount "/" for the NeoBench platform.
+options		NBFS
+# device		nbfs			# NBFS as loadable module (alternative)
 
 # NeoBench boot/runtime interfaces.
 options		NEOBENCH_BOOTINFO

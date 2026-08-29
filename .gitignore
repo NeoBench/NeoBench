@@ -67,6 +67,18 @@ out/
 # FreeBSD build output
 bsd/obj/
 
+# Test build directories (local, not kernel-tree)
+kernel/fs/nbfs/tests/build/
+kernel/fs/vfs/tests/build/
+tools/nbfs/rootimg/build/
+
+# Kernel build intermediate (objcopy-embedded root image)
+rootfs/boot/rootfs.o
+
+# FS-UAE hardfile / generated boot images
+images/*.hdf
+build_adf.py.out/
+
 # FreeBSD integration checkout/build output
 /bsd/freebsd-src/
 /bsd/obj/

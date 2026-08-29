@@ -11,6 +11,7 @@
 
 #include "layout.h"
 #include "fs/bitmap.h"
+#include "mkfs.h"
 
 static uint8_t bitmap[NBFS_DEFAULT_BLOCK_SIZE];
 
@@ -21,7 +22,7 @@ uint64_t nbfs_alloc_block(void)
     uint64_t block = next_block++;
 
     if (block >=
-        ((128ULL * 1024ULL * 1024ULL) /
+        (mkfs_image_size() /
          NBFS_DEFAULT_BLOCK_SIZE))
     {
         return UINT64_MAX;

@@ -15,12 +15,7 @@
 #include "fs/bitmap.h"
 #include "fs/inode.h"
 #include "fs/verify.h"
-
-#define NBFS_IMAGE_SIZE \
-    (128ULL * 1024ULL * 1024ULL)
-
-#define NBFS_TOTAL_BLOCKS \
-    (NBFS_IMAGE_SIZE / NBFS_DEFAULT_BLOCK_SIZE)
+#include "mkfs.h"
 
 static int read_block_bitmap(FILE *fp, uint8_t *bitmap)
 {
@@ -121,7 +116,8 @@ int nbfs_verify_image(FILE *fp)
         return -1;
     }
 
-    if (sb.total_blocks != NBFS_TOTAL_BLOCKS)
+    if (sb.total_blocks !=
+        mkfs_image_size() / NBFS_DEFAULT_BLOCK_SIZE)
     {
         puts("FAIL: invalid total block count.");
         return -1;
@@ -189,7 +185,7 @@ int nbfs_verify_image(FILE *fp)
     uint64_t free_blocks = 0;
 
     for (uint64_t block = 0;
-         block < NBFS_TOTAL_BLOCKS;
+         block < mkfs_image_size() / NBFS_DEFAULT_BLOCK_SIZE;
          block++)
     {
         if (!bit_is_set(bitmap, block))
@@ -261,7 +257,7 @@ int nbfs_verify_image(FILE *fp)
 
     long image_size = ftell(fp);
 
-    if (image_size != (long)NBFS_IMAGE_SIZE)
+    if (image_size != (long)mkfs_image_size())
     {
         puts("FAIL: invalid image size.");
         return -1;

@@ -17,6 +17,8 @@ int vfs_filesystem_init(
     fs->flags = flags;
     fs->private_data = 0;
     fs->lookup = 0;
+    fs->get_size = 0;
+    fs->read_file = 0;
 
     return 0;
 }
@@ -31,4 +33,6 @@ void vfs_filesystem_destroy(vfs_filesystem_t *fs)
     fs->flags = 0;
     fs->private_data = 0;
     fs->lookup = 0;
+    fs->get_size = 0;
+    fs->read_file = 0;
 }

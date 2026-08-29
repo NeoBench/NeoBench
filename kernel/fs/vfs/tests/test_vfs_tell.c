@@ -37,8 +37,12 @@ int main(void)
 
     if (vfs_filesystem_init(&fs, "nbfs", 512, 0) != 0)
         return fail("VFS filesystem initialized");
-    fs.private_data = ctx;
-    fs.lookup = vfs_nbfs_lookup;
+    if (vfs_nbfs_bind(&fs, ctx) != 0)
+    {
+        nbfs_close(ctx);
+        return fail("filesystem bind");
+    }
+
     printf("PASS: VFS filesystem initialized\n");
 
     if (vfs_vnode_init(&root, &fs, 1, VFS_VNODE_DIR) != 0)

@@ -18,7 +18,8 @@ OBJS = \
 	path.o \
 	vfs.o \
 	vnode.o \
-	tests/console_stub.o
+	tests/console_stub.o \
+	tests/kernel_nbfs_stub.o
 
 TESTS = \
 	tests/test_vfs \
@@ -87,6 +88,7 @@ test: $(TESTS)
 
 clean:
 	rm -f *.o
+	rm -f tests/*.o
 	rm -f $(TESTS)
 
 .PHONY: all test clean

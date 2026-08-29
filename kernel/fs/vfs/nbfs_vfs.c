@@ -3,7 +3,21 @@
 #include <stdint.h>
 
 #include "nbfs_vfs.h"
-#include "libnbfs.h"
+
+int vfs_nbfs_bind(
+    vfs_filesystem_t *fs,
+    nbfs_context_t *ctx)
+{
+    if (!fs || !ctx)
+        return -1;
+
+    fs->private_data = ctx;
+    fs->lookup = vfs_nbfs_lookup;
+    fs->get_size = vfs_nbfs_get_size;
+    fs->read_file = vfs_nbfs_read;
+
+    return 0;
+}
 
 int vfs_nbfs_lookup(
     vfs_filesystem_t *fs,
@@ -13,9 +27,6 @@ int vfs_nbfs_lookup(
     uint32_t *result_mode
 )
 {
-    printf("DEBUG vfs_nbfs_lookup: parent=%llu name=\"%s\"\n",
-           (unsigned long long)parent_inode,
-           name ? name : "(null)");
     nbfs_context_t *ctx;
     nbfs_inode_t inode;
 
@@ -41,4 +52,53 @@ int vfs_nbfs_lookup(
     *result_mode = inode.mode;
 
     return 0;
+}
+
+int vfs_nbfs_get_size(
+    vfs_filesystem_t *fs,
+    uint64_t inode_number,
+    uint64_t *size)
+{
+    nbfs_context_t *ctx;
+    nbfs_inode_t inode;
+
+    if (!fs || !fs->private_data || !size)
+        return -1;
+
+    ctx = (nbfs_context_t *)fs->private_data;
+
+    if (nbfs_read_inode(
+            ctx,
+            inode_number,
+            &inode) != 0)
+        return -1;
+
+    *size = inode.size;
+
+    return 0;
+}
+
+ssize_t vfs_nbfs_read(
+    vfs_filesystem_t *fs,
+    uint64_t inode_number,
+    uint64_t offset,
+    void *buffer,
+    size_t size)
+{
+    nbfs_context_t *ctx;
+
+    if (!fs || !fs->private_data || !buffer)
+        return -1;
+
+    ctx = (nbfs_context_t *)fs->private_data;
+
+    if (nbfs_read_file(
+            ctx,
+            inode_number,
+            offset,
+            buffer,
+            (uint64_t)size) != 0)
+        return -1;
+
+    return (ssize_t)size;
 }

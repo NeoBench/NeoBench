@@ -50,8 +50,11 @@ int main(void)
      * The VFS filesystem currently carries the NBFS context
      * through private_data.
      */
-    fs.private_data = ctx;
-    fs.lookup = vfs_nbfs_lookup;
+    if (vfs_nbfs_bind(&fs, ctx) != 0)
+    {
+        nbfs_close(ctx);
+        return fail("filesystem bind");
+    }
 
     printf("PASS: VFS filesystem initialized\n");
 

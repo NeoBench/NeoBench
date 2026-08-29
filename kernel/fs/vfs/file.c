@@ -7,7 +7,6 @@
 #include "vfs/file.h"
 #include "vfs/vnode.h"
 #include "vfs/filesystem.h"
-#include "../../include/nbfs.h"
 
 int vfs_file_init(
     vfs_file_t *file,
@@ -49,7 +48,6 @@ ssize_t vfs_file_read(
     void *buffer,
     size_t size)
 {
-    nbfs_inode_t inode;
     uint64_t remaining;
     uint64_t requested;
     uint64_t file_size;
@@ -67,18 +65,18 @@ ssize_t vfs_file_read(
     if (file->vnode->type != VFS_VNODE_REG)
         return -1;
 
-    if (!file->vnode->fs)
+    if (!file->vnode->fs ||
+        !file->vnode->fs->get_size ||
+        !file->vnode->fs->read_file)
         return -1;
 
-    rc = nbfs_kernel_read_inode(
+    rc = file->vnode->fs->get_size(
         file->vnode->fs,
         file->vnode->ino,
-        &inode);
+        &file_size);
 
     if (rc != 0)
         return -1;
-
-    file_size = inode.size;
 
     if (file->offset >= file_size)
         return 0;
@@ -89,7 +87,7 @@ ssize_t vfs_file_read(
     if (requested > remaining)
         requested = remaining;
 
-    rc = (int)nbfs_kernel_read(
+    rc = (int)file->vnode->fs->read_file(
         file->vnode->fs,
         file->vnode->ino,
         file->offset,
@@ -229,7 +227,7 @@ int64_t vfs_file_seek(
     int64_t offset,
     int whence)
 {
-    nbfs_inode_t inode;
+    uint64_t inode_size;
     int64_t base;
     int64_t new_offset;
 
@@ -251,19 +249,19 @@ int64_t vfs_file_seek(
 
         case VFS_SEEK_END:
             if (!file->vnode->fs ||
-                !file->vnode->fs->private_data)
+                !file->vnode->fs->get_size)
                 return -1;
 
-            if (nbfs_kernel_read_inode(
+            if (file->vnode->fs->get_size(
                     file->vnode->fs,
                     file->vnode->ino,
-                    &inode) != 0)
+                    &inode_size) != 0)
                 return -1;
 
-            if (inode.size > INT64_MAX)
+            if (inode_size > INT64_MAX)
                 return -1;
 
-            base = (int64_t)inode.size;
+            base = (int64_t)inode_size;
             break;
 
         default:

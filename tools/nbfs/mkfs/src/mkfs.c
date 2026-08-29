@@ -10,12 +10,35 @@
 #include "fs/directory.h"
 #include "fs/verify.h"
 
-int mkfs_create(const char *image)
+static uint64_t g_image_size =
+    128ULL * 1024ULL * 1024ULL;
+
+uint64_t mkfs_image_size(void)
 {
-    FILE *fp =
-        image_create(
-            image,
-            128ULL * 1024ULL * 1024ULL);
+    return g_image_size;
+}
+
+int mkfs_create_ex(const char *image, uint64_t size_bytes)
+{
+    FILE *fp;
+
+    if (size_bytes == 0 ||
+        size_bytes % NBFS_DEFAULT_BLOCK_SIZE != 0)
+    {
+        puts("Invalid image size.");
+        return 1;
+    }
+
+    if (size_bytes <
+        (NBFS_DATA_START + 1) * NBFS_DEFAULT_BLOCK_SIZE)
+    {
+        puts("Image too small for NBFS v1 layout.");
+        return 1;
+    }
+
+    g_image_size = size_bytes;
+
+    fp = image_create(image, size_bytes);
 
     if (!fp)
     {
@@ -98,4 +121,9 @@ int mkfs_create(const char *image)
     puts("NBFS filesystem created.");
 
     return 0;
+}
+
+int mkfs_create(const char *image)
+{
+    return mkfs_create_ex(image, 128ULL * 1024ULL * 1024ULL);
 }

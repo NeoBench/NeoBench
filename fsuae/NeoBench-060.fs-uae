@@ -4,23 +4,29 @@
 
 amiga_model = A4000
 
-cpu_type = 68060
+cpu = 68060
 
-chip_memory = 2
-fast_memory = 128
-zorro_iii_memory = 256
+chip_memory = 2048
+fast_memory = 0
+zorro_iii_memory = 262144
 
-# NeoBench development filesystem
-hard_drive_0 = /home/lordp/NeoBench/rootfs
-hard_drive_0_label = NEOBENCH
+# NeoBench HDF hard drive image
+hard_drive_0 = /home/lordp/NeoBench/images/neobench.hdf
+hard_drive_0_type = hdf
+hard_drive_0_label = NEObench
 
 # Windowed development mode
 fullscreen = 0
 window_width = 1024
 window_height = 768
 
-# Disable unnecessary extras for the first boot test
+# No floppy drives
 floppy_drive_count = 0
+
+# NeoBench console = CIA-B serial port.
+# Expose it on a TCP socket and wait for a listener so early
+# bootblock output is captured too:
+serial_port = tcp://127.0.0.1:1234/wait
 
 # Save emulator state/configuration separately
 save_states = 0

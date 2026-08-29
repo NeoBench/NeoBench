@@ -131,6 +131,14 @@ int nbfs_kernel_mount(
 );
 
 /*
+ * Validate an NBFS superblock on a device without mounting it.
+ * Used at boot time to probe for a root filesystem.
+ */
+int nbfs_kernel_probe(
+    block_device_t *device
+);
+
+/*
  * Read an inode directly from the NBFS inode table.
  */
 int nbfs_kernel_read_inode(
@@ -153,6 +161,15 @@ ssize_t nbfs_kernel_read(
 );
 
 /*
+ * Report a file's size in bytes (VFS get_size operation).
+ */
+int nbfs_kernel_get_size(
+    vfs_filesystem_t *fs,
+    uint64_t inode_number,
+    uint64_t *size
+);
+
+/*
  * Directory lookup.
  */
 int nbfs_kernel_lookup(
@@ -160,7 +177,24 @@ int nbfs_kernel_lookup(
     uint64_t parent_inode,
     const char *name,
     uint64_t *result_inode,
-    unsigned long *result_type
+    uint32_t *result_mode
+);
+
+/*
+ * Read the mounted root inode number.
+ */
+int nbfs_kernel_root_inode(
+    const vfs_filesystem_t *fs,
+    uint64_t *root_inode
+);
+
+/*
+ * Copy the mounted volume name into out.
+ */
+int nbfs_kernel_volume(
+    const vfs_filesystem_t *fs,
+    char *out,
+    size_t out_size
 );
 
 void nbfs_kernel_shutdown(void);

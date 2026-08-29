@@ -99,7 +99,21 @@ echo "[5/7] Building NeoLoader ELF loader..."
     -o "$TMP/elf-loader.o"
 
 echo
-echo "[6/7] Building NeoLoader loader/transfer..."
+echo "[6/7] Building NeoLoader console..."
+
+"$CC" $CFLAGS \
+    -c "$BOOT/src/console.c" \
+    -o "$TMP/console.o"
+
+echo
+echo "[6b] Building NeoLoader 3D boot art..."
+
+"$CC" $CFLAGS \
+    -c "$BOOT/src/bootart.c" \
+    -o "$TMP/bootart.o"
+
+echo
+echo "[7/7] Building NeoLoader loader/transfer..."
 
 "$CC" $CFLAGS \
     -c "$BOOT/src/loader.c" \
@@ -115,12 +129,14 @@ ls -lh \
     "$KERNEL_OBJ" \
     "$TMP/neoloader-start.o" \
     "$TMP/neoloader-main.o" \
+    "$TMP/console.o" \
+    "$TMP/bootart.o" \
     "$TMP/elf-loader.o" \
     "$TMP/loader.o" \
     "$TMP/transfer.o"
 
 echo
-echo "[7/7] Linking NeoLoader..."
+echo "[8/8] Linking NeoLoader..."
 
 rm -f "$LOADER"
 
@@ -129,6 +145,8 @@ rm -f "$LOADER"
     -o "$LOADER" \
     "$TMP/neoloader-start.o" \
     "$TMP/neoloader-main.o" \
+    "$TMP/console.o" \
+    "$TMP/bootart.o" \
     "$TMP/elf-loader.o" \
     "$TMP/loader.o" \
     "$TMP/transfer.o" \
