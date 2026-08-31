@@ -72,7 +72,7 @@ def assemble_bootblock(kernel_lba, kernel_sectors, entry, root_blk):
             ["m68k-elf-as", "-o", obj, "-m68000",
              "--defsym", f"KERNEL_LBA={kernel_lba}",
              "--defsym", f"KERNEL_SECTORS={kernel_sectors}",
-             "--defsym", f"LOAD_ADDR={0x20000000}",
+             "--defsym", f"LOAD_ADDR={0x40000000}",
              "--defsym", f"ENTRY={entry}",
              src], check=True)
         subprocess.run(["m68k-elf-objcopy", "-O", "binary", "-j", ".text",

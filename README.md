@@ -10,7 +10,7 @@ through its own VFS layer, targeting the Amiga 4000 under FS-UAE.
 
 ## What is in the box
 
-- `kernel/` — 68060 kernel (link base `0x20000000`, Zorro III RAM).
+- `kernel/` — 68060 kernel (link base `0x40000000`, Zorro III RAM).
   Console/banner, shell (`neoshell` with `nbroot` / `nbcat`), a VFS with
   dentry/path/file abstraction, a memory-backed block device and the NBFS
   kernel driver. A small NBFS root image is embedded in the kernel binary

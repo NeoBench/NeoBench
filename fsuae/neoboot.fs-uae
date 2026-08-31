@@ -1,7 +1,8 @@
 [config]
 
-# NeoBench floppy-boot dev config: Kickstart runs the ADF bootblock,
-# which opens scsi.device and streams the kernel from the IDE hardfile.
+# NeoBench floppy-boot dev config: Kickstart runs the ADF bootblock, which
+# probes the on-board IDE controller and streams the kernel flat image from
+# the raw IDE hardfile into Zorro III RAM (0x40000000), then jumps to it.
 
 amiga_model = A4000
 
@@ -11,7 +12,7 @@ kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/A4000.47.115.rom
 
 chip_memory = 2048
 fast_memory = 0
-zorro_iii_memory = 262144
+zorro_iii_memory = 256
 
 floppy_drive_count = 1
 floppy_drive_0 = /home/lordp/NeoBench/images/neoboot.adf

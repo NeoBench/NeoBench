@@ -110,7 +110,7 @@ def main():
     kernel_lba = start_lba + kernel_rel
 
     rdisk.dump()
-    bb = bootblock_bytes(kernel_lba, n_blocks, 0x20000000, e_entry, part_root)
+    bb = bootblock_bytes(kernel_lba, n_blocks, 0x40000000, e_entry, part_root)
     blkdev.write_block(0, bytes(bb[0:512]))
     blkdev.write_block(1, bytes(bb[512:1024]))
     for i in range(n_blocks):

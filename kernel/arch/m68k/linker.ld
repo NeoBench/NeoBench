@@ -15,13 +15,13 @@ SECTIONS
  * addresses, so the VMA base must satisfy bp, given that ld lays the
  * first LOAD segment at file offset 0x1000:
  *
- *     VMA = KERNEL_BASE(0x20000000) + file_offset
+ *     VMA = KERNEL_BASE(0x40000000) + file_offset
  *
- * NeoBench targets an A4000 whose Zorro III RAM begins at
- * 0x20000000 (see scripts/build_hdf.py KERNEL_BASE and
- * fsuae/NeoBench-060.fs-uae zorro_iii_memory).
+ * NeoBench targets an A4000 whose Zorro III RAM is autoconfiged by
+ * FS-UAE at 0x40000000 (see scripts/build_hdf.py KERNEL_BASE and
+ * fsuae/neoboot.fs-uae zorro_iii_memory).
  */
-. = 0x20001000;
+. = 0x40001000;
 
     .text : ALIGN(4)
     {

@@ -30,7 +30,7 @@ SECTOR_SIZE = 512
 ADF_SIZE = 880 * 1024
 BOOTBLOCK_SIZE = 1024
 
-KERNEL_BASE = 0x20000000
+KERNEL_BASE = 0x40000000
 
 
 def carry_sum(data):
@@ -110,4 +110,4 @@ if __name__ == '__main__':
     sys.exit(build(sys.argv[1],
                    int(os.environ.get('KERNEL_LBA', 263)),
                    int(os.environ.get('KERNEL_SECTORS', 16457)),
-                   int(os.environ.get('ENTRY', '0x20001000'), 0)))
+                   int(os.environ.get('ENTRY', '0x40001000'), 0)))

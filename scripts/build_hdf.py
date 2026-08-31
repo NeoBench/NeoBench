@@ -23,7 +23,7 @@ import tempfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SECTOR = 512
 
-KERNEL_BASE = 0x20000000      # Zorro III fast RAM (A4000)
+KERNEL_BASE = 0x40000000      # Zorro III fast RAM (A4000, FS-UAE autoconfig)
 
 # NeoBench native filesystem — "NBFS". Proclaimed to Kickstart as a custom,
 # Unix-style filesystem via an RDB FileSystemHeader ("neobench.fsh") rather

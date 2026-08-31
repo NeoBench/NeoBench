@@ -18,7 +18,7 @@ SECTOR = 512
 KERNEL_LBA = int(__import__('os').environ.get('KERNEL_LBA', '263'))
 
 LOAD_OFFSET = 0x1000   # ELF e_entry lands at KERNEL_BASE + 0x1000
-KERNEL_BASE = 0x20000000
+KERNEL_BASE = 0x40000000
 
 
 def build(kernel_path, out_path, size_mb=16):

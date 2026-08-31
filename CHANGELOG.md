@@ -2,11 +2,28 @@
 
 All notable changes to NeoBench are recorded here.
 
+## [v0.1-alpha] - 2026-08-31
+
+**Boot path now reaches NeoShell under FS-UAE**
+
+- Kernel link base moved from `0x20000000` to `0x40000000` to match the
+  Zorro III base FS-UAE's A4000 autoconfig actually assigns (previously the
+  kernel was loaded into unmapped memory and bus-error/reset).
+- `fsuae/neoboot.fs-uae`: `zorro_iii_memory` corrected from an invalid
+  `262144` (treated as MB -> 256 GB, rejected) to `256` MB so the Z3 fast
+  RAM is actually present.
+- `scripts/bootblock.S`: `ide_probe` now probes with a single `READ SECTORS`
+  (0x20) instead of `IDENTIFY` (0xEC), which reliably errs on the emulated
+  drive; `ide_wait` now times out against the video beam (`VPOSR`) so the
+  async IDE completion (which only runs during per-scanline event handling)
+  can be observed. The raw-HDF stream path then boots the kernel to
+  NeoShell and the shell answers interactive commands.
+
 ## [v0.1-alpha] - 2026-08-29
 
 **Kernel boot path**
 
-- Kernel links at the Zorro III RAM base `0x20000000` (A4000, 256 MB Z3),
+- Kernel links at the Zorro III RAM base `0x40000000` (A4000, 256 MB Z3),
   with VMA = base + ELF file offset, so a flat load at the load base makes
   link addresses match runtime addresses.
 - `scripts/build_hdf.py` builds the RDB, boot block and a single FFS
