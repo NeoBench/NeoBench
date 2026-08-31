@@ -233,7 +233,7 @@ static void cmd_ver(void)
     sh_line();
     sh("  Version ..... " NB_COLOR_BRIGHT_GREEN "r1.0" NB_COLOR_RESET "\n");
     sh("  Base ........ " NB_COLOR_BRIGHT_WHITE "FreeBSD stable/15" NB_COLOR_RESET "\n");
-    sh("  Machine ..... " NB_COLOR_BRIGHT_WHITE "m68k/68060 Amiga" NB_COLOR_RESET "\n");
+    sh("  Machine ..... " NB_COLOR_BRIGHT_WHITE "m68k/68030+ Amiga" NB_COLOR_RESET "\n");
     sh("  Build ....... " NB_COLOR_BRIGHT_WHITE __DATE__ " " __TIME__ NB_COLOR_RESET "\n");
     sh("  Compiler .... " NB_COLOR_BRIGHT_WHITE "m68k-elf-gcc 16.1.0" NB_COLOR_RESET "\n");
     sh("\n");
@@ -244,7 +244,7 @@ static void cmd_status(void)
     sh("\n");
     sh_color(NB_COLOR_BRIGHT_GREEN NB_COLOR_BOLD, "  NeoBench System Status\n");
     sh_line();
-    sh_status("CPU",         "Motorola MC68060",       NB_COLOR_BRIGHT_WHITE);
+    sh_status("CPU",         "Motorola 68030+",        NB_COLOR_BRIGHT_WHITE);
     sh_status("RAM",         "128 MB Fast + 2 MB Chip", NB_COLOR_BRIGHT_WHITE);
     sh_status("Machine",     "Amiga A4000",            NB_COLOR_BRIGHT_WHITE);
     sh_status("Kernel",      "running",                NB_COLOR_BRIGHT_GREEN);
@@ -264,10 +264,10 @@ static void cmd_cpu(void)
     sh("\n");
     sh_color(NB_COLOR_BRIGHT_GREEN, "  CPU Information\n");
     sh_line();
-    sh("  Model ....... " NB_COLOR_BRIGHT_WHITE "Motorola MC68060" NB_COLOR_RESET "\n");
-    sh("  Clock ....... " NB_COLOR_BRIGHT_WHITE "50 MHz" NB_COLOR_RESET "\n");
-    sh("  ISA ......... " NB_COLOR_BRIGHT_WHITE "Motorola 68000" NB_COLOR_RESET "\n");
-    sh("  MMU ......... " NB_COLOR_BRIGHT_GREEN "68060 MMU (enabled)" NB_COLOR_RESET "\n");
+    sh("  Model ....... " NB_COLOR_BRIGHT_WHITE "Motorola 68030+" NB_COLOR_RESET "\n");
+    sh("  Clock ....... " NB_COLOR_BRIGHT_WHITE "25 MHz (A1500)" NB_COLOR_RESET "\n");
+    sh("  ISA ......... " NB_COLOR_BRIGHT_WHITE "Motorola 68030" NB_COLOR_RESET "\n");
+    sh("  MMU ......... " NB_COLOR_BRIGHT_GREEN "68030 MMU" NB_COLOR_RESET "\n");
     sh("  FPU ......... " NB_COLOR_BRIGHT_GREEN "Integrated" NB_COLOR_RESET "\n");
     sh("  I-Cache ..... " NB_COLOR_BRIGHT_WHITE "8 KB" NB_COLOR_RESET "\n");
     sh("  D-Cache ..... " NB_COLOR_BRIGHT_WHITE "8 KB" NB_COLOR_RESET "\n");

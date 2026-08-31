@@ -1,0 +1,6 @@
+amiga_model = A1200
+floppy_drive_count = 1
+floppy_drive_0 = /home/lordp/NeoBench/images/baretest.adf
+hard_drive_0 = /home/lordp/NeoBench/images/neobench.hdf
+hard_drive_0_file_system = uae
+serial_port = tcp://127.0.0.1:1234/wait

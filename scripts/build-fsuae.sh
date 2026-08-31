@@ -19,7 +19,7 @@ LOADER="$OUT/neoloader.elf"
 LOADER_BIN="$OUT/neoloader-fsuae.bin"
 
 CFLAGS="
--m68060
+-m68030
 -ffreestanding
 -fno-builtin
 -fno-stack-protector

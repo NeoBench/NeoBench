@@ -1,0 +1,4 @@
+amiga_model = A1200
+floppy_drive_count = 1
+floppy_drive_0 = /home/lordp/NeoBench/images/baretest.adf
+serial_port = tcp://127.0.0.1:1234/wait

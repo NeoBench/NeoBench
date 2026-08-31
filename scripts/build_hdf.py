@@ -1,210 +1,248 @@
 #!/usr/bin/env python3
-"""NeoBench HDF Builder v7 — Fixed RDB/PART/Boot block structures."""
+"""NeoBench HDF Builder v8 — canonical RDB, DOS bootblock, assembled 68k.
 
-import struct, sys, os
+Fixes vs v7 (all verified against ACE hardblocks.h + amitools):
+  * RDSK (RigidDiskBlock) lives at block 0 with canonical field offsets.
+  * PART block at block 1 with canonical offsets and a full 20-long
+    struct DosEnvec environment at offset 128 (pb_Environment).
+  * RDSK/PART/FFS block checksums sum-to-zero (RW = -sum).
+  * Bootblock checksum is the end-around-carry sum -> 0xFFFFFFFF.
+  * Boot code is assembled from scripts/bootblock.S with m68k-elf
+    binutils and inserted at offset $0C (not $08).
+  * IOStdReq offsets corrected: io_Command=28, io_Length=36, io_Data=40,
+    io_Offset=44 (byte offsets for scsi.device). Kernel read is chunked
+    128 KB per DoIO.
+"""
 
+import os
+import struct
+import subprocess
+import sys
+import tempfile
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SECTOR = 512
 
-def csum(data, nbytes=None):
-    """Amiga RDB/PART/bootblock checksum.
+KERNEL_BASE = 0x20000000      # Zorro III fast RAM (A4000)
 
-    The ROM requires that the 32-bit sum of ALL longwords in the block,
-    INCLUDING the stored checksum, equals 0xFFFFFFFF (-1).  Storing the
-    one's complement (~sum) achieves exactly that.
-    """
-    if nbytes is None: nbytes = len(data)
-    s = 0
-    for i in range(0, nbytes, 4):
-        s = (s + struct.unpack_from('>I', data, i)[0]) & 0xFFFFFFFF
-    return (~s) & 0xFFFFFFFF
+# NeoBench native filesystem — "NBFS". Proclaimed to Kickstart as a custom,
+# Unix-style filesystem via an RDB FileSystemHeader ("neobench.fsh") rather
+# than being faked as an Amiga FFS volume. The partition advertises this
+# DosType so OS 3.x mounting hands the bootblock straight to the kernel.
+NBFS_DOSTYPE = 0x4E424653    # "NBFS\0" (big-endian ASCII identifier)
+
+# Classic m68k AmigaOS binary IOStdReq offsets
+IO_COMMAND = 28
+IO_ERROR = 31
+IO_LENGTH = 36
+IO_DATA = 40
+IO_OFFSET = 44
+
 
 def w32(d, o, v):
     struct.pack_into('>I', d, o, v & 0xFFFFFFFF)
 
 
-def make_boot_code(kernel_lba, kernel_blocks, entry_target, load_addr):
-    """68k boot code. Must fit in 1012 bytes (1024-byte bootblock minus header)."""
-    code = bytearray(504)
-    p = 0
-
-    def e16(v):
-        nonlocal p; struct.pack_into('>H', code, p, v & 0xFFFF); p += 2
-    def e32(v):
-        nonlocal p; struct.pack_into('>I', code, p, v & 0xFFFFFFFF); p += 4
-    def here(): return p
-
-    # Supervisor + stack
-    e16(0x46FC); e16(0x2700)           # MOVE #$2700,SR
-    e16(0x41F9); e32(0x00080000)      # LEA $80000,A7
-
-    # --- Print "NB" banner marker ---
-    e16(0x41FA); msg_ref = here(); e16(0)
-    # Inline serial print loop (reused via BRA)
-    lp = here()
-    e16(0x1018); e16(0x4A00)          # MOVE.B (A0)+,D0 / TST.B D0
-    e16(0x6700); done1 = here(); e16(0)  # BEQ done
-    e16(0x0839); e16(0x0006); e32(0x00BFE001)  # BTST #6,$BFE001
-    e16(0x67FA)                        # BEQ wait
-    e16(0x11C0); e32(0x00BFD100)      # MOVE.B D0,$BFD100
-    e16(0x6000)                        # BRA lp
-    e16(lp - here())
-    struct.pack_into('>H', code, done1, here() - (done1 + 2))
-    struct.pack_into('>H', code, msg_ref, here() - (msg_ref + 2))
-
-    # --- Zero IO request at $40000 ---
-    e16(0x41F9); e32(0x00040000)      # LEA $40000,A0
-    e16(0x703F)                        # MOVEQ #63,D0
-    cl = here()
-    e16(0x4218); e16(0x51C8); e16(cl - here())  # CLR.L (A0)+ / DBRA
-
-    # --- Fill IO request ---
-    e16(0x43F9); e32(0x00040000)      # LEA $40000,A1
-    e16(0x31FC); e16(2); e16(20)      # MOVE.W #2,20(A1) CMD_READ
-    e16(0x23FC); e32(kernel_blocks * SECTOR); e16(24)  # io_Length
-    e16(0x23FC); e32(load_addr); e16(28)          # io_Data
-    e16(0x23FC); e32(kernel_lba); e16(32)  # io_Offset
-
-    # --- Open scsi.device ---
-    e16(0x43FA); dev_ref = here(); e16(0)  # LEA devname(PC),A1
-    e16(0x91C8)                        # SUB.L A0,A0
-    e16(0x7000)                        # MOVEQ #0,D0
-    e16(0x2CFC); e32(4)               # MOVE.L 4.W,A6
-    e16(0x4EAE); e16(0xFDD8)          # JSR -552(A6) OpenDevice
-
-    # --- DoIO ---
-    e16(0x43F9); e32(0x00040000)      # LEA $40000,A1
-    e16(0x2CFC); e32(4)               # MOVE.L 4.W,A6
-    e16(0x4EAE); e16(0xFD90)          # JSR -624(A6) DoIO
-
-    # --- Print "OK" ---
-    e16(0x41FA); ok_ref = here(); e16(0)
-    lp2 = here()
-    e16(0x1018); e16(0x4A00)
-    e16(0x6700); done2 = here(); e16(0)
-    e16(0x0839); e16(0x0006); e32(0x00BFE001)
-    e16(0x67FA)
-    e16(0x11C0); e32(0x00BFD100)
-    e16(0x6000); e16(lp2 - here())
-    struct.pack_into('>H', code, done2, here() - (done2 + 2))
-    struct.pack_into('>H', code, ok_ref, here() - (ok_ref + 2))
-
-    # --- Jump to kernel entry ---
-    # The kernel file was copied flat to $200000, so the true runtime
-    # address of the ELF entry point is computed on the host side
-    # (e_entry is a link-time VMA, NOT an offset into the loaded image).
-    e16(0x43F9); e32(entry_target)    # LEA $<entry_target>,A1
-
-    # --- Disable interrupts and jump ---
-    e16(0x46FC); e16(0x2700)          # MOVE #$2700,SR
-    e16(0x4ED1)                        # JMP (A1)
-
-    # ================================================
-    # Strings (packed tightly)
-    # ================================================
-    banner = b"NB:NeoBench v1.0\r\n"
-    code[p:p+len(banner)] = banner; p += len(banner)
-
-    struct.pack_into('>H', code, dev_ref, here() - (dev_ref + 2))
-    devname = b"scsi.device\x00"
-    code[p:p+len(devname)] = devname; p += len(devname)
-
-    okmsg = b"OK\r\n"
-    code[p:p+len(okmsg)] = okmsg; p += len(okmsg)
-
-    return code[:p]
+def rdb_csum(data, nbytes=None):
+    """RDB/FFS block checksum: longword sum to zero (checksum = -sum)."""
+    if nbytes is None:
+        nbytes = len(data)
+    s = 0
+    for i in range(0, nbytes, 4):
+        s = (s + struct.unpack_from('>I', data, i)[0]) & 0xFFFFFFFF
+    return (-s) & 0xFFFFFFFF
 
 
+def carry_wrap_sum(data, nbytes):
+    """Additive carry-wraparound 32-bit sum used by bootblock checksums."""
+    s = 0
+    for i in range(0, nbytes, 4):
+        v = struct.unpack_from('>I', data, i)[0]
+        nxt = (s + v) & 0xFFFFFFFF
+        if nxt < s:
+            nxt = (nxt + 1) & 0xFFFFFFFF
+        s = nxt
+    return s
+
+
+def bootblk_csum(data, nbytes):
+    """Bootblock checksum: store ~(carry-wrapped sum); total == 0xFFFFFFFF."""
+    return (~carry_wrap_sum(data, nbytes)) & 0xFFFFFFFF
+
+
+# ---------------------------------------------------------------------
+# scripts/bootblock.S  ->  flat binary
+# ---------------------------------------------------------------------
+def assemble_bootblock(kernel_lba, kernel_sectors, entry_target):
+    src = os.path.join(SCRIPT_DIR, 'bootblock.S')
+    with tempfile.TemporaryDirectory() as work:
+        obj = os.path.join(work, 'bb.o')
+        elf = os.path.join(work, 'bb.elf')
+        raw = os.path.join(work, 'bb.bin')
+        defs = [
+            f'KERNEL_LBA={kernel_lba}',
+            f'KERNEL_SECTORS={kernel_sectors}',
+            f'LOAD_ADDR={KERNEL_BASE:#x}',
+            f'ENTRY={entry_target:#x}',
+        ]
+        subprocess.run(['m68k-elf-as', '-m68000'] +
+                       [f'--defsym={d}' for d in defs] +
+                       ['-o', obj, src], check=True)
+        subprocess.run(['m68k-elf-ld', '-Ttext=0', '-e', '_start',
+                        '-o', elf, obj], check=True)
+        subprocess.run(['m68k-elf-objcopy', '-O', 'binary', '-j', '.text',
+                        elf, raw], check=True)
+        with open(raw, 'rb') as f:
+            code = f.read()
+    return code
+
+
+# ---------------------------------------------------------------------
+# RigidDiskBlock (devices/hardblocks.h offset table)
+# ---------------------------------------------------------------------
+def make_rdsk(hostid, blockbytes, flags, badblocklist, partitionlist,
+              fsyslist, drive_init, rdbblocks_lo, rdbblocks_hi,
+              cylinders, sectors, heads, interleave, park,
+              lowcyl, highcyl, cylblocks, high_rdsk, wpc, rw, step):
+    # Layout mirrors amitools/rdbtool output byte-for-byte (ground truth:
+    # the same RDB is produced by HDInstTool-class tools and mounts under
+    # Kickstart 3.2).  rdb_SummedLongs == 64 (256-byte header region).
+    rdb = bytearray(SECTOR)
+    w32(rdb, 0, 0x5244534B)                  # rdb_ID "RDSK"
+    w32(rdb, 4, 64)                          # rdb_SummedLongs
+                                             # rdb_ChkSum @8 (last)
+    w32(rdb, 12, hostid)                     # rdb_HostID
+    w32(rdb, 16, blockbytes)                 # rdb_BlockBytes
+    w32(rdb, 20, flags)                      # rdb_Flags
+    w32(rdb, 24, badblocklist)               # rdb_BadBlockList (0xFFFFFFFF)
+    w32(rdb, 28, partitionlist)              # rdb_PartitionList
+    w32(rdb, 32, fsyslist)                   # rdb_FileSysHeaderList (0xFFFFFFFF)
+    w32(rdb, 36, drive_init)                 # rdb_DriveInit (0xFFFFFFFF)
+                                             # rdb_BootBlk @40 = 0
+                                             # rdb_BockList @44 = 0
+                                             # rdb_Reserved1[] zeros @48
+    # physical drive geometry (matches rdbtool Reserved2 layout)
+    w32(rdb, 64, cylinders)                  # cyls
+    w32(rdb, 68, sectors)                    # secs
+    w32(rdb, 72, heads)                      # heads
+    w32(rdb, 76, interleave)                 # interleave
+    w32(rdb, 80, park)                       # parking_zone
+    w32(rdb, 96, wpc)                        # write_pre_comp
+    w32(rdb, 100, rw)                        # reduced_write
+    w32(rdb, 104, step)                      # step_rate
+    # logical drive geometry (matches rdbtool Reserved3 layout)
+    w32(rdb, 128, rdbblocks_lo)              # rdb_blk_lo
+    w32(rdb, 132, rdbblocks_hi)              # rdb_blk_hi (last RDB block)
+    w32(rdb, 136, lowcyl)                    # lo_cyl (data starts here)
+    w32(rdb, 140, highcyl)                   # hi_cyl
+    w32(rdb, 144, cylblocks)                 # cyl_blocks
+                                             # auto_park_secs @148 = 0
+    w32(rdb, 152, high_rdsk)                 # high_rdsk_block
+    w32(rdb, 8, rdb_csum(rdb, SECTOR))
+    return rdb
+
+
+# ---------------------------------------------------------------------
+# PartitionBlock: canonical DosEnvec at offset 128 (amitools layout)
+# ---------------------------------------------------------------------
 def make_part(next_block, dostype, name, lowcyl, highcyl, bootpri,
-              total_cyls, heads, spt, bpc):
-    """Build a PartitionBlock per devices/hardblocks.h.
-
-    struct PartitionBlock layout:
-      0  pb_ID          'PART'
-      4  pb_SummedLongs 128
-      8  pb_ScsiHost
-      12 pb_Next
-      16 pb_Flags       bit0 = PBFB_BOOT
-      20 pb_Reserved1
-      24 pb_DevFlags
-      28 pb_DriveName[32]
-      60 pb_Reserved2[2]
-      68 pb_Environment[]   <- DE_ table lives HERE
-         env[0] DE_TABLESIZE
-         env[1] DE_SIZEBLOCK   (in longwords: 512B -> 128)
-         env[2] DE_SECORG
-         env[3] DE_NUMHEADS
-         env[4] DE_SECSPERTRACK
-         env[5] DE_BLKSTRACK
-         env[6] DE_FILESYSTEM  (DOSType!)
-         env[7] DE_LOWCYL
-         env[8] DE_HIGHCYL
-         env[9] DE_NUMBUFFER
-         env[10] DE_BUFMEMTYPE
-         env[11] DE_MAXTRANSFER
-         env[12] DE_MASK
-         env[13] DE_BOOTPRI
-         env[14] DE_DOSBASE
-         env[15] DE_BOOTBLOCKS (=2)
-     136 pb_EReserved[]
-    """
+              heads, spt):
+    # Mirrors amitools/rdbtool PartitionBlock byte-for-byte.  The
+    # DosEnvec slots matter; blk_per_trk must stay at slot 5 (my v8 put
+    # dostype there, which Kickstart rejected).
     p = bytearray(SECTOR)
-    w32(p,  0, 0x50415254)             # par_ID = "PART"
-    w32(p,  4, 128)                     # par_SummedLongs = 128
-                                        # par_ChkSum written last @8
-    w32(p, 12, 0x7FFFFFFF)              # par_HostID
-    w32(p, 16, next_block)              # par_Next
-    w32(p, 20, 0x00000003)              # par_Flags: BOOTABLE | NODOSYNC
-    w32(p, 24, 0)                       # par_Reserved1
-    w32(p, 28, 0)                       # par_DevFlags
-    p[32:32+len(name)+1] = name + b'\x00'   # par_DriveName[32]
-                                        # 64..67 par_Reserved2[2]
+    w32(p, 0, 0x50415254)                    # pb_ID "PART"
+    w32(p, 4, 64)                            # pb_SummedLongs (256-byte region)
+                                             # pb_ChkSum @8 (last)
+    w32(p, 12, 7)                            # pb_HostID
+    w32(p, 16, next_block)                   # pb_Next (0xFFFFFFFF = none)
+    w32(p, 20, 0x01)                         # pb_Flags PBFF_BOOTABLE
+    w32(p, 24, 0)                            # pb_DevFlags
+    # pb_DriveName: ubyte length followed by the name chars (amitools
+    # convention; FS-UAE null-terminates at 37+len, so a missing length
+    # byte makes it clobber the DosEnvec below).
+    name = name[:31]
+    p[36] = len(name)
+    p[37:37 + len(name)] = name
+                                             # else zeros @68..127
 
-    env = [0] * 17
-    env[0]  = 16                        # DE_TABLESIZE (last used index)
-    env[1]  = SECTOR // 4               # DE_SIZEBLOCK in longwords
-    env[2]  = 0                         # DE_SECORG
-    env[3]  = heads                     # DE_NUMHEADS
-    env[4]  = spt                       # DE_SECSPERTRACK
-    env[5]  = bpc                       # DE_BLKSTRACK
-    env[6]  = dostype                   # DE_FILESYSTEM == DOSType
-    env[7]  = lowcyl                    # DE_LOWCYL
-    env[8]  = highcyl                   # DE_HIGHCYL
-    env[9]  = 30                        # DE_NUMBUFFER
-    env[10] = 0                         # DE_BUFMEMTYPE (any)
-    env[11] = 0x00200000                # DE_MAXTRANSFER
-    env[12] = 0x7FFFFFFE                # DE_MASK
-    env[13] = bootpri                   # DE_BOOTPRI
-    env[14] = -1                        # DE_DOSBASE (use default)
-    env[15] = 2                         # DE_BOOTBLOCKS (1024 bytes)
-    env[16] = 0                         # DE_ reserved / terminator pad
+    env = [0] * 20
+    env[0] = 16                              # DE_TABLESIZE
+    env[1] = 128                             # DE_SIZEBLOCK (bytes; amitools)
+    env[2] = 0                               # DE_SECORG
+    env[3] = heads                           # DE_NUMHEADS
+    env[4] = 1                               # DE_SECSPERTRACK (1 sec/block)
+    env[5] = spt                             # DE_BLKSPERTRACK
+    env[6] = 2                               # DE_RESERVED (amitools value)
+    env[7] = 0                               # DE_PREALLOC
+    env[8] = 0                               # DE_INTERLEAVE
+    env[9] = lowcyl                          # DE_LOWCYL
+    env[10] = highcyl                        # DE_HIGHCYL
+    env[11] = 30                             # DE_NUMBUFFER
+    env[12] = 0                              # DE_BUFMEMTYPE
+    env[13] = 0x00FFFFFF                     # DE_MAXTRANSFER
+    env[14] = 0x7FFFFFFE                     # DE_MASK
+    env[15] = bootpri                        # DE_BOOTPRI
+    env[16] = dostype                        # DE_DOSTYPE
+    env[17] = 0                              # DE_BAUD
+    env[18] = 0                              # DE_CONTROL
+    env[19] = 0                              # DE_BOOTBLOCKS
     for i, v in enumerate(env):
-        w32(p, 68 + i * 4, v)
+        w32(p, 128 + i * 4, v)
 
-    w32(p, 8, csum(p))                  # checksum over whole sector
+    w32(p, 8, rdb_csum(p, SECTOR))
     return p
 
 
+# ---------------------------------------------------------------------
+# FileSystemHeader (FSHD): announces the NeoBench "neobench.fsh" native
+# filesystem to Kickstart (dosextens.h struct FileSysHeaderBlock).  The
+# rom reads the RDB's rdb_FileSysHeaderList, matches fs_DosType against the
+# partition's DE_DOSTYPE, and uses the declared handler to mount the volume
+# so it can reach the bootblock and hand control to the kernel.
+# ---------------------------------------------------------------------
+def make_fshd(next_block, dostype, device, handler, hostid=7):
+    f = bytearray(SECTOR)
+    w32(f, 0, 0x46534844)                  # fs_ID "FSHD"
+    w32(f, 4, 64)                          # fs_SummedLongs
+                                           # fs_ChkSum @8 (last)
+    w32(f, 12, hostid)                     # fs_HostID
+    w32(f, 16, next_block)                 # fs_Next (0xFFFFFFFF = none)
+    w32(f, 20, 0x02)                       # fs_Flags FSSF_BOOTBLOCKRESIDENT
+    dev = device[:31]
+    f[24] = len(dev)                       # fs_Device (BSTR)
+    f[25:25 + len(dev)] = dev
+    hnd = handler[:31]
+    f[56] = len(hnd)                       # fs_FileName (BSTR)
+    f[57:57 + len(hnd)] = hnd
+    w32(f, 88, dostype)                    # fs_DosType
+                                           # fs_Reserved[] zeros
+                                           # fs_SegListBlocks @104
+    w32(f, 8, rdb_csum(f, SECTOR))
+    return f
+
+
+# ---------------------------------------------------------------------
+# Raw NBFS partition builder (no FFS stub): the bootblock streams the
+# kernel directly and the RDB FSHD declares the volume as "neobench.fsh".
+# ---------------------------------------------------------------------
 def build(kernel_path, out_path, size_mb=16):
     with open(kernel_path, 'rb') as f:
         kernel = f.read()
 
-    # ---- Parse ELF32 MSB: find runtime address of e_entry when the
-    #      whole file is loaded flat at KERNEL_BASE. ----
-    # NeoBench runs the kernel from Zorro III RAM (A4000, 0x20000000);
-    # kernel/arch/m68k/linker.ld links with VMA = KERNEL_BASE + offset.
-    KERNEL_BASE = 0x20000000
+    # ---- ELF entry -> flat load offset at KERNEL_BASE ----
     assert kernel[0:4] == b'\x7fELF' and kernel[4] == 1 and kernel[5] == 2, \
         "expect ELF32 big-endian"
-    e_entry   = struct.unpack_from('>I', kernel, 24)[0]
-    phoff     = struct.unpack_from('>I', kernel, 28)[0]
+    e_entry = struct.unpack_from('>I', kernel, 24)[0]
+    phoff = struct.unpack_from('>I', kernel, 28)[0]
     phentsize = struct.unpack_from('>H', kernel, 42)[0]
-    phnum     = struct.unpack_from('>H', kernel, 44)[0]
+    phnum = struct.unpack_from('>H', kernel, 44)[0]
     entry_off = None
     for i in range(phnum):
         ph = phoff + i * phentsize
         p_type, p_offset, p_vaddr = struct.unpack_from('>III', kernel, ph)
-        if p_type == 1 and p_vaddr <= e_entry < p_vaddr + max(
-                struct.unpack_from('>I', kernel, ph+16)[0], 1):
+        p_memsz = struct.unpack_from('>I', kernel, ph + 16)[0]
+        if p_type == 1 and p_vaddr <= e_entry < p_vaddr + max(p_memsz, 1):
             entry_off = p_offset + (e_entry - p_vaddr)
             break
     if entry_off is None:
@@ -214,267 +252,171 @@ def build(kernel_path, out_path, size_mb=16):
     print(f"Kernel ELF: e_entry=0x{e_entry:x} -> load offset 0x{entry_off:x} "
           f"-> jump target 0x{entry_target:08x}")
 
-    total_sec = (size_mb * 1024 * 1024) // SECTOR
+    # Drive-matched geometry: FS-UAE identifies the 16 MB IDE image as
+    # LCHS=130/4/63 (32760 sectors).  The RDB/partition must be within
+    # that; Kickstart's scsi.device rejects a partition whose CHS
+    # geometry exceeds the drive's IDENTIFY geometry.
+    heads = 4
+    spt = 63
+    bpc = heads * spt                        # 252 sectors/cylinder
+    total_cyls = 130                         # 130 * 252 = 32760 sectors
+    total_sec = total_cyls * bpc
     img = bytearray(total_sec * SECTOR)
 
-    heads = 16; spt = 64; bpc = heads * spt
-    total_cyls = total_sec // bpc  # 32
-
-    ffs_start_cyl = 1; ffs_end_cyl = total_cyls - 1
-    ffs_lba = ffs_start_cyl * bpc
+    part_start_cyl = 1
+    part_end_cyl = 125
+    part_lba = part_start_cyl * bpc            # partition owns cylinders 1..125
 
     n_data = (len(kernel) + SECTOR - 1) // SECTOR
-    ffs_blocks = (ffs_end_cyl - ffs_start_cyl + 1) * bpc
 
-    # Partition-relative block layout:
-    #   0-1       boot block (2 sectors)
-    #   2..2+NBMP-1  bitmap blocks (one per 4096 blocks)
-    #   REL_HEADER   FFS file header
-    #   REL_KERNEL   kernel data (NeoLoader reads this flat)
-    #   ...n_data... extension headers, then root block
-    # FFS bitmap blocks: 16-byte header, 496 bytes = 3968 bits
-    # per block; 8 blocks cover 31744 blocks (31 cyls @ 1024).
-    BMP_HDR = 16
-    BITS_PER_BMP = (SECTOR - BMP_HDR) * 8
-    NBMP = max(1, (ffs_blocks + BITS_PER_BMP - 1) // BITS_PER_BMP)
-    if NBMP > 8:
-        print(f"ERROR: bitmap needs {NBMP} blocks (FFS allows 8)")
+    # Partition-relative layout (raw NBFS, no FFS stub):
+    #   0-1 bootblock, 2..2+n_data-1 kernel data
+    REL_KERNEL = 2
+    kernel_lba = part_lba + REL_KERNEL
+    root_rel = REL_KERNEL + n_data             # where the NBFS superblock lives
+    part_blocks = (part_end_cyl - part_start_cyl + 1) * bpc
+    if root_rel >= part_blocks:
+        print(f"ERROR: kernel too large for NBFS partition "
+              f"({root_rel + 1} > {part_blocks} blocks)")
         sys.exit(1)
-    REL_HEADER = 2 + NBMP
-    REL_KERNEL = REL_HEADER + 1
-    kernel_lba = ffs_lba + REL_KERNEL
 
     print(f"Kernel: {len(kernel)} bytes, {n_data} blocks at LBA {kernel_lba}")
     print(f"Geometry: {total_cyls} cyls, {heads} heads, {spt} spt, {bpc} sec/cyl")
-    print(f"FFS:  cyl {ffs_start_cyl}-{ffs_end_cyl} = {ffs_blocks} blocks")
 
-    # ================================================
-    # RDB at sector 1 (Rigid Disk Block)
-    # Correct Amiga RDSK structure
-    # ================================================
-    rdb = bytearray(SECTOR)
-    w32(rdb,  0, 0x5244534B)           # rdb_ID = "RDSK"
-    w32(rdb,  4, 128)                   # rdb_SummedLongs = 128 (full sector)
-    w32(rdb, 12, 0x7FFFFFFF)           # rdb_HostID
-    w32(rdb, 16, SECTOR)               # rdb_BlockSize = 512
-    w32(rdb, 20, 2)                     # rdb_Flags = RDBFF_LAST
-    w32(rdb, 24, 0)                     # rdb_BadBlockList = 0
-    w32(rdb, 28, 2)                     # rdb_PartitionList = sector 2
-    w32(rdb, 32, 0)                     # rdb_FileSysHeaderList
-    w32(rdb, 36, 0)                     # rdb_DriveInit
-    w32(rdb, 44, 0)                     # rdb_RDBBlocksLo = 0
-    w32(rdb, 48, 3)                     # rdb_RDBBlocksHi = 3
-    w32(rdb, 52, bpc)                   # rdb_CylSectors = 1024
-    w32(rdb, 56, heads)                 # rdb_HeadsPerCyl = 16
-    w32(rdb, 76, 0)                     # rdb_LoCylinder = 0
-    w32(rdb, 80, total_cyls - 1)        # rdb_HiCylinder = 31
-    w32(rdb, 84, bpc)                   # rdb_CylBlocks = 1024
-    w32(rdb, 92, 3)                     # rdb_HighRDSKBlock = 3
-    w32(rdb, 8, csum(rdb, 512))
-    img[SECTOR:2*SECTOR] = rdb
+    # ==================================================================
+    # RDSK at block 0 (canonical; HDToolBox/WinUAE write it at sector 0)
+    # ==================================================================
+    rdb = make_rdsk(
+        hostid=7, blockbytes=SECTOR, flags=0x07,          # RDBFF_SYNCFS|NOREMOVE|LAST
+        badblocklist=0xFFFFFFFF, partitionlist=1,
+        fsyslist=2, drive_init=0xFFFFFFFF,
+        rdbblocks_lo=0, rdbblocks_hi=bpc - 1,             # 251 (RDB zone = cyl 0)
+        cylinders=total_cyls, sectors=spt, heads=heads,
+        interleave=1, park=total_cyls - 1,
+        lowcyl=1, highcyl=total_cyls - 1,
+        cylblocks=bpc, high_rdsk=0,
+        wpc=total_cyls - 1, rw=total_cyls - 1, step=3,
+    )
+    img[0:SECTOR] = rdb
 
-    # ================================================
-    # Partition 1: FFS boot (cyl 1-31, whole data area).
-    # The kernel (8 MB+) is stored as one contiguous "file";
-    # its header block list is chained across extension
-    # headers because a single sector can only hold 96
-    # block pointers.  NeoLoader boots the kernel directly
-    # from kernel_lba, so these structures are a mountable
-    # stub for Kickstart/AmigaOS rather than the boot path.
-    # ================================================
-    p1 = make_part(next_block=0, dostype=0x444F5301, name=b'boot',
-                   lowcyl=ffs_start_cyl, highcyl=ffs_end_cyl, bootpri=0,
-                   total_cyls=total_cyls, heads=heads, spt=spt, bpc=bpc)
-    img[2*SECTOR:3*SECTOR] = p1
+    # ==================================================================
+    # PART at block 1 (bootable, NeoBench NBFS, cylinders 1..125)
+    # ==================================================================
+    p1 = make_part(next_block=0xFFFFFFFF, dostype=NBFS_DOSTYPE, name=b'boot',
+                   lowcyl=part_start_cyl, highcyl=part_end_cyl, bootpri=5,
+                   heads=heads, spt=spt)
+    img[SECTOR:2 * SECTOR] = p1
 
-    # ================================================
-    # FFS Boot block at ffs_lba — TWO sectors (1024 bytes).
-    # KS reads DE_BOOTBLOCKS * SizeBlock = 2 * 512 bytes and
-    # validates the checksum across the whole 1024-byte block.
-    # 'DOS\x01' at offset 0, checksum at offset 4, code from offset 12.
-    # ================================================
-    bc = make_boot_code(kernel_lba, n_data, entry_target, KERNEL_BASE)
-    if len(bc) > 2*SECTOR - 12:
-        print(f"ERROR: Boot code {len(bc)} bytes > {2*SECTOR-12} limit")
+    # ==================================================================
+    # FileSystemHeader at block 2: proclaim "neobench.fsh" (NBFS) so the
+    # 3.2+ Kickstart recognises the volume as the native NeoBench
+    # filesystem and mounts it to reach the bootblock -> kernel handover.
+    # ==================================================================
+    fsh = make_fshd(next_block=0xFFFFFFFF, dostype=NBFS_DOSTYPE,
+                    device=b'NEObench0', handler=b'neobench.fsh')
+    img[2 * SECTOR:3 * SECTOR] = fsh
+
+    # ==================================================================
+    # Bootblock at partition start (part_lba): NBFS bootblock, code at $0C.
+    # The mounted volume's boot block is what hands control to the kernel.
+    # ==================================================================
+    bc = assemble_bootblock(kernel_lba, n_data, entry_target)
+    if len(bc) > 0x300 - 0x0C:
+        print(f"ERROR: boot code {len(bc)} bytes > {(0x300 - 0x0C)} (overlaps IO scratch)")
         sys.exit(1)
-    bb = bytearray(2*SECTOR)
-    bb[0:4] = b'DOS\x01'
-    bb[8:8+len(bc)] = bc
-    w32(bb, 4, csum(bb))
-    off = ffs_lba * SECTOR
-    img[off:off+2*SECTOR] = bb
+    bb = bytearray(2 * SECTOR)
+    bb[0:4] = b'DOS\x01'                 # DOS bootable ID (ROM executes it to
+                                         # hand control to the kernel)
+    bb[0x0C:0x0C + len(bc)] = bc
+    w32(bb, 4, bootblk_csum(bb, 2 * SECTOR))
+    off = part_lba * SECTOR
+    img[off:off + 2 * SECTOR] = bb
+    print(f"Bootblock: {len(bc)} bytes of 68k code at LBA {part_lba}")
 
-    # ================================================
-    # Layout within the FFS partition (relative blocks):
-    #   0-1 boot block, 2..2+NBMP-1 bitmap blocks,
-    #   REL_HEADER file header, REL_KERNEL kernel data,
-    #   then extension headers and the root block.
-    # ================================================
-    N_PER_HEADER = (SECTOR - 128) // 4   # 96 block pointers per header
-    n_main = min(n_data, N_PER_HEADER)
-    n_ext = 0
-    if n_data > n_main:
-        n_ext = (n_data - n_main + N_PER_HEADER - 1) // N_PER_HEADER
-    ext_rel_base = REL_KERNEL + n_data
-    root_rel = ext_rel_base + n_ext
+    # ==================================================================
+    # flat kernel data (raw, immediately after the bootblock)
+    # ==================================================================
+    img[(part_lba + REL_KERNEL) * SECTOR:(part_lba + REL_KERNEL) * SECTOR +
+        len(kernel)] = kernel
 
-    if root_rel >= ffs_blocks:
-        print(f"ERROR: kernel too large for FFS partition "
-              f"({root_rel + 1} > {ffs_blocks} blocks)")
-        sys.exit(1)
-
-    # ================================================
-    # FFS Root block
-    # ================================================
-    root_sector = ffs_lba + root_rel
-    rb = bytearray(SECTOR)
-    w32(rb,  0, 0x524F4F54)            # rt_ID = "ROOT"
-    w32(rb,  4, 128)                    # rt_SummedLongs = 128
-    w32(rb, 12, 0)                      # rt_VolumeDate (set to 0)
-    w32(rb, 16, 0)                      # rt_Link = 0
-    w32(rb, 20, 1)                      # rt_SubDirs = 1 (root itself)
-    w32(rb, 24, 0)                      # rt_HashChain = 0 (empty hash)
-    # rt_BitMapBlocks[8] at offsets 40..72 -> plural bitmap blocks
-    for k in range(min(NBMP, 8)):
-        w32(rb, 40 + k * 4, ffs_lba + 2 + k)
-    w32(rb, 8, csum(rb, 512))
-    off = root_sector * SECTOR
-    img[off:off+SECTOR] = rb
-
-    # ================================================
-    # FFS Bitmap blocks at ffs_lba+2 .. +2+NBMP-1
-    # ================================================
-    used_blocks = [0, 1]  # boot blocks
-    for k in range(NBMP):
-        used_blocks.append(2 + k)      # bitmap blocks
-    used_blocks.append(REL_HEADER)     # file header
-    used_blocks.append(root_rel)       # root block
-    for i in range(n_data):
-        used_blocks.append(REL_KERNEL + i)   # kernel data
-    for i in range(n_ext):
-        used_blocks.append(ext_rel_base + i) # extension headers
-
-    for k in range(NBMP):
-        bm = bytearray(SECTOR)
-        w32(bm, 0, 0x424D4150)         # bm_ID = "BMAP"
-        w32(bm, 4, 128)                 # bm_SummedLongs = 128
-        w32(bm, 12, ffs_blocks)         # bm_RegionSize
-        base = k * BITS_PER_BMP
-        for b in used_blocks:
-            if base <= b < base + BITS_PER_BMP and b < ffs_blocks:
-                bit = b - base
-                bm[BMP_HDR + bit // 8] |= 0x80 >> (bit % 8)
-        w32(bm, 8, csum(bm, 512))
-        off = (ffs_lba + 2 + k) * SECTOR
-        img[off:off+SECTOR] = bm
-
-    # ================================================
-    # FFS file header + extension chain.  Each 512-byte
-    # header holds 96 data-block pointers; fh_Extension
-    # (offset 24) chains to the next header for big files.
-    # ================================================
-    def write_header(lba_rel, data_start, count, next_lba, byte_size):
-        h = bytearray(SECTOR)
-        w32(h, 0, 0x46494C45)          # fh_ID = "FILE"
-        w32(h, 4, 128)                   # fh_SummedLongs = 128
-        w32(h, 12, ffs_lba + lba_rel)    # fh_OwnKey
-        w32(h, 20, count)                # fh_DataSize (pointers listed)
-        w32(h, 24, next_lba)             # fh_Extension (0 = last)
-        w32(h, 28, byte_size)            # fh_ByteSize
-        for i in range(count):
-            w32(h, 128 + i * 4, ffs_lba + data_start + i)
-        w32(h, 8, csum(h, 512))
-        img[(ffs_lba + lba_rel) * SECTOR:(ffs_lba + lba_rel + 1) * SECTOR] = h
-
-    first_ext = (ffs_lba + ext_rel_base) if n_ext > 0 else 0
-    write_header(REL_HEADER, REL_KERNEL, n_main, first_ext, len(kernel))
-
-    for j in range(n_ext):
-        lba_rel = ext_rel_base + j
-        data_start = REL_KERNEL + n_main + j * N_PER_HEADER
-        count = min(N_PER_HEADER, n_data - (n_main + j * N_PER_HEADER))
-        next_lba = (ffs_lba + ext_rel_base + j + 1) if j + 1 < n_ext else 0
-        write_header(lba_rel, data_start, count, next_lba, len(kernel))
-
-    # ================================================
-    # Kernel data at REL_KERNEL (NeoLoader reads this flat)
-    # ================================================
-    off = (ffs_lba + REL_KERNEL) * SECTOR
-    img[off:off+len(kernel)] = kernel
-
-    # ================================================
-    # Write output
-    # ================================================
+    # ==================================================================
+    # write output
+    # ==================================================================
     with open(out_path, 'wb') as f:
         f.write(img)
 
     print(f"\nHDF: {out_path} ({size_mb} MB)")
-    print(f"RDB:       LBA 1 (RDSK)")
-    print(f"PART 1:    LBA 2 (FFS cyl {ffs_start_cyl}-{ffs_end_cyl}, {ffs_blocks} blocks)")
-    print(f"FFS boot:  LBA {ffs_lba}")
-    print(f"Kernel:    LBA {kernel_lba} ({n_data} blocks, "
-          f"{n_ext} header extensions)")
-    print(f"Root:      LBA {root_sector}")
+    print(f"RDSK:       LBA 0")
+    print(f"FSHD:       LBA 2 (neobench.fsh, dos type {NBFS_DOSTYPE:#x})")
+    print(f"PART 1:     LBA 1 (bootable NBFS, cyl {part_start_cyl}-{part_end_cyl}, "
+          f"{part_blocks} blocks, boot_pri 5)")
+    print(f"Partition:  cyl {part_start_cyl} * {bpc} sec/cyl = start LBA {part_lba}")
+    print(f"Kernel:     LBA {kernel_lba} ({n_data} blocks, raw, no FFS)")
+    print(f"Root:       LBA {part_lba + root_rel}")
 
-    # Verify structures
+    # ==================================================================
+    # verify
+    # ==================================================================
     print("\n=== Verification ===")
 
-    # Verify RDB
-    rdb2 = img[SECTOR:2*SECTOR]
-    rdb_id = rdb2[0:4]
-    rdb_sl = struct.unpack_from('>I', rdb2, 4)[0]
-    rdb_csum = struct.unpack_from('>I', rdb2, 8)[0]
-    rdb_pl = struct.unpack_from('>I', rdb2, 28)[0]
-    rdb_bs = struct.unpack_from('>I', rdb2, 16)[0]
-    rdb_hs = struct.unpack_from('>I', rdb2, 56)[0]
-    rdb_cs = struct.unpack_from('>I', rdb2, 52)[0]
-    total = 0
-    for i in range(0, 512, 4):
-        total = (total + struct.unpack_from('>I', rdb2, i)[0]) & 0xFFFFFFFF
-    print(f"RDB ID: {rdb_id} (expect RDSK)")
-    print(f"RDB SummedLongs: {rdb_sl} (expect 128)")
-    print(f"RDB Checksum: 0x{rdb_csum:08x} (sum incl. chk=0x{total:08x}, "
-          f"expect ffffffff) -> {'OK' if total == 0xFFFFFFFF else 'FAIL'}")
-    print(f"RDB PartitionList: {rdb_pl} (expect 2)")
-    print(f"RDB BlockSize: {rdb_bs} (expect 512)")
-    print(f"RDB CylSectors: {rdb_cs} (expect {bpc})")
-    print(f"RDB HeadsPerCyl: {rdb_hs} (expect {heads})")
+    def sum_block(buf, nbytes, label, expect):
+        s = 0
+        for i in range(0, nbytes, 4):
+            s = (s + struct.unpack_from('>I', buf, i)[0]) & 0xFFFFFFFF
+        ok = s == expect
+        print(f"{label}: re-sum = 0x{s:08x} (expect 0x{expect:08x}) -> "
+              f"{'OK' if ok else 'FAIL'}")
+        return ok
 
-    # Verify PART 1
-    part1 = img[2*SECTOR:3*SECTOR]
-    p1_id = part1[0:4]
-    p1_next = struct.unpack_from('>I', part1, 16)[0]
-    p1_dt = part1[68+6*4:68+6*4+4]          # pb_Environment[DE_FILESYSTEM]
-    p1_dn = part1[32:64].split(b'\x00')[0]  # pb_DriveName
-    p1_lowcyl = struct.unpack_from('>I', part1, 68+7*4)[0]
-    p1_highcyl = struct.unpack_from('>I', part1, 68+8*4)[0]
-    total = 0
-    for i in range(0, 512, 4):
-        total = (total + struct.unpack_from('>I', part1, i)[0]) & 0xFFFFFFFF
-    print(f"\nPART1 ID: {p1_id} (expect PART)")
-    print(f"PART1 Next: {p1_next} (expect 0)")
-    print(f"PART1 DOSType @env[6]: {p1_dt} (expect DOS\\x01)")
-    print(f"PART1 DriveName: {p1_dn} (expect boot)")
-    print(f"PART1 Cylinders: {p1_lowcyl}-{p1_highcyl}")
-    print(f"PART1 Checksum verify: 0x{total:08x} "
-          f"(expect ffffffff) -> {'OK' if total == 0xFFFFFFFF else 'FAIL'}")
+    ok = True
+    ok &= sum_block(img[0:SECTOR], SECTOR, "RDSK block 0 checksum", 0)
+    ok &= sum_block(img[SECTOR:2 * SECTOR], SECTOR, "PART block 1 checksum", 0)
+    ok &= sum_block(img[2 * SECTOR:3 * SECTOR], SECTOR, "FSHD block 2 checksum", 0)
 
-    # Verify Boot block (1024 bytes)
-    bb2 = img[ffs_lba*SECTOR:(ffs_lba+2)*SECTOR]
-    bb_hdr = bb2[0:4]
-    bb_csum = struct.unpack_from('>I', bb2, 4)[0]
-    total = 0
-    for i in range(0, 1024, 4):
-        total = (total + struct.unpack_from('>I', bb2, i)[0]) & 0xFFFFFFFF
-    print(f"\nBoot ID: {bb_hdr} (expect DOS\\x01)")
-    print(f"Boot Checksum: 0x{bb_csum:08x} (sum over 1024B incl. chk="
-          f"0x{total:08x}, expect ffffffff) -> "
-          f"{'OK' if total == 0xFFFFFFFF else 'FAIL'}")
-    print(f"Boot first code byte: 0x{bb2[8]:02x} (expect 0x46 = MOVE SR)")
+    r = img[0:SECTOR]
+    print(f"RDSK ID: {r[0:4]} (expect b'RDSK')", end="  ")
+    print(f"PartitionList={struct.unpack_from('>I', r, 28)[0]} "
+          f"(expect 1) FileSysHeaderList={struct.unpack_from('>I', r, 32)[0]} "
+          f"(expect 2) BlkHi={struct.unpack_from('>I', r, 132)[0]} "
+          f"(expect {bpc - 1}) LoCyl={struct.unpack_from('>I', r, 136)[0]} "
+          f"(expect {part_start_cyl}) HiCyl={struct.unpack_from('>I', r, 140)[0]}")
+
+    f = img[2 * SECTOR:3 * SECTOR]
+    print(f"FSHD ID: {f[0:4]} (expect b'FSHD')", end="  ")
+    print(f"Next=0x{struct.unpack_from('>I', f, 16)[0]:08x} "
+          f"Device={f[25:f[24] + 25]} FileName={f[57:f[56] + 57]} "
+          f"DosType=0x{struct.unpack_from('>I', f, 88)[0]:08x}")
+
+    p = img[SECTOR:2 * SECTOR]
+    print(f"PART ID: {p[0:4]} (expect b'PART')", end="  ")
+    print(f"Next=0x{struct.unpack_from('>I', p, 16)[0]:08x} "
+          f"Flags=0x{struct.unpack_from('>I', p, 20)[0]:x} "
+          f"Name={p[36:68].split(b'\x00')[0]}")
+
+    def env(li):
+        return struct.unpack_from('>I', p, 128 + li * 4)[0]
+    print(f"Env: size={env(0)} sblk={env(1)} surf={env(3)} spt={env(5)} "
+          f"low_cyl={env(9)} high_cyl={env(10)} maxxfer=0x{env(13):x} "
+          f"mask=0x{env(14):x} pri={env(15)} dos=0x{env(16):08x}")
+    bpt = env(3) * env(5)
+    print(f"Partition start block = lowcyl*bpc = {env(9)}*{bpt} = {env(9) * bpt} "
+          f"(bootblock at LBA {part_lba}) -> "
+          f"{'OK' if env(9) * bpt == part_lba else 'FAIL'}")
+
+    bb2 = img[part_lba * SECTOR:(part_lba + 2) * SECTOR]
+    bb_re = carry_wrap_sum(bb2, 2 * SECTOR)
+    ok &= bb_re == 0xFFFFFFFF
+    print(f"Bootblock checksum: end-around re-sum = 0x{bb_re:08x} "
+          f"(expect 0xffffffff) -> {'OK' if bb_re == 0xFFFFFFFF else 'FAIL'}")
+    print(f"Boot ID: {bb2[0:4]} (expect b'DOS\\x01') "
+          f"code[0:2]={bb2[0x0C:0x0E].hex()} (expect move #$2700,SR = 46fc)")
+
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print(f"Usage: {sys.argv[0]} <kernel.elf> <output.hdf> [size_mb]")
         sys.exit(1)
-    build(sys.argv[1], sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 16)
+    build(sys.argv[1], sys.argv[2],
+          int(sys.argv[3]) if len(sys.argv) > 3 else 16)

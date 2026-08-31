@@ -1,0 +1,7 @@
+amiga_model = A4000T
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/kicka4000t.rom
+cpu = 68060
+fpu = 68060
+floppy_drive_count = 1
+floppy_drive_0 = /home/lordp/NeoBench/images/neoboot.adf
+serial_port = tcp://127.0.0.1:1234/wait

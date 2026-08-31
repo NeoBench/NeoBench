@@ -1,0 +1,5 @@
+sound_card = none
+window_hidden = 1
+video_sync = none
+window_hidden = 0
+window_resolution = 1024x768

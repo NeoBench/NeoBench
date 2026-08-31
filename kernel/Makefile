@@ -1,7 +1,7 @@
 CC=m68k-elf-gcc
 OBJCOPY=m68k-elf-objcopy
 
-CFLAGS = -m68060 \
+CFLAGS = -m68030 \
          -ffreestanding \
          -fno-builtin \
          -fno-stack-protector \
@@ -10,9 +10,9 @@ CFLAGS = -m68060 \
          -O2 \
          -Iinclude
 
-ASFLAGS = -m68060
+ASFLAGS = -m68030
 
-LDFLAGS = -m68060 \
+LDFLAGS = -m68030 \
           -nostdlib \
           -Wl,-T,arch/m68k/linker.ld
 

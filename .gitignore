@@ -86,3 +86,25 @@ build_adf.py.out/
 /bsd/freebsd-src/
 /*.o
 *.elf
+
+# Generated floppy/hardfile images
+*.adf
+*.hdf
+*.img
+
+# Python build tool bytecode
+__pycache__/
+*.pyc
+
+# Host test binaries
+kernel/fs/vfs/tests/bin/
+kernel/fs/vfs/tests/test_vfs
+kernel/fs/vfs/tests/test_vfs_open
+kernel/fs/vfs/tests/test_vfs_seek
+kernel/fs/vfs/tests/test_vfs_tell
+kernel/fs/vfs/tests/test_nbfs_lookup
+kernel/fs/vfs/tests/test_nbfs_nested_lookup
+kernel/fs/vfs/tests/test_nbfs_dentry
+kernel/fs/vfs/tests/test_nbfs_file_read
+kernel/fs/nbfs/tests/test_kernel_root
+tests/test_boot

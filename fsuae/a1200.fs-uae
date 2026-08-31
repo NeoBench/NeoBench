@@ -1,0 +1,6 @@
+amiga_model = A1200
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/A1200.47.115.rom
+cpu = 68020
+floppy_drive_count = 1
+floppy_drive_0 = /home/lordp/NeoBench/images/boottest.adf
+serial_port = tcp://127.0.0.1:1234/wait

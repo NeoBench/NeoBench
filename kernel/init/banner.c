@@ -72,7 +72,7 @@ void kernel_banner(void)
 
     console_write_color(NB_COLOR_BRIGHT_CYAN, "║");
     console_write(NB_COLOR_DIM);
-    console_write("              FreeBSD stable/15  /  m68k/68060                ");
+    console_write("              FreeBSD stable/15  /  m68k/68030+                ");
     console_write_color(NB_COLOR_BRIGHT_CYAN, "║\n");
 
     console_write_color(NB_COLOR_BRIGHT_CYAN,
@@ -83,11 +83,11 @@ void kernel_banner(void)
     /* System configuration panel */
     console_write_color(NB_COLOR_BRIGHT_GREEN, "  System Configuration\n");
     console_write(NB_COLOR_WHITE "  ─────────────────────────────────────────────\n" NB_COLOR_RESET);
-    print_status("CPU",          "Motorola MC68060",          NB_COLOR_BRIGHT_WHITE);
+    print_status("CPU",          "Motorola 68030+",          NB_COLOR_BRIGHT_WHITE);
     print_status("RAM",          "128 MB Fast + 2 MB Chip",   NB_COLOR_BRIGHT_WHITE);
     print_status("Machine",      "Amiga A4000",               NB_COLOR_BRIGHT_WHITE);
     print_status("Kernel",       "NeoBench r1.0",             NB_COLOR_BRIGHT_WHITE);
-    print_status("Arch",         "m68k/68060",                NB_COLOR_BRIGHT_WHITE);
+    print_status("Arch",         "m68k/68030+",               NB_COLOR_BRIGHT_WHITE);
     print_status("Root",         "NBFS",                      NB_COLOR_BRIGHT_WHITE);
 
     console_write("\n");

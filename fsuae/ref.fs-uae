@@ -17,7 +17,7 @@ zorro_iii_memory = 262144
 # decodes the RDB and executes the partition bootblock.  The default
 # "uae"/filesys controller mounts the FFS volume directly and never
 # runs the DOS\x01 boot block, so the kernel would never boot.
-hard_drive_0 = /home/lordp/NeoBench/images/neobench.hdf
+hard_drive_0 = /home/lordp/NeoBench/images/ref.hdf
 hard_drive_0_type = hdf
 hard_drive_0_controller = ide
 hard_drive_0_label = NEObench

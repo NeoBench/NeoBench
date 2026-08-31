@@ -1,0 +1,3 @@
+amiga_model = A1200
+floppy_drive_count = 0
+serial_port = tcp://127.0.0.1:1234/wait

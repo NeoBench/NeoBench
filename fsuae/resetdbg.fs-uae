@@ -1,0 +1,29 @@
+[config]
+
+# NeoBench floppy-boot dev config: Kickstart runs the ADF bootblock,
+# which opens scsi.device and streams the kernel from the IDE hardfile.
+
+amiga_model = A4000
+
+cpu = 68040
+
+fpu = 68040
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/kicka4000.rom
+
+chip_memory = 2048
+fast_memory = 4096
+zorro_iii_memory = 0
+
+floppy_drive_count = 1
+floppy_drive_0 = /home/lordp/NeoBench/images/boottest.adf
+
+
+fullscreen = 0
+window_width = 1024
+window_height = 768
+
+serial_port = tcp://127.0.0.1:1234/wait
+
+save_states = 0
+uae_resetwarning = 1
+uae_cpu_reset_pause = 1
