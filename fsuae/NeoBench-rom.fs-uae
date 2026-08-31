@@ -1,0 +1,15 @@
+amiga_model = A4000
+cpu = 68060
+chip_memory = 2048
+fast_memory = 0
+zorro_iii_memory = 0
+
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/NeoBench.rom
+
+floppy_drive_count = 0
+hard_drive_count = 0
+
+serial_port = tcp://127.0.0.1:1234/wait
+serial_port_log = /tmp/opencode/neorom-serial.log
+
+video_format = PAL

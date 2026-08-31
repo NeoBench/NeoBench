@@ -1,11 +1,110 @@
+# ============================================================
+# NeoBench generated filesystem images
+# ============================================================
 
-# Generated NeoBench filesystem images
-images/*.nbfs
-images/*.img
-images/*.iso
+images/*.img*
+images/*.nbfs*
+tools/nbfs/mkfs/*.img*
+tools/nbfs/mkfs/*.nbfs*
 
-# Generated NeoBench/NBFS disk images
-images/*.img
-images/*.nbfs
-tools/nbfs/mkfs/*.img
-tools/nbfs/mkfs/*.nbfs
+# ============================================================
+# FreeBSD integration checkout
+# ============================================================
+
+bsd/freebsd-src/
+
+# ============================================================
+# NeoBench audit output
+# ============================================================
+
+.audit/
+
+# ============================================================
+# NBFS generated test artifacts
+# ============================================================
+
+libs/libnbfs/tests/test_directory_delete
+libs/libnbfs/tests/test_directory_delete.nbfs
+libs/libnbfs/tests/test_directory_delete_nonempty
+libs/libnbfs/tests/test_directory_delete_nonempty.nbfs
+libs/libnbfs/tests/test_directory_files
+libs/libnbfs/tests/test_directory_lookup
+libs/libnbfs/tests/test_directory_nested
+libs/libnbfs/tests/test_file_create
+libs/libnbfs/tests/test_file_delete
+libs/libnbfs/tests/test_file_extent_limit
+libs/libnbfs/tests/test_file_io
+libs/libnbfs/tests/test_file_multiblock
+libs/libnbfs/tests/test_file_overwrite
+libs/libnbfs/tests/test_file_rename
+libs/libnbfs/tests/test_file_reuse
+libs/libnbfs/tests/test_filesystem
+libs/libnbfs/tests/test_inode_allocator
+libs/libnbfs/tests/test_nested_file_delete
+libs/libnbfs/tests/test_rename_safety
+
+# Generic NBFS test images
+libs/libnbfs/tests/*.nbfs
+
+# ============================================================
+# Build artifacts
+# ============================================================
+
+*.o
+*.a
+
+build/
+out/
+
+# ============================================================
+# Temporary/editor files
+# ============================================================
+
+*~
+*.swp
+*.swo
+
+# FreeBSD build output
+bsd/obj/
+
+# Test build directories (local, not kernel-tree)
+kernel/fs/nbfs/tests/build/
+kernel/fs/vfs/tests/build/
+tools/nbfs/rootimg/build/
+
+# Kernel build intermediate (objcopy-embedded root image)
+rootfs/boot/rootfs.o
+
+# FS-UAE hardfile / generated boot images
+images/*.hdf
+build_adf.py.out/
+
+# FreeBSD integration checkout/build output
+/bsd/freebsd-src/
+/bsd/obj/
+/bsd/obj-*/
+/bsd/freebsd-src/
+/*.o
+*.elf
+
+# Generated floppy/hardfile images
+*.adf
+*.hdf
+*.img
+
+# Python build tool bytecode
+__pycache__/
+*.pyc
+
+# Host test binaries
+kernel/fs/vfs/tests/bin/
+kernel/fs/vfs/tests/test_vfs
+kernel/fs/vfs/tests/test_vfs_open
+kernel/fs/vfs/tests/test_vfs_seek
+kernel/fs/vfs/tests/test_vfs_tell
+kernel/fs/vfs/tests/test_nbfs_lookup
+kernel/fs/vfs/tests/test_nbfs_nested_lookup
+kernel/fs/vfs/tests/test_nbfs_dentry
+kernel/fs/vfs/tests/test_nbfs_file_read
+kernel/fs/nbfs/tests/test_kernel_root
+tests/test_boot

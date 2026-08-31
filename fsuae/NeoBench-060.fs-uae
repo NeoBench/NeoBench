@@ -1,0 +1,39 @@
+[config]
+
+# NeoBench FS-UAE development target
+
+amiga_model = A4000
+
+cpu = 68060
+
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/A4000.47.115.rom
+
+chip_memory = 2048
+fast_memory = 0
+zorro_iii_memory = 262144
+
+# NeoBench HDF hard drive image
+# Attach to the A4000's real IDE controller (scsi.device) so the ROM
+# decodes the RDB and executes the partition bootblock.  The default
+# "uae"/filesys controller mounts the FFS volume directly and never
+# runs the DOS\x01 boot block, so the kernel would never boot.
+hard_drive_0 = /home/lordp/NeoBench/images/neobench.hdf
+hard_drive_0_type = hdf
+hard_drive_0_controller = ide
+hard_drive_0_label = NEObench
+
+# Windowed development mode
+fullscreen = 0
+window_width = 1024
+window_height = 768
+
+# No floppy drives
+floppy_drive_count = 0
+
+# NeoBench console = CIA-B serial port.
+# Expose it on a TCP socket and wait for a listener so early
+# bootblock output is captured too:
+serial_port = tcp://127.0.0.1:1234/wait
+
+# Save emulator state/configuration separately
+save_states = 0

@@ -1,0 +1,6 @@
+amiga_model = A4000
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/A4000.47.115.rom
+cpu = 68040
+serial_port = tcp://127.0.0.1:1234/wait
+sound_card = none
+window_hidden = 1

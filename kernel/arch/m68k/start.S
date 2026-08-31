@@ -1,33 +1,38 @@
 .section .text
 .global _start
 .extern kernel_main
+.extern _bss_start
+.extern _bss_end
+.extern _stack_top
 
 _start:
+    /* Establish supervisor stack. */
+    move.l  #_stack_top,%sp
 
-    move.l  #_stack_top, %sp
-
-    lea     _bss_start, %a0
-    lea     _bss_end, %a1
+    /* Clear .bss. */
+    lea     _bss_start,%a0
+    lea     _bss_end,%a1
 
 clear_bss:
-    cmpa.l  %a1,%a0
-    bge     bss_done
+    cmp.l   %a1,%a0
+    bcc.s   bss_done
 
     clr.l   (%a0)+
-    bra     clear_bss
+    bra.s   clear_bss
 
 bss_done:
-
-    jsr kernel_main
+    /* Enter C kernel. */
+    jsr     kernel_main
 
 halt:
-    bra halt
-
+    bra.s   halt
 
 .section .bss
-
 .align 4
+
 _stack:
     .skip 16384
 
+.align 4
+.global _stack_top
 _stack_top:

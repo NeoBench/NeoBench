@@ -43,34 +43,44 @@ static void dump_root_directory(FILE *fp, uint64_t block)
     }
 
 
-    nbfs_dirent_t *entries =
-        (nbfs_dirent_t *)data;
-
-
     printf("\nRoot directory\n");
-    printf("--------------\n");
+printf("--------------\n");
 
+size_t offset = 0;
 
-    size_t count =
-        NBFS_DEFAULT_BLOCK_SIZE /
-        sizeof(nbfs_dirent_t);
+while (offset + 12 <= NBFS_DEFAULT_BLOCK_SIZE)
+{
+    nbfs_dirent_t *entry =
+        (nbfs_dirent_t *)(data + offset);
 
+    if (entry->record_length == 0)
+        break;
 
-    for (size_t i = 0; i < count; i++)
+    if (entry->record_length < 12 ||
+        offset + entry->record_length >
+        NBFS_DEFAULT_BLOCK_SIZE)
     {
-        if (entries[i].inode == 0)
-            continue;
+        printf("Invalid directory record at offset %zu\n",
+               offset);
+        break;
+    }
 
-
-        printf("%s\n", entries[i].name);
+    if (entry->inode != 0)
+    {
+        printf("%.*s\n",
+               entry->name_length,
+               entry->name);
 
         printf("  inode: %llu\n",
                (unsigned long long)
-               entries[i].inode);
+               entry->inode);
 
         printf("  type:  %u\n",
-               entries[i].type);
+               entry->type);
     }
+
+    offset += entry->record_length;
+}
 }
 
 

@@ -1,0 +1,7 @@
+amiga_model = A4000
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/A4000.47.115.rom
+cpu = 68040
+hard_drive_0 = /tmp/opencode/blank16.hdf
+serial_port = tcp://127.0.0.1:15999
+sound_card = none
+window_hidden = 1

@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "file.h"
 
 int nbfs_create_file(

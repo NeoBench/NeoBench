@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "../../shared/libc/memory.h"
 
 #include "cache.h"

@@ -10,8 +10,8 @@
 #include <nbfs/nbfs.h>
 
 #include "fs/superblock.h"
+#include "mkfs.h"
 
-#define NBFS_IMAGE_SIZE (128ULL * 1024ULL * 1024ULL)
 #define NBFS_TOTAL_INODES 1024ULL
 
 int nbfs_write_superblock(FILE *fp)
@@ -29,7 +29,7 @@ int nbfs_write_superblock(FILE *fp)
     sb.flags = 0;
 
     sb.total_blocks =
-        NBFS_IMAGE_SIZE / NBFS_DEFAULT_BLOCK_SIZE;
+        mkfs_image_size() / NBFS_DEFAULT_BLOCK_SIZE;
 
     /*
      * Blocks before DATA_START are permanently reserved:

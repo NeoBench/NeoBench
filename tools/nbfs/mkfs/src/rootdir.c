@@ -34,8 +34,8 @@ int nbfs_create_root_inode(FILE *fp)
     /*
      * Root directory inode
      */
-    root.mode = 0x4000;
-    root.links = 1;
+    root.mode = NBFS_MODE_DIRECTORY;
+    root.links = 2;
 
 
 

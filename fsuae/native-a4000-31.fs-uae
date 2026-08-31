@@ -1,0 +1,9 @@
+amiga_model = A4000
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/kicka4000.rom
+cpu = 68040
+hard_drive_0 = /home/lordp/NeoBench/images/neobench.hdf
+serial_port = tcp://127.0.0.1:1234/wait
+sound_card = none
+window_hidden = 1
+hard_drive_0_type = hdf
+hard_drive_0_controller = ide

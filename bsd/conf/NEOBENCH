@@ -1,0 +1,38 @@
+#
+# NEOBENCH -- FreeBSD-derived NeoBench kernel for Amiga 68060
+#
+# This configuration is consumed after the stable/15 source tree has been
+# patched with the NeoBench m68k machine port.
+#
+
+machine		m68k
+machine_arch	m68k
+cpu		MC68060
+ident		NEOBENCH
+
+options		SCHED_4BSD
+options		INVARIANTS
+options		WITNESS
+options		DDB
+options		KDB
+options		KDB_TRACE
+options		PRINTF_BUFR_SIZE=128
+
+# Core networking retained for NeoBench network drivers.
+options		INET
+options		INET6
+
+# Filesystem framework.
+options		VFS
+
+# NeoBench File System (NBFS).  Built-in read-only filesystem.
+# Provides root mount "/" for the NeoBench platform.
+options		NBFS
+# device		nbfs			# NBFS as loadable module (alternative)
+
+# NeoBench boot/runtime interfaces.
+options		NEOBENCH_BOOTINFO
+options		NEOBENCH_RTGF
+
+# Amiga platform.
+device		neobench

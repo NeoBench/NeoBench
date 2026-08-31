@@ -1,0 +1,31 @@
+[config]
+
+# NeoBench FS-UAE boot test target (A1500 floor -> A4000 runtime map, 68030)
+amiga_model = A4000
+
+cpu = 68030
+
+kickstart_file = /home/lordp/Documents/FS-UAE/Kickstarts/A4000.47.115.rom
+
+chip_memory = 2048
+fast_memory = 0
+zorro_iii_memory = 262144
+
+# NeoBench NBFS HDF. Attach to the real A4000 IDE controller so the ROM
+# decodes the RDB (RDSK -> FSHD "neobench.fsh" + PART) and hands control
+# to the kernel via the partition bootblock.
+hard_drive_0 = /home/lordp/NeoBench/images/neobench.hdf
+hard_drive_0_type = hdf
+hard_drive_0_controller = ide
+hard_drive_0_label = NEObench
+
+fullscreen = 0
+window_width = 1024
+window_height = 768
+
+floppy_drive_count = 0
+
+# NeoBench console = CIA-B serial port, exposed on TCP for early capture.
+serial_port = tcp://127.0.0.1:9902/wait
+
+save_states = 0

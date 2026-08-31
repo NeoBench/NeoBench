@@ -1,0 +1,15 @@
+diff --git a/Makefile.inc1 b/Makefile.inc1
+--- a/Makefile.inc1
++++ b/Makefile.inc1
+@@ -147,9 +147,10 @@ TARGET_TRIPLE?=	${TARGET_ARCH:S/amd64/x86_64/}-${TARGET_TRIPLE_ABI}-freebsd${OS_REVISION}
+ KNOWN_ARCHES?=	aarch64/arm64 \
+ 		amd64 \
+ 		armv7/arm \
+ 		i386 \
+ 		powerpc \
+ 		powerpc64/powerpc \
+ 		powerpc64le/powerpc \
+ 		powerpcspe/powerpc \
+-		riscv64/riscv
++		riscv64/riscv \
++		m68k/m68k

@@ -8,7 +8,7 @@ CC      := m68k-elf-gcc
 LD      := m68k-elf-gcc
 
 CFLAGS = \
-    -m68060 \
+    -m68030 \
     -O2 \
     -Wall \
     -Wextra \

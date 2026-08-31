@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "file.h"
 #include "disk.h"
 
