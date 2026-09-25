@@ -28,6 +28,8 @@ OBJS := \
     boot.o \
     amiga.o \
     string.o \
+    fline.o \
+    probe.o \
     $(KERNEL_DIR)/init/kernel_main.o \
     $(KERNEL_DIR)/init/banner.o \
     $(KERNEL_DIR)/init/console.o

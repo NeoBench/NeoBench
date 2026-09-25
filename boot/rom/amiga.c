@@ -82,6 +82,9 @@
 #define SCRATCH_ROW  (*(volatile uint8_t *)(STATE_BASE + 1UL))
 #define SCRATCH_FG   (*(volatile uint8_t *)(STATE_BASE + 2UL))
 
+/* Set at the end of amiga_display_init; see amiga_display_ready(). */
+static uint8_t display_ready;
+
 void amiga_serial_putc(char c)
 {
     volatile uint16_t * const sr =
@@ -175,6 +178,17 @@ void amiga_display_init(void)
     SCRATCH_FG  = NB_COL_GREEN;         /* phosphor green until told else */
 
     amiga_display_clear();
+    display_ready = 1;
+}
+
+/*
+ * 1 once the display engine has been programmed and the frame buffer
+ * cleared.  The mode registers are write-only, so this flag is the only
+ * honest answer to "is the display up" for the boot self-test.
+ */
+int amiga_display_ready(void)
+{
+    return display_ready;
 }
 
 /*

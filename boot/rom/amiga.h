@@ -33,5 +33,6 @@ void amiga_display_clear(void);
 void amiga_display_vsync(void);
 void amiga_set_color(unsigned idx, uint8_t r, uint8_t g, uint8_t b);
 void amiga_set_fg(unsigned idx);
+int  amiga_display_ready(void);
 
 #endif /* NB_AMIGA_H */
