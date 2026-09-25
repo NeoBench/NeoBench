@@ -1,6 +1,6 @@
 /* NeoBench boot ROM header + entry point (m68k, kickstart-style layout). */
     .section .bootvec, "ax"
-    .long 0x0007FFE0        /*  0: initial SSP: top of chip ram */
+    .long 0x001FFFE0        /*  0: initial SSP: top of 2 MB chip ram */
     .long 0x00FC0000        /*  1: initial PC:  code area base in this ROM */
 
 /*

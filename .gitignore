@@ -4,6 +4,9 @@ images/*.nbfs
 images/*.img
 images/*.iso
 
+# Compiler-generated header dependency files
+*.d
+
 # Generated NeoBench/NBFS disk images
 images/*.img
 images/*.nbfs

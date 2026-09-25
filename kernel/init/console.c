@@ -16,3 +16,8 @@ void console_write(const char *s)
     while (*s)
         console_putc(*s++);
 }
+
+void console_set_color(unsigned idx)
+{
+    amiga_set_fg(idx);
+}

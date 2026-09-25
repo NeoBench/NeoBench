@@ -26,6 +26,7 @@
 #define DMACON      0x096
 #define BPL1PTH     0x0e0
 #define BPL1PTL     0x0e2
+#define BPLPT(n)    (0x0e0U + (uint16_t)((n) << 2))   /* BPL1PT..BPL8PT */
 #define BPLCON0     0x100
 #define BPLCON1     0x102
 #define BPLCON2     0x104
@@ -48,27 +49,38 @@
 #define DMAF_RASTER  0x0100U            /* bitplane DMA            */
 #define DMAF_MASTER  0x0200U            /* master DMA enable       */
 
-/* BPLCON0 bits, from NDK graphics/display.h */
+/*
+ * BPLCON0 bits, from NDK graphics/display.h.
+ *
+ * MODE_640 ($8000) selects hires.  Eight bitplanes cannot be expressed in
+ * the three-bit plane-count field (max 7, and 7 is "reserved"), so AGA puts
+ * the high bit of the count at bit 4: BPU=0 plus $0010 means eight planes.
+ * Anything else with bit 4 set would count as more than eight and the
+ * chipset shows nothing at all (the emulator rejects it as >8 planes).
+ */
+#define MODE_640     0x8000U
 #define COLORON      0x0200U
-#define BPLCNT(n)    ((uint16_t)((n) & 0x7) << 12)  /* PLNCNTSHFT = 12 */
+#define BPLCNT_AGA8  0x0010U
 
 /* Vertical-blank request bit, NDK hardware/intbits.i */
 #define INTF_VERTB   0x0020U
 
 #define SERIAL_TX     0x00DFF030UL      /* FS-UAE serial capture port */
 
-#define FRAMEBUF     0x00010000UL      /* bitplane base, 64-byte aligned */
-#define FB_PITCH     40UL              /* 320 px / 8 = 40 bytes per row  */
-#define FB_ROWS      256UL
-#define FB_PLANES    8UL               /* planar layout: plane p sits    */
-#define FB_PLANE     (FB_PITCH * FB_ROWS)  /* FB_PLANE bytes after p-1    */
+/* Planar frame buffer geometry, from amiga.h */
+#define FRAMEBUF     NB_FB_BASE
+#define FB_PITCH     NB_PLANE_PITCH     /* 640 px / 8 = 80 bytes per row */
+#define FB_ROWS      NB_SCREEN_H
+#define FB_PLANES    8UL
+#define FB_PLANE     NB_PLANE_SIZE
 
-#define TEXT_COLS    40UL
-#define TEXT_ROWS    32UL
+#define TEXT_COLS    (NB_SCREEN_W / 8UL)   /* 80 */
+#define TEXT_ROWS    (NB_SCREEN_H / 8UL)   /* 32 */
 
 #define STATE_BASE   0x00007F00UL      /* console scratch in chip ram */
 #define SCRATCH_COL  (*(volatile uint8_t *)(STATE_BASE + 0UL))
 #define SCRATCH_ROW  (*(volatile uint8_t *)(STATE_BASE + 1UL))
+#define SCRATCH_FG   (*(volatile uint8_t *)(STATE_BASE + 2UL))
 
 void amiga_serial_putc(char c)
 {
@@ -110,45 +122,83 @@ void amiga_serial_init(void)
 }
 
 /*
- * Bring up a 320x256 lores display with a single bitplane on AGA.
+ * Bring up a hires 640x256 display with eight bitplanes (256 colours) on AGA.
  *
- * The two details that matter most here:
+ * The details that matter:
  *
  *  - DMAF_MASTER must be set alongside DMAF_RASTER. The bitplane channel bit
  *    is gated by the master enable, so writing $8100 alone leaves *no* DMA
  *    running and the screen stays black.
- *  - FMODE must be 0 so Agnus performs 16-bit fetches. With DDF 0x38/0xd0
- *    that is 20 words (40 bytes) per line, matching FB_PITCH. FMODE != 0
- *    would switch to 32-bit/64-byte fetches and read off the end of the row.
+ *  - FMODE = 1 (32-bit fetch) is the only fetch mode whose cycle diagram
+ *    grants eight plane fetches per eight-cycle unit in hires; at 16-bit
+ *    fetch (FMODE = 0) hires tops out at four planes, so AGA 256 colours at
+ *    640 px is impossible without it.
+ *  - DDF 0x3c/0xd4 then yields (0xd4-0x3c)/8 + 1 = 20 units of 4 bytes =
+ *    80 bytes fetched per plane per line, exactly FB_PITCH, so plane
+ *    pointers need no modulo.
  */
 void amiga_display_init(void)
 {
-    REG16(FMODE)   = 0;                /* 16-bit fetches (OCS-compatible) */
-    REG16(BPLCON3) = 0;                /* normal colours, bank 0          */
+    uint32_t i;
+
+    REG16(FMODE)   = 1;                /* 32-bit fetches (8 planes/hires)  */
+    REG16(BPLCON3) = 0;                /* colour bank 0, high-nibble pass  */
 
     REG16(DIWSTRT) = 0x2c81;           /* vstart 44, hstart 0x81          */
     REG16(DIWSTOP) = 0x2cc1;           /* wraps -> 256 lines              */
-    REG16(DDFSTRT) = 0x0038;
-    REG16(DDFSTOP) = 0x00d0;
+    REG16(DDFSTRT) = 0x003c;
+    REG16(DDFSTOP) = 0x00d4;
 
-    REG16(BPL1PTH) = (uint16_t)(FRAMEBUF >> 16);
-    REG16(BPL1PTL) = (uint16_t)(FRAMEBUF & 0xffffU);
+    for (i = 0; i < FB_PLANES; i++)
+    {
+        uint32_t base = FRAMEBUF + i * FB_PLANE;
+        REG16(BPLPT(i))      = (uint16_t)(base >> 16);
+        REG16(BPLPT(i) + 2U) = (uint16_t)(base & 0xffffU);
+    }
 
-    REG16(BPLCON0) = (uint16_t)(BPLCNT(1) | COLORON);  /* lores, 1 plane  */
+    REG16(BPLCON0) = (uint16_t)(MODE_640 | COLORON | BPLCNT_AGA8);
     REG16(BPLCON1) = 0x0000;
     REG16(BPLCON2) = 0x0000;
 
-    REG16(COLOR00) = 0x0000;           /* black background                */
-    REG16(COLOR01) = 0x03f3;           /* P1 phosphor green (#33ff33):
-                                        * 0x0RGB, so 0x0ff0 would be
-                                        * R=F,G=F,B=0 (yellow)             */
+    /* Console palette: black ground, phosphor green, and the two status
+     * colours the boot self-test reports with. */
+    amiga_set_color(NB_COL_BLACK, 0x00, 0x00, 0x00);
+    amiga_set_color(NB_COL_GREEN, 0x33, 0xff, 0x33);
+    amiga_set_color(NB_COL_RED,   0xff, 0x50, 0x40);
+    amiga_set_color(NB_COL_AMBER, 0xff, 0xb0, 0x00);
+    amiga_set_color(NB_COL_WHITE, 0xe8, 0xf0, 0xf8);
 
     REG16(DMACON) = DMAF_SETCLR | DMAF_MASTER | DMAF_RASTER;
 
     SCRATCH_COL = 0;
     SCRATCH_ROW = 0;
+    SCRATCH_FG  = NB_COL_GREEN;         /* phosphor green until told else */
 
     amiga_display_clear();
+}
+
+/*
+ * Write one of the AGA's 256 hardware palette entries at full 8-bit depth.
+ *
+ * Denise keeps eight banks of 32 registers. BPLCON3 bits 15..13 select the
+ * bank and bit 9 selects which nibble of each channel the write lands in:
+ * clear writes the high nibble (the value is replicated across the byte),
+ * set merges the low nibble into it. High pass first, then low pass, or the
+ * second write would have nothing to merge into.
+ */
+void amiga_set_color(unsigned idx, uint8_t r, uint8_t g, uint8_t b)
+{
+    const unsigned bank = (idx >> 5) & 7U;
+    const unsigned num  = idx & 31U;
+    const uint16_t reg  = (uint16_t)(COLOR00 + num * 2U);
+
+    REG16(BPLCON3) = (uint16_t)(bank << 13);
+    REG16(reg) = (uint16_t)(((uint16_t)(r >> 4) << 8) |
+                            ((uint16_t)(g >> 4) << 4) | (b >> 4));
+
+    REG16(BPLCON3) = (uint16_t)((bank << 13) | 0x0200U);
+    REG16(reg) = (uint16_t)(((uint16_t)(r & 15U) << 8) |
+                            ((uint16_t)(g & 15U) << 4) | (b & 15U));
 }
 
 void amiga_display_clear(void)
@@ -156,7 +206,7 @@ void amiga_display_clear(void)
     uint8_t *p = (uint8_t *)FRAMEBUF;
     uint32_t i;
 
-    for (i = 0; i < FB_PITCH * FB_ROWS; i++)
+    for (i = 0; i < FB_PLANE * FB_PLANES; i++)
         p[i] = 0;
 }
 
@@ -178,6 +228,7 @@ void amiga_display_clear(void)
 void amiga_display_vsync(void)
 {
     uint32_t spins = 0;
+    uint32_t i;
 
     REG16(INTREQ) = INTF_VERTB;             /* ack the previous vblank */
     while ((REG16(INTREQR) & INTF_VERTB) == 0)
@@ -186,8 +237,25 @@ void amiga_display_vsync(void)
             break;
     }
 
-    REG16(BPL1PTH) = (uint16_t)(FRAMEBUF >> 16);
-    REG16(BPL1PTL) = (uint16_t)(FRAMEBUF & 0xffffU);
+    /* Rewind every plane, not just plane 1: each pointer counts on its own. */
+    for (i = 0; i < FB_PLANES; i++)
+    {
+        uint32_t base = FRAMEBUF + i * FB_PLANE;
+        REG16(BPLPT(i))      = (uint16_t)(base >> 16);
+        REG16(BPLPT(i) + 2U) = (uint16_t)(base & 0xffffU);
+    }
+}
+
+/*
+ * Set the colour index the console inks subsequent glyphs with.
+ *
+ * The palette itself is programmed once in amiga_display_init; this only
+ * chooses which of those entries the next characters use, so the boot
+ * self-test can report ok/fail/warning in green/red/amber on one screen.
+ */
+void amiga_set_fg(unsigned idx)
+{
+    SCRATCH_FG = (uint8_t)idx;
 }
 
 /*
@@ -257,6 +325,7 @@ void amiga_putc(char c)
 
     {
         const uint8_t *glyph = font8x8[(uint8_t)c];
+        const uint8_t fg = SCRATCH_FG;
         const uint32_t x0 = (uint32_t)col * 8UL;
         const uint32_t y0 = (uint32_t)row * 8UL;
 
@@ -269,12 +338,12 @@ void amiga_putc(char c)
             uint32_t k;
 
             for (k = 0; k < 8; k++)
-                fb_pixel(x0 + shear + k, y0 + i, 0);          /* erase   */
+                fb_pixel(x0 + shear + k, y0 + i, NB_COL_BLACK);      /* erase */
 
             for (k = 0; k < 8; k++)
             {
                 if (glyph[i] & (uint8_t)(0x80U >> k))
-                    fb_pixel(x0 + shear + k, y0 + i, 1);      /* phosphor */
+                    fb_pixel(x0 + shear + k, y0 + i, fg);            /* ink   */
             }
         }
     }

@@ -18,7 +18,9 @@ COMMON_CFLAGS := \
     -fno-zero-initialized-in-bss \
     -fno-common \
     -Wall \
-    -Wextra
+    -Wextra \
+    -MMD \
+    -MP
 
 KERNEL_DIR := ../../kernel
 
@@ -43,6 +45,9 @@ all: $(TARGET)
 $(KERNEL_DIR)/init/%.o: $(KERNEL_DIR)/init/%.c
 	$(CC) $(COMMON_CFLAGS) -c $< -o $@
 
+# Header dependencies (font8x8.h, amiga.h, ...); generated next to the objects.
+-include $(OBJS:.o=.d)
+
 $(ELFS): $(OBJS) rom.ld
 	$(LD) -T rom.ld -nostdlib -o $@ $(OBJS)
 	$(CROSS)size $@
@@ -52,4 +57,4 @@ $(TARGET): $(ELFS)
 	truncate -s 524288 $@
 
 clean:
-	rm -f $(OBJS) $(ELFS) $(TARGET)
+	rm -f $(OBJS) $(OBJS:.o=.d) $(ELFS) $(TARGET)
