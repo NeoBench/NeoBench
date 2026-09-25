@@ -15,7 +15,7 @@ void kernel_main(const nb_bootinfo_t *boot)
     kernel_banner();
     amiga_serial_putc('B');
 
-    console_write("Kernel started\n");
+    console_write("System detected\n");
 
     for (;;)
         amiga_display_vsync();

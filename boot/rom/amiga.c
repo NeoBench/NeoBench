@@ -60,6 +60,8 @@
 #define FRAMEBUF     0x00010000UL      /* bitplane base, 64-byte aligned */
 #define FB_PITCH     40UL              /* 320 px / 8 = 40 bytes per row  */
 #define FB_ROWS      256UL
+#define FB_PLANES    8UL               /* planar layout: plane p sits    */
+#define FB_PLANE     (FB_PITCH * FB_ROWS)  /* FB_PLANE bytes after p-1    */
 
 #define TEXT_COLS    40UL
 #define TEXT_ROWS    32UL
@@ -136,8 +138,10 @@ void amiga_display_init(void)
     REG16(BPLCON1) = 0x0000;
     REG16(BPLCON2) = 0x0000;
 
-    REG16(COLOR00) = 0x0000;           /* black background */
-    REG16(COLOR01) = 0x0ff0;           /* bright green foreground */
+    REG16(COLOR00) = 0x0000;           /* black background                */
+    REG16(COLOR01) = 0x03f3;           /* P1 phosphor green (#33ff33):
+                                        * 0x0RGB, so 0x0ff0 would be
+                                        * R=F,G=F,B=0 (yellow)             */
 
     REG16(DMACON) = DMAF_SETCLR | DMAF_MASTER | DMAF_RASTER;
 
@@ -187,12 +191,45 @@ void amiga_display_vsync(void)
 }
 
 /*
+ * Set one screen pixel to a planar colour index.
+ *
+ * The console font is drawn through this instead of whole bytes because the
+ * glyphs are sheared (see amiga_putc): a sheared row no longer lines up with
+ * a byte boundary, and the horizontal shift is different for every scanline.
+ */
+static void fb_pixel(uint32_t x, uint32_t y, uint8_t idx)
+{
+    uint32_t p;
+
+    if (x >= (uint32_t)TEXT_COLS * 8UL || y >= FB_ROWS)
+        return;
+
+    for (p = 0; p < FB_PLANES; p++)
+    {
+        uint8_t *dst = (uint8_t *)(FRAMEBUF + p * FB_PLANE) + y * FB_PITCH
+                       + (x >> 3);
+        uint8_t mask = (uint8_t)(0x80U >> (x & 7U));
+
+        if ((idx >> p) & 1U)
+            *dst |= mask;
+        else
+            *dst &= (uint8_t)~mask;
+    }
+}
+
+/*
  * Draw one character to the console and mirror it to the serial port, so
  * boot progress is observable without needing a screenshot.
+ *
+ * Glyphs are rendered in italics: each scanline is shifted right by two
+ * pixels at the cap height down to zero at the baseline (7-i)/3, the classic
+ * bitmap-font shear.  Each row's cell is erased first, using exactly the
+ * sheared footprint of that row, so a repaint clears the old glyph without
+ * ever clipping the shear of the neighbouring cell (neighbour shear pixels
+ * always land outside the footprint).
  */
 void amiga_putc(char c)
 {
-    uint8_t *fb = (uint8_t *)FRAMEBUF;
     uint8_t col = SCRATCH_COL;
     uint8_t row = SCRATCH_ROW;
     uint32_t i;
@@ -220,11 +257,25 @@ void amiga_putc(char c)
 
     {
         const uint8_t *glyph = font8x8[(uint8_t)c];
+        const uint32_t x0 = (uint32_t)col * 8UL;
+        const uint32_t y0 = (uint32_t)row * 8UL;
 
         for (i = 0; i < 8; i++)
         {
-            uint8_t *dst = fb + ((uint32_t)row * 8UL + i) * FB_PITCH + col;
-            *dst = glyph[i];
+            /* Shear per scanline: 2 px at the cap height, 0 at baseline.
+             * Table, not a divide: no libgcc in this freestanding link. */
+            static const uint8_t shear_tab[8] = { 2, 2, 1, 1, 1, 0, 0, 0 };
+            const uint32_t shear = shear_tab[i];
+            uint32_t k;
+
+            for (k = 0; k < 8; k++)
+                fb_pixel(x0 + shear + k, y0 + i, 0);          /* erase   */
+
+            for (k = 0; k < 8; k++)
+            {
+                if (glyph[i] & (uint8_t)(0x80U >> k))
+                    fb_pixel(x0 + shear + k, y0 + i, 1);      /* phosphor */
+            }
         }
     }
 
