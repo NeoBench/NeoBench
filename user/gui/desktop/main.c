@@ -1,301 +1,577 @@
 /*
- * nb_desktop_render() - static Vista Aero themed scene for the AGA
- * target (640x256 hires, 256 colours).
+ * nb_desktop_render() -- the NeoBench "futuristic clean" desktop.
  *
- * Composited into the RGB565 back buffer with the gfx primitives:
- *   - aurora wallpaper (gradients + soft glow discs)
- *   - two glass windows: software alpha over a pre-blurred wallpaper,
- *     1 px light border, frosted content pane, Aero caption buttons
- *   - dark glass taskbar with start orb, quick launch, task buttons
- *     and clock
- *   - sidebar gadgets: analog clock + notes
- * Finally quantised and pushed to the planar frame buffer.
+ * AGA, 640x512 interlaced, 256 colours (boot/rom/amiga.h).  Everything
+ * below is composited into the RGB565 back buffer with the gfx
+ * primitives and then quantised and packed by gfx_present(): there is no
+ * bitmap anywhere in the ROM.
+ *
+ * Freestanding m68k rules apply throughout -- the link has no
+ * __udivsi3, so no divide by a runtime value and no floating point.
+ * Every division here is by a constant the compiler turns into a shift,
+ * and the two numbers that have to move (bar widths, the uptime) are
+ * made by shifting or by subtracting instead.
+ *
+ * The scene, top to bottom:
+ *
+ *   wallpaper  navy -> near-black vertical gradient, the NeoBench mark
+ *              sunk into it as a watermark, three teal horizon glows and
+ *              a 32 px hairline grid laid over the top of it
+ *   icons      four custom tiles down the left edge -- chip, telemetry,
+ *              layered docs, media badge -- each on a frosted rounded
+ *              tile with a shadowed label under it
+ *   windows    two dark glass panels: the wallpaper blurred in place
+ *              beneath a blue-black tint, a one-pixel lit rim, a caption
+ *              rule and small round caption buttons
+ *   gadgets    an analog dial and a two-bar system monitor
+ *   taskbar    a 44 px bar carrying the mark-only start orb, quick
+ *              launch, task buttons, an activity indicator and the
+ *              uptime readout
  */
 
 #include "../../../boot/rom/gfx.h"
 #include "../../../boot/rom/amiga.h"
+#include "logo.h"
 
-/* ---- palette ---------------------------------------------------- */
-#define C_WHITE      NB_RGB(31, 63, 31)
-#define C_TITLE_TXT  NB_RGB(3, 8, 16)      /* dark navy, on light glass   */
-#define C_BODY_TXT   NB_RGB(8, 20, 30)
-#define C_MUTED      NB_RGB(14, 32, 31)
-#define C_GLASS_TINT NB_RGB(22, 54, 31)    /* pale blue frosted tint      */
-#define C_PANE       NB_RGB(27, 58, 31)    /* frosted white content pane  */
-#define C_LINE       NB_RGB(18, 40, 31)
-#define C_GREEN      NB_RGB(6, 54, 8)
+/* boot/rom/probe.c: how many megabytes of expansion space answered. */
+extern unsigned nb_probe_mem_mb(void);
 
-/* ---- helpers ---------------------------------------------------- */
+/* ------------------------------------------------------------------ *
+ * Palette
+ * ------------------------------------------------------------------ */
+#define C_INK     NB_RGB(31, 63, 31)     /* white                       */
+#define C_TEXT    NB_RGB(26, 56, 30)     /* bright body text            */
+#define C_MUTE    NB_RGB(14, 32, 18)     /* secondary text              */
+#define C_ACC     NB_RGB(6, 41, 22)      /* brand teal                  */
+#define C_ACC_D   NB_RGB(3, 22, 13)      /* dim teal                    */
+#define C_GREEN   NB_RGB(6, 54, 8)       /* status green                */
+#define C_TILE    NB_RGB(2, 7, 8)        /* glass body                  */
+#define C_PANE    NB_RGB(3, 11, 12)      /* inner pane / tracks         */
+#define C_EDGE    NB_RGB(7, 22, 16)      /* inner rules                 */
+#define C_RIM     NB_RGB(15, 36, 18)     /* lit rim                     */
+#define C_RIM_D   NB_RGB(8, 24, 14)      /* dim rim                     */
+#define C_SHADOW  NB_RGB(0, 1, 1)        /* drop shadow                 */
+#define C_BG0     NB_RGB(2, 14, 8)       /* wallpaper top               */
+#define C_BG1     NB_RGB(0, 2, 3)        /* wallpaper bottom            */
+#define C_GLOW_A  NB_RGB(3, 30, 16)      /* teal horizon glow           */
+#define C_GLOW_B  NB_RGB(4, 20, 14)      /* steel glow                  */
+#define C_GLOW_C  NB_RGB(5, 34, 20)      /* cyan glow                   */
+#define C_GRID    NB_RGB(10, 26, 16)     /* hairline grid               */
 
-static void text_shadow(int x, int y, const char *s, uint16_t c)
+#define WM_X      106                    /* watermark veil box          */
+#define WM_Y      225
+#define WM_W      220
+#define WM_H      231
+#define WM_FADE   166                    /* veil strength: the mark shows
+                                            at ~35 % underneath it, which
+                                            is where teal still separates
+                                            from a navy wallpaper        */
+
+/* ------------------------------------------------------------------ *
+ * Small helpers
+ * ------------------------------------------------------------------ */
+
+/* Decimal output without a printf -- and without libgcc. */
+static char *put_num(char *d, unsigned v)
 {
-    gfx_text(x + 1, y + 1, s, NB_RGB(0, 2, 6));
+    static const unsigned decade[10] = {
+        1000000000U, 100000000U, 10000000U, 1000000U, 100000U,
+        10000U, 1000U, 100U, 10U, 1U
+    };
+    unsigned i;
+    int started = 0;
+
+    for (i = 0; i < 10; i++) {
+        unsigned digit = 0;
+
+        while (v >= decade[i]) {
+            v -= decade[i];
+            digit++;
+        }
+        if (digit || started || i == 9) {
+            started = 1;
+            *d++ = (char)('0' + digit);
+        }
+    }
+    return d;
+}
+
+static char *put_str(char *d, const char *s)
+{
+    while (*s)
+        *d++ = *s++;
+    return d;
+}
+
+static void fmt_time(char *d, unsigned h, unsigned m, unsigned s)
+{
+    if (h)
+        d = put_num(d, h);
+    else
+        *d++ = '0';
+    *d++ = ':';
+    if (m < 10)
+        *d++ = '0';
+    d = put_num(d, m);
+    *d++ = ':';
+    if (s < 10)
+        *d++ = '0';
+    d = put_num(d, s);
+    *d = '\0';
+}
+
+static int strw(const char *s)
+{
+    int n = 0;
+
+    while (s[n])
+        n++;
+    return n * 8;
+}
+
+/* text with a one-pixel dark drop, so labels stay readable over the
+ * wallpaper's glows as well as over glass */
+static void text_d(int x, int y, const char *s, uint16_t c)
+{
+    gfx_text(x + 1, y + 1, s, C_SHADOW);
     gfx_text(x, y, s, c);
 }
 
-/* frosted caption button: 17x15 at x,y; kind 0 = min, 1 = max, 2 = close */
-static void cap_btn(int x, int y, int kind)
+static void text_right(int right, int y, const char *s, uint16_t c)
 {
-    if (kind == 2) {
-        gfx_fill_r(x, y, 17, 15, 3, NB_RGB(16, 6, 6));
-        gfx_alpha_r(x, y, 17, 15, 3, NB_RGB(31, 10, 9), 190);
-        gfx_line(x + 5, y + 4, x + 11, y + 10, C_WHITE);
-        gfx_line(x + 5, y + 10, x + 11, y + 4, C_WHITE);
-    } else {
-        gfx_alpha_r(x, y, 17, 15, 3, C_WHITE, 96);
-        if (kind == 0) {                       /* minimise */
-            gfx_fill(x + 5, y + 9, 7, 2, NB_RGB(4, 12, 22));
-        } else {                               /* maximise */
-            gfx_fill(x + 4, y + 4, 9, 1, NB_RGB(4, 12, 22));
-            gfx_fill(x + 4, y + 5, 1, 6, NB_RGB(4, 12, 22));
-            gfx_fill(x + 12, y + 5, 1, 6, NB_RGB(4, 12, 22));
-            gfx_fill(x + 4, y + 10, 9, 1, NB_RGB(4, 12, 22));
-            gfx_fill(x + 5, y + 6, 7, 3, NB_RGB(10, 30, 31));
-        }
-    }
+    text_d(right - strw(s), y, s, c);
 }
 
-/* Aero glass window: blurred backdrop, tinted alpha, light border,
- * brighter caption strip, frosted content pane. */
-static void glass_window(int x, int y, int w, int h, int th,
-                         const char *title, int buttons)
+/* centred label under an icon tile */
+static void label_c(int x, int y, int w, const char *s)
 {
-    int i;
+    int t = (w - strw(s)) / 2;
 
-    gfx_blur(x, y, w, h);
-    gfx_alpha_r(x, y, w, h, 7, C_WHITE, 176);              /* rim */
-    gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 6, C_GLASS_TINT, 110);
-    /* caption light strip, inset past the corner radius */
-    gfx_alpha(x + 8, y + 2, w - 16, th - 3, C_WHITE, 44);
-    /* frosted content pane */
-    gfx_alpha_r(x + 2, y + th, w - 4, h - th - 2, 5, C_PANE, 240);
-
-    text_shadow(x + 10, y + (th - 8) / 2, title, C_TITLE_TXT);
-    for (i = 0; i < buttons; i++) {
-        int bx = x + w - (20 + i * 19);
-        cap_btn(bx, y + 3, (i == 0) ? 2 : (i == 1 ? 1 : 0));
-    }
+    text_d(x + t, y, s, C_TEXT);
 }
 
-/* ---- scene pieces ----------------------------------------------- */
+static uint16_t bb_at(int x, int y)
+{
+    return *(const volatile uint16_t *)(uintptr_t)(
+        NB_BACKBUF_BASE + (unsigned)(y * 640 + x) * 2u);
+}
 
+/* ------------------------------------------------------------------ *
+ * Wallpaper
+ * ------------------------------------------------------------------ */
+
+/*
+ * The watermark cannot be faded with a rectangle: a wash across the
+ * mark's bounding box also washes the wallpaper under it, and against a
+ * gradient that edge is plainly visible.  So each row of the veil is
+ * filled with the wallpaper colour *of that row*, read back out of the
+ * gradient before the mark went down.  Blending a colour with itself is
+ * exact, so the background outside the artwork comes out untouched and
+ * only the artwork is pulled back -- no edge anywhere.
+ *
+ * The glows and the grid go on afterwards, over mark and wallpaper
+ * alike, for the same reason.
+ */
 static void wallpaper(void)
 {
-    gfx_vgrad(0, 0, 640, 132, NB_RGB(5, 16, 31), NB_RGB(7, 45, 31));
-    gfx_vgrad(0, 132, 640, 124, NB_RGB(7, 45, 31), NB_RGB(2, 8, 17));
-    gfx_disc_a(470, 74, 196, NB_RGB(24, 52, 30), 44);      /* teal aurora */
-    gfx_disc_a(430, 60, 120, NB_RGB(26, 58, 31), 34);
-    gfx_disc_a(150, 214, 140, NB_RGB(6, 34, 30), 40);      /* low glow    */
-    gfx_disc_a(200, 96, 90, NB_RGB(4, 22, 26), 30);
-}
-
-static void desktop_icon(int x, int y, uint16_t badge, const char *label)
-{
-    gfx_fill_r(x, y, 30, 26, 5, NB_RGB(10, 26, 31));
-    gfx_alpha_r(x, y, 30, 26, 5, C_WHITE, 200);
-    gfx_fill(x + 5, y + 6, 20, 13, NB_RGB(3, 12, 24));
-    gfx_fill(x + 7, y + 8, 16, 9, badge);
-    gfx_fill(x + 12, y + 20, 6, 2, NB_RGB(12, 30, 31));
-    text_shadow(x - 6, y + 30, label, C_WHITE);
-}
-
-static void window_files(void)
-{
-    static const uint16_t badges[5] = {
-        NB_RGB(8, 40, 31), NB_RGB(6, 54, 8),
-        NB_RGB(29, 56, 6), NB_RGB(20, 24, 31), NB_RGB(31, 20, 18)
-    };
-    static const char *names[5] = {
-        "Kernel", "Bootrom", "Docs", "Tools", "Media"
-    };
-    static const char *sizes[5] = {
-        "1.2 MB", "512 kB", "-", "-", "-"
-    };
     int i;
-    const int x = 390, y = 64, w = 168, h = 150, th = 22;
 
-    glass_window(x, y, w, h, th, "Files", 1);
+    gfx_vgrad(0, 0, 640, 512, C_BG0, C_BG1);
 
-    /* column header */
-    gfx_alpha(x + 4, y + th + 2, w - 8, 12, NB_RGB(20, 44, 31), 40);
-    gfx_text(x + 12, y + th + 4, "Name", C_MUTED);
-    gfx_text(x + w - 58, y + th + 4, "Size", C_MUTED);
-    gfx_fill(x + 4, y + th + 15, w - 8, 1, C_LINE);
+    logo_mark(110, 210, 210);
+    gfx_text_s(111, 429, "NEOBENCH", LOGO_NAVY, 3);
+    gfx_text_s(110, 428, "NEOBENCH", LOGO_TEAL, 3);
+    for (i = WM_Y; i < WM_Y + WM_H; i++)
+        gfx_alpha(WM_X, i, WM_W, 1, bb_at(40, i), WM_FADE);
 
-    for (i = 0; i < 5; i++) {
-        int ry = y + th + 18 + i * 18;
-        if (i == 1)                              /* hover row */
-            gfx_alpha(x + 4, ry, w - 8, 17, NB_RGB(10, 40, 31), 34);
-        gfx_fill_r(x + 10, ry + 3, 13, 13, 3, badges[i]);
-        gfx_alpha(x + 12, ry + 5, 5, 4, C_WHITE, 150);
-        gfx_text(x + 30, ry + 5, names[i], C_BODY_TXT);
-        gfx_text(x + w - 60, ry + 5, sizes[i], C_MUTED);
+    gfx_disc_a(300, 452, 250, C_GLOW_A, 34);
+    gfx_disc_a(556, 476, 210, C_GLOW_B, 40);
+    gfx_disc_a(596, 58, 170, C_GLOW_C, 44);
+
+    for (i = 0; i < 512; i += 32)
+        gfx_alpha(0, i, 640, 1, C_GRID, 26);
+    for (i = 16; i < 640; i += 32)
+        gfx_alpha(i, 0, 1, 512, C_GRID, 15);
+}
+
+/* ------------------------------------------------------------------ *
+ * Icons -- four custom marks, all built from the same primitives the
+ * NeoBench logo is, so the set reads as one family.
+ * ------------------------------------------------------------------ */
+
+static void icon_tile(int x, int y)
+{
+    gfx_alpha_r(x + 2, y + 6, 44, 44, 11, C_SHADOW, 130);
+    gfx_fill_r(x, y, 48, 48, 11, C_RIM);
+    gfx_fill_r(x + 1, y + 1, 46, 46, 10, C_TILE);
+    gfx_alpha_r(x + 1, y + 1, 46, 46, 10, C_ACC, 46);
+    gfx_alpha(x + 5, y + 4, 38, 11, C_INK, 26);
+}
+
+/* System: an AGA gate array, legs out on all four sides */
+static void icon_chip(int x, int y)
+{
+    int i;
+
+    icon_tile(x, y);
+    gfx_fill_r(x + 13, y + 13, 22, 22, 4, C_PANE);
+    gfx_fill_r(x + 15, y + 15, 18, 18, 3, C_ACC);
+    gfx_fill_r(x + 19, y + 19, 10, 10, 2, C_TILE);
+    for (i = 0; i < 3; i++) {
+        gfx_fill(x + 17 + i * 6, y + 8, 3, 5, C_ACC);
+        gfx_fill(x + 17 + i * 6, y + 35, 3, 5, C_ACC);
+        gfx_fill(x + 8, y + 17 + i * 6, 5, 3, C_ACC);
+        gfx_fill(x + 35, y + 17 + i * 6, 5, 3, C_ACC);
     }
-    gfx_fill(x + 4, y + h - 18, w - 8, 1, C_LINE);
-    gfx_text(x + 12, y + h - 14, "5 objects", C_MUTED);
+}
+
+/* Bench: a rising bar chart under a threshold rule */
+static void icon_bench(int x, int y)
+{
+    icon_tile(x, y);
+    gfx_fill(x + 10, y + 37, 30, 2, C_INK);
+    gfx_fill(x + 12, y + 30, 5, 7, C_ACC);
+    gfx_fill(x + 19, y + 24, 5, 13, C_ACC);
+    gfx_fill(x + 26, y + 17, 5, 20, C_ACC);
+    gfx_fill(x + 33, y + 11, 5, 26, C_ACC);
+    gfx_alpha(x + 10, y + 21, 30, 1, C_INK, 165);
+}
+
+/* Docs: three stacked cards, the front one lit */
+static void icon_docs(int x, int y)
+{
+    icon_tile(x, y);
+    gfx_fill_r(x + 9, y + 12, 22, 16, 3, C_PANE);
+    gfx_fill_r(x + 13, y + 17, 22, 16, 3, C_EDGE);
+    gfx_fill_r(x + 17, y + 22, 22, 15, 3, C_ACC);
+    gfx_fill(x + 21, y + 26, 14, 2, C_TILE);
+    gfx_fill(x + 21, y + 30, 10, 2, C_TILE);
+}
+
+/* Media: a play badge */
+static void icon_media(int x, int y)
+{
+    icon_tile(x, y);
+    gfx_disc(x + 24, y + 24, 15, C_ACC);
+    gfx_disc(x + 24, y + 24, 12, C_PANE);
+    gfx_tri(x + 21, y + 17, x + 21, y + 31, x + 33, y + 24, C_INK);
+}
+
+static void icons(void)
+{
+    const int x = 20;
+
+    icon_chip(x, 36);    label_c(x, 90, 48, "System");
+    icon_bench(x, 144);  label_c(x, 198, 48, "Bench");
+    icon_docs(x, 252);   label_c(x, 306, 48, "Docs");
+    icon_media(x, 360);  label_c(x, 414, 48, "Media");
+}
+
+/* ------------------------------------------------------------------ *
+ * Windows
+ * ------------------------------------------------------------------ */
+
+/* caption button: 0 minimise (floor bar), 1 maximise (square),
+ * 2 close (cross) */
+static void cap_btn(int x, int y, int kind)
+{
+    gfx_fill_r(x, y, 13, 11, 3, C_RIM_D);
+    gfx_alpha_r(x + 1, y + 1, 11, 9, 2, C_TILE, 205);
+    if (kind == 2) {
+        gfx_line(x + 4, y + 3, x + 9, y + 8, C_TEXT);
+        gfx_line(x + 4, y + 8, x + 9, y + 3, C_TEXT);
+    } else if (kind == 1) {
+        gfx_fill(x + 4, y + 3, 6, 6, C_TEXT);
+    } else {
+        gfx_fill(x + 4, y + 7, 6, 2, C_TEXT);
+    }
+}
+
+/*
+ * Dark glass: the wallpaper underneath is blurred first, then tinted
+ * blue-black, so the panel keeps the colour of what is behind it without
+ * carrying any of its detail -- the Vista read, without the chrome.
+ */
+static void glass_window(int x, int y, int w, int h, int th,
+                         const char *title, int nbtn)
+{
+    int i, bx;
+
+    gfx_alpha_r(x - 4, y + 6, w + 10, h + 4, 12, C_SHADOW, 120);
+    gfx_blur(x + 2, y + 2, w - 4, h - 4);
+
+    gfx_fill_r(x, y, w, h, 9, C_RIM);
+    gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 8, C_TILE, 210);
+    gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 8, C_ACC, 26);
+    gfx_alpha(x + 3, y + 3, w - 6, 3, C_INK, 34);
+
+    /* caption */
+    gfx_fill(x + 1, y + th, w - 2, 1, C_EDGE);
+    gfx_alpha(x + 4, y + 5, 3, th - 9, C_ACC, 235);
+    text_d(x + 14, y + (th - 8) / 2, title, C_TEXT);
+
+    bx = x + w - 8 - nbtn * 15;
+    for (i = 0; i < nbtn; i++)
+        cap_btn(bx + i * 15, y + (th - 11) / 2,
+                (i == nbtn - 1) ? 2 : i);
+
+    /* content pane */
+    gfx_alpha_r(x + 4, y + th + 4, w - 8, h - th - 8, 7, C_PANE, 120);
+    gfx_fill(x + 4, y + th + 3, w - 8, 1, C_EDGE);
+}
+
+/* a plain panel, for the gadgets */
+static void panel(int x, int y, int w, int h, const char *title)
+{
+    gfx_alpha_r(x - 4, y + 5, w + 8, h + 4, 12, C_SHADOW, 120);
+    gfx_blur(x + 2, y + 2, w - 4, h - 4);
+
+    gfx_fill_r(x, y, w, h, 9, C_RIM);
+    gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 8, C_TILE, 214);
+    gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 8, C_ACC, 26);
+    gfx_alpha(x + 3, y + 3, w - 6, 3, C_INK, 34);
+
+    if (title) {
+        gfx_fill(x + 1, y + 16, w - 2, 1, C_EDGE);
+        gfx_alpha(x + 6, y + 5, 3, 7, C_ACC, 235);
+        text_d(x + 14, y + 5, title, C_MUTE);
+    }
+}
+
+static void status_row(int x, int y, const char *s)
+{
+    gfx_fill(x, y, 2, 8, C_ACC);
+    text_d(x + 10, y, s, C_TEXT);
 }
 
 static void window_main(void)
 {
-    const int x = 60, y = 34, w = 340, h = 180, th = 24;
+    const int x = 124, y = 40, w = 300, h = 156;
+    char mem[40];
+    char *d;
 
-    glass_window(x, y, w, h, th, "NeoBench", 3);
+    glass_window(x, y, w, h, 20, "NeoBench", 3);
 
-    gfx_text(x + 14, y + th + 8, "Welcome to NeoBench", NB_RGB(2, 14, 30));
-    gfx_text(x + 14, y + th + 20, "Aero desktop on original AGA hardware",
-             C_MUTED);
-    gfx_fill(x + 14, y + th + 34, w - 28, 1, C_LINE);
+    text_d(x + 10, y + 28, "NeoBench 0.1.0", C_TEXT);
+    text_d(x + 10, y + 42, "Futuristic desktop on AGA", C_MUTE);
+    gfx_alpha(x + 10, y + 56, w - 20, 1, C_EDGE, 220);
 
-    /* status rows */
-    gfx_fill_r(x + 14, y + th + 44, 7, 7, 3, C_GREEN);
-    gfx_text(x + 28, y + th + 44, "AGA 640x256, 256 colours", C_BODY_TXT);
-    gfx_fill_r(x + 14, y + th + 58, 7, 7, 3, C_GREEN);
-    gfx_text(x + 28, y + th + 58, "Motorola 68060 + FPU", C_BODY_TXT);
-    gfx_fill_r(x + 14, y + th + 72, 7, 7, 3, C_GREEN);
-    gfx_text(x + 28, y + th + 72, "10 MB memory, 800 KB floppy", C_BODY_TXT);
+    status_row(x + 10, y + 66, "640x512 interlaced, 256 colours");
+    status_row(x + 10, y + 82, "Motorola 68060 with FPU");
 
-    gfx_text(x + 14, y + th + 92, "chipset: AGA   rom: AmigaOS 3.2.3",
-             C_MUTED);
+    d = put_num(mem, nb_probe_mem_mb());
+    d = put_str(d, " MB memory, 2 MB chip");
+    *d = '\0';
+    status_row(x + 10, y + 98, mem);
 
-    /* About button */
-    gfx_fill_r(x + w - 92, y + h - 32, 78, 22, 5, NB_RGB(14, 34, 31));
-    gfx_alpha_r(x + w - 92, y + h - 32, 78, 22, 5, C_WHITE, 210);
-    gfx_alpha_r(x + w - 91, y + h - 31, 76, 20, 4, NB_RGB(24, 56, 31), 60);
-    gfx_text(x + w - 74, y + h - 26, "About", NB_RGB(2, 12, 24));
+    status_row(x + 10, y + 114, "AmigaOS 3.2.3 ROM chainload");
 }
+
+/* right-aligned column helper */
+static void col_r(int right, int y, const char *s)
+{
+    text_d(right - strw(s), y, s, C_MUTE);
+}
+
+static void window_files(void)
+{
+    const int x = 376, y = 176, w = 248, h = 232;
+    static const char *name[6] = {
+        "Kickstart", "Workbench", "NeoBench",
+        "bench", "docs", "startup-seq"
+    };
+    static const char *size[6] = {
+        "512 KB", "1.2 MB", "512 KB", "24 KB", "40 KB", "1 KB"
+    };
+    int i, ry;
+
+    glass_window(x, y, w, h, 20, "Files", 3);
+
+    text_d(x + 10, y + 28, "Name", C_MUTE);
+    col_r(x + w - 10, y + 28, "Size");
+    gfx_alpha(x + 10, y + 40, w - 20, 1, C_EDGE, 220);
+
+    for (i = 0; i < 6; i++) {
+        ry = y + 50 + i * 22;
+        gfx_fill_r(x + 10, ry + 1, 12, 12, 3,
+                   i < 3 ? C_ACC : C_ACC_D);
+        gfx_alpha(x + 11, ry + 2, 10, 4, C_INK, 70);
+        text_d(x + 30, ry + 3, name[i], C_TEXT);
+        col_r(x + w - 10, ry + 3, size[i]);
+    }
+
+    gfx_alpha(x + 10, y + 196, w - 20, 1, C_EDGE, 220);
+    text_d(x + 10, y + 204, "6 objects", C_MUTE);
+}
+
+/* ------------------------------------------------------------------ *
+ * Gadgets
+ * ------------------------------------------------------------------ */
+
+/* outer, inner (26,18), inner (21,15) endpoint offsets for eight ticks
+ * around a 30 px face -- the four cardinals run long and bright */
+static const int dial_tick[8][4] = {
+    {  0, -26,  0, -21 }, { 18, -18, 15, -15 },
+    { 26,   0, 21,   0 }, { 18,  18, 15,  15 },
+    {  0,  26,  0,  21 }, { -18, 18, -15, 15 },
+    { -26,  0, -21,  0 }, { -18,-18, -15,-15 }
+};
+
+static void gadget_clock(int cx, int cy, int r)
+{
+    int i;
+
+    gfx_disc(cx + 1, cy + 4, r + 3, C_SHADOW);
+    gfx_disc(cx, cy, r, C_RIM);
+    gfx_disc(cx, cy, r - 2, C_TILE);
+    gfx_disc_a(cx, cy, r - 3, C_ACC, 30);
+    gfx_alpha(cx - 7, cy - r + 5, 14, 4, C_INK, 44);
+
+    for (i = 0; i < 8; i++)
+        gfx_line(cx + dial_tick[i][0], cy + dial_tick[i][1],
+                 cx + dial_tick[i][2], cy + dial_tick[i][3],
+                 (i & 1) ? C_ACC : C_TEXT);
+
+    gfx_line(cx, cy, cx - 11, cy - 6, C_TEXT);      /* hour           */
+    gfx_line(cx, cy, cx + 15, cy - 8, C_TEXT);      /* minute         */
+    gfx_line(cx, cy, cx + 3, cy + 19, C_ACC);       /* second         */
+    gfx_disc(cx, cy, 3, C_INK);
+}
+
+static void bar(int x, int y, int w, int fill)
+{
+    gfx_fill_r(x, y, w, 10, 4, C_SHADOW);
+    gfx_fill_r(x + 1, y + 1, w - 2, 8, 3, C_PANE);
+    gfx_fill_r(x + 1, y + 1, fill, 8, 3, C_ACC);
+    gfx_alpha(x + 1, y + 1, fill, 3, C_INK, 40);
+}
+
+static void gadget_monitor(int x, int y, int w, int h)
+{
+    int tw = w - 56;
+    int c1 = (tw >> 2) + (tw >> 3);     /* 37.5 %, shifts only          */
+    int c2 = (tw >> 1) + (tw >> 3);     /* 62.5 %                       */
+
+    panel(x, y, w, h, "System");
+
+    text_d(x + 8, y + 23, "CPU", C_MUTE);
+    bar(x + 46, y + 21, tw, c1);
+
+    text_d(x + 8, y + 35, "RAM", C_MUTE);
+    bar(x + 46, y + 33, tw, c2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Taskbar
+ * ------------------------------------------------------------------ */
 
 static void start_orb(void)
 {
-    const int cx = 26, cy = 240;
+    const int cx = 28, cy = 490;
 
-    gfx_disc(cx, cy, 15, NB_RGB(0, 3, 8));                /* shadow    */
-    gfx_disc(cx, cy, 14, NB_RGB(5, 22, 31));              /* rim       */
-    gfx_disc(cx, cy, 12, NB_RGB(8, 38, 31));              /* bowl      */
-    gfx_disc(cx, cy, 10, NB_RGB(15, 56, 31));             /* core      */
-    gfx_disc_a(cx, cy - 5, 8, C_WHITE, 78);               /* gloss     */
-    /* four-pane flag */
-    gfx_fill(cx - 5, cy - 5, 5, 5, C_WHITE);
-    gfx_fill(cx + 1, cy - 5, 5, 5, C_WHITE);
-    gfx_fill(cx - 5, cy + 1, 5, 5, C_WHITE);
-    gfx_fill(cx + 1, cy + 1, 5, 5, C_WHITE);
+    gfx_disc(cx, cy + 3, 21, C_SHADOW);
+    gfx_disc(cx, cy, 19, C_RIM_D);
+    gfx_disc(cx, cy, 18, LOGO_NAVY);
+    gfx_disc(cx, cy, 17, LOGO_BG);
+    logo_mark(cx - 12, cy - 12, 24);
+    gfx_disc_a(cx, cy + 9, 16, C_ACC, 60);
+}
+
+static void quick_launch(void)
+{
+    const int y = 479;
+    int i;
+
+    for (i = 0; i < 3; i++)
+        gfx_alpha_r(58 + i * 26, y, 22, 22, 6, C_INK, 18);
+
+    gfx_fill_r(64, y + 5, 10, 13, 2, C_ACC);         /* documents      */
+    gfx_fill(66, y + 8, 6, 1, C_TILE);
+    gfx_fill(66, y + 11, 6, 1, C_TILE);
+
+    gfx_disc(95, y + 11, 7, C_ACC);                  /* media          */
+    gfx_tri(93, y + 7, 93, y + 15, 100, y + 11, C_TILE);
+
+    gfx_fill(116, y + 12, 3, 6, C_ACC);              /* telemetry      */
+    gfx_fill(121, y + 8, 3, 10, C_ACC);
+    gfx_fill(126, y + 4, 3, 14, C_ACC);
+}
+
+static void task_btn(int x, int w, int active, const char *s)
+{
+    const int y = 474, h = 28;
+
+    gfx_alpha_r(x, y, w, h, 7, C_INK, active ? 34 : 14);
+    gfx_fill_r(x, y + 5, 2, h - 10, 1, active ? C_ACC : C_RIM_D);
+    gfx_fill_r(x + 10, y + 8, 12, 12, 3, active ? C_ACC : C_ACC_D);
+    gfx_alpha(x + 11, y + 9, 10, 4, C_INK, 70);
+    text_d(x + 30, y + 10, s, active ? C_TEXT : C_MUTE);
+}
+
+/*
+ * The uptime readout.  NeoBench has no real-time clock, so there is no
+ * wall time this machine could honestly show -- it counts what it can
+ * actually observe, fields, and reports the seconds those add up to.
+ * The hours/minutes/seconds split is done by repeated subtraction:
+ * dividing here would be the one divide in the file by a value the
+ * compiler cannot fold away.
+ */
+static void uptime_text(void)
+{
+    unsigned s = nb_secs, h = 0, m = 0;
+    char buf[16];
+
+    while (s >= 3600U) { s -= 3600U; h++; }
+    while (s >= 60U)   { s -= 60U;   m++; }
+    fmt_time(buf, h, m, s);
+
+    text_d(554, 486, "up ", C_MUTE);
+    text_right(634, 486, buf, C_TEXT);
 }
 
 static void taskbar(void)
 {
-    const int y = 226, h = 30;
-    int i;
+    const int y = 468, h = 44;
 
     gfx_blur(0, y, 640, h);
-    gfx_alpha(0, y, 640, h, NB_RGB(0, 0, 0), 150);
-    gfx_alpha(0, y, 640, 1, C_WHITE, 120);               /* top highlight */
-    gfx_alpha(0, y + 1, 640, 1, NB_RGB(0, 0, 0), 90);
+    gfx_alpha(0, y, 640, h, NB_RGB(0, 3, 6), 188);
+    gfx_alpha(0, y, 640, 1, C_ACC, 170);
+    gfx_alpha(0, y + h - 1, 640, 1, C_INK, 26);
 
     start_orb();
+    quick_launch();
 
-    /* quick launch */
-    for (i = 0; i < 3; i++)
-        gfx_alpha_r(52 + i * 24, y + 6, 19, 19, 4, C_WHITE, 64);
-    gfx_fill_r(56, y + 10, 11, 11, 2, NB_RGB(10, 44, 31));
-    gfx_fill_r(58, y + 12, 5, 5, 1, NB_RGB(26, 58, 31));
-    gfx_fill_r(80, y + 10, 11, 11, 2, NB_RGB(10, 44, 31));
-    gfx_fill_r(82, y + 12, 5, 5, 1, NB_RGB(31, 56, 6));
-    gfx_fill_r(104, y + 10, 11, 11, 2, NB_RGB(10, 44, 31));
-    gfx_fill_r(106, y + 12, 5, 5, 1, NB_RGB(31, 22, 18));
-    gfx_fill(130, y + 5, 1, 20, NB_RGB(18, 40, 31));
+    gfx_alpha(146, y + 9, 1, 26, C_RIM_D, 190);
+    task_btn(158, 124, 1, "NeoBench");
+    task_btn(290, 76, 0, "Files");
 
-    /* task buttons */
-    gfx_alpha_r(142, y + 4, 124, 22, 5, C_WHITE, 70);
-    gfx_alpha_r(143, y + 5, 122, 20, 4, NB_RGB(14, 48, 31), 46);
-    gfx_fill_r(150, y + 8, 15, 14, 3, NB_RGB(6, 30, 31));
-    gfx_fill(153, y + 11, 9, 6, NB_RGB(24, 56, 31));
-    gfx_text(172, y + 10, "NeoBench", C_WHITE);
+    gfx_alpha(440, y + 9, 1, 26, C_RIM_D, 190);
+    gfx_fill(470, 491, 4, 6, C_ACC_D);
+    gfx_fill(476, 487, 4, 10, C_ACC);
+    gfx_fill(482, 483, 4, 14, C_ACC);
 
-    gfx_alpha_r(274, y + 4, 116, 22, 5, C_WHITE, 46);
-    gfx_fill_r(282, y + 8, 15, 14, 3, NB_RGB(6, 30, 31));
-    gfx_fill(285, y + 11, 9, 6, NB_RGB(29, 56, 6));
-    gfx_text(304, y + 10, "Files", NB_RGB(26, 54, 31));
-
-    /* tray + clock (right edge: clock text ends at 636) */
-    gfx_alpha_r(530, y + 5, 24, 20, 4, C_WHITE, 40);
-    gfx_fill_r(536, y + 10, 8, 8, 2, NB_RGB(6, 46, 31));
-    gfx_alpha_r(556, y + 5, 24, 20, 4, C_WHITE, 40);
-    gfx_fill_r(562, y + 10, 8, 8, 2, NB_RGB(6, 54, 8));
-    gfx_fill(586, y + 5, 1, 20, NB_RGB(18, 40, 31));
-    gfx_text(592, y + 6, "10:08", C_WHITE);
-    gfx_text(592, y + 15, "26 Sep", NB_RGB(22, 48, 31));
+    gfx_alpha(540, y + 9, 1, 26, C_RIM_D, 190);
+    uptime_text();
 }
 
-static void gadget_clock(void)
-{
-    /* integer positions for 12 hours on a radius-25 circle */
-    static const int tick[12][2] = {
-        { 0, -25 }, { 12, -21 }, { 21, -12 }, { 25, 0 },
-        { 21, 12 }, { 12, 21 }, { 0, 25 }, { -12, 21 },
-        { -21, 12 }, { -25, 0 }, { -21, -12 }, { -12, -21 }
-    };
-    const int cx = 596, cy = 62;
-    int i;
-
-    gfx_blur(cx - 34, cy - 34, 68, 68);
-    gfx_disc(cx, cy, 31, NB_RGB(14, 36, 31));             /* rim       */
-    gfx_disc(cx, cy, 29, NB_RGB(27, 58, 31));             /* face      */
-    gfx_disc_a(cx, cy - 10, 20, C_WHITE, 40);             /* glass     */
-
-    for (i = 0; i < 12; i++) {
-        int tx = cx + tick[i][0];
-        int ty = cy + tick[i][1];
-        if (i % 3 == 0)
-            gfx_fill(tx - 1, ty - 1, 3, 3, NB_RGB(4, 16, 26));
-        else
-            gfx_fill(tx, ty, 1, 1, NB_RGB(10, 30, 31));
-    }
-
-    /* 10:08 hands: hour ~304 deg, minute ~48 deg from 12 o'clock */
-    gfx_line(cx, cy, cx - 13, cy - 9, NB_RGB(3, 14, 26));
-    gfx_line(cx, cy + 1, cx - 13, cy - 8, NB_RGB(3, 14, 26));
-    gfx_line(cx, cy, cx + 16, cy - 15, NB_RGB(3, 14, 26));
-    gfx_line(cx, cy + 1, cx + 16, cy - 14, NB_RGB(3, 14, 26));
-    gfx_disc(cx, cy, 3, NB_RGB(31, 10, 9));
-}
-
-static void gadget_notes(void)
-{
-    const int x = 562, y = 104, w = 68, h = 64;
-
-    gfx_blur(x, y, w, h);
-    gfx_alpha_r(x, y, w, h, 6, C_WHITE, 170);
-    gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 5, C_PANE, 224);
-    gfx_text(x + 8, y + 7, "Notes", C_TITLE_TXT);
-    gfx_fill(x + 6, y + 19, w - 12, 1, C_LINE);
-    gfx_fill(x + 6, y + 26, w - 12, 1, NB_RGB(20, 44, 31));
-    gfx_fill(x + 6, y + 35, w - 20, 1, NB_RGB(20, 44, 31));
-    gfx_fill(x + 6, y + 44, w - 14, 1, NB_RGB(20, 44, 31));
-    gfx_fill(x + 6, y + 53, w - 24, 1, NB_RGB(20, 44, 31));
-}
-
-/* ---- entry point ------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * Scene
+ * ------------------------------------------------------------------ */
 
 void nb_desktop_render(void)
 {
     gfx_init();
-    amiga_serial_putc('w');
 
     wallpaper();
-    desktop_icon(16, 14, NB_RGB(10, 44, 31), "System");
-    desktop_icon(16, 74, NB_RGB(29, 56, 6), "Docs");
-    amiga_serial_putc('p');
+    icons();
 
-    window_files();
     window_main();
-    amiga_serial_putc('n');
+    window_files();
 
-    gadget_clock();
-    gadget_notes();
-    amiga_serial_putc('g');
+    gadget_clock(590, 76, 30);
+    gadget_monitor(452, 116, 172, 48);
 
     taskbar();
-    amiga_serial_putc('t');
 
     gfx_present();
-    amiga_serial_putc('P');
 }
