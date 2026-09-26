@@ -4,6 +4,7 @@
 
 extern void kernel_banner(void);
 extern void kernel_detect(void);
+extern void kernel_drivers(void);
 extern void kernel_ok(const char *msg);
 extern void nb_desktop_render(void);
 
@@ -21,11 +22,15 @@ void kernel_main(const nb_bootinfo_t *boot)
     kernel_detect();
     amiga_serial_putc('D');
 
+    kernel_drivers();
+    amiga_serial_putc('R');
+
     kernel_ok("System detected.");
 
     /* Desktop scene replaces the boot log on screen. */
-    nb_desktop_render();
+    kernel_ok("Reached target Graphical Interface.");
     amiga_serial_putc('G');
+    nb_desktop_render();
 
     for (;;)
         amiga_display_vsync();

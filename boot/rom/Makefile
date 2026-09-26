@@ -30,13 +30,16 @@ OBJS := \
     amiga.o \
     string.o \
     fline.o \
+    vbl.o \
     probe.o \
+    ata.o \
     gfx.o \
     lib32.o \
     $(KERNEL_DIR)/init/kernel_main.o \
     $(KERNEL_DIR)/init/banner.o \
     $(KERNEL_DIR)/init/console.o \
-    $(USER_DIR)/main.o
+    $(USER_DIR)/main.o \
+    $(USER_DIR)/logo.o
 
 .PHONY: all clean
 
