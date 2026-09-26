@@ -23,6 +23,7 @@ COMMON_CFLAGS := \
     -MP
 
 KERNEL_DIR := ../../kernel
+USER_DIR   := ../../user/gui/desktop
 
 OBJS := \
     boot.o \
@@ -30,9 +31,12 @@ OBJS := \
     string.o \
     fline.o \
     probe.o \
+    gfx.o \
+    lib32.o \
     $(KERNEL_DIR)/init/kernel_main.o \
     $(KERNEL_DIR)/init/banner.o \
-    $(KERNEL_DIR)/init/console.o
+    $(KERNEL_DIR)/init/console.o \
+    $(USER_DIR)/main.o
 
 .PHONY: all clean
 
@@ -45,6 +49,9 @@ all: $(TARGET)
 	$(CC) $(COMMON_CFLAGS) -c $< -o $@
 
 $(KERNEL_DIR)/init/%.o: $(KERNEL_DIR)/init/%.c
+	$(CC) $(COMMON_CFLAGS) -c $< -o $@
+
+$(USER_DIR)/%.o: $(USER_DIR)/%.c
 	$(CC) $(COMMON_CFLAGS) -c $< -o $@
 
 # Header dependencies (font8x8.h, amiga.h, ...); generated next to the objects.

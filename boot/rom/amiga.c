@@ -149,8 +149,16 @@ void amiga_display_init(void)
 
     REG16(DIWSTRT) = 0x2c81;           /* vstart 44, hstart 0x81          */
     REG16(DIWSTOP) = 0x2cc1;           /* wraps -> 256 lines              */
-    REG16(DDFSTRT) = 0x003c;
-    REG16(DDFSTOP) = 0x00d4;
+    /*
+     * DDFSTRT is one 32-bit fetch unit (0x08, = 32 hires pixels at FMODE 1)
+     * earlier than the classic hires $3c: with eight 32-bit plane fetches the
+     * data window starts 32 pixels after the DIW opens, which clipped the
+     * rightmost 32 columns of the framebuffer and left a 32-pixel backdrop
+     * gap on the left.  $34 aligns the fetched data with DIW exactly
+     * ($81..$c1), so all 640 columns show.
+     */
+    REG16(DDFSTRT) = 0x0034;
+    REG16(DDFSTOP) = 0x00cc;
 
     for (i = 0; i < FB_PLANES; i++)
     {
