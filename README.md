@@ -9,15 +9,16 @@ control to NeoBench.
 
 What works today, on real hardware or the FS-UAE/WinUAE emulator:
 
-- **Native AGA video from the first instruction** — hires 640×256, 8 bitplanes
-  (256 colours), driven directly by the chipset. No ROM calls, no OS underneath.
+- **Native AGA video from the first instruction** — hires 640×512 interlaced,
+  8 bitplanes (256 colours), driven directly by the chipset. No ROM calls, no OS
+  underneath.
 - **Linux-style boot console** — a systemd-style detection log with the P1
   phosphor green (`#33FF33`) palette and italic glyphs:
 
   ```
   NeoBench 0.1.0 m68k-aga
   [  OK  ] CPU detected (Motorola 68060)
-  [  OK  ] RTG detected (hires 640x256, 8 bitplanes)
+  [  OK  ] RTG detected (hires 640x512 lace, 8 bpp)
   [  OK  ] MMU detected
   [  OK  ] FPU detected
   [  OK  ] Memory detected (10 MB)

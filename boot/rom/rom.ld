@@ -11,12 +11,13 @@ MEMORY
 
     /*
      * Chip RAM layout (2 MB, A1200):
-     *   $010000..$038000  planar frame buffer (8 planes x $5000)
-     *   $040000..$090000  RGB565 back buffer for the GUI compositor
-     *   $0A0000..$1E0000  BSS / heap          (this region)
+     *   $010000..$060000  planar frame buffer (8 planes x $A000)
+     *   $060000..$100000  RGB565 back buffer for the GUI compositor
+     *   $100000..$110000  runtime arena (quantiser scratch)
+     *   $110000..$1E0000  BSS / heap          (this region)
      *   $1E0000..$200000  stack, top at $1FFFE0
      */
-    ram    (rw) : ORIGIN = 0x000A0000, LENGTH = 0x00140000
+    ram    (rw) : ORIGIN = 0x00110000, LENGTH = 0x000D0000
 }
 
 SECTIONS

@@ -1,5 +1,5 @@
 /*
- * gfx.c - software compositor for the NeoBench Aero desktop.
+ * gfx.c - software compositor for the NeoBench desktop.
  *
  * Drawing happens in an RGB565 back buffer; gfx_present() quantises the
  * finished scene with median cut, uploads a 255-colour AGA palette and
@@ -7,7 +7,7 @@
  *
  * No runtime library: no division (hand-rolled shift/subtract udiv and
  * reciprocal multiply), no large static buffers (runtime bump arena in
- * the $90000..$A0000 Chip RAM gap).
+ * the $100000..$110000 Chip RAM gap).
  */
 
 #include "gfx.h"
@@ -15,7 +15,7 @@
 #include "font8x8.h"
 
 #define GW  640
-#define GH  256
+#define GH  512
 
 /* ------------------------------------------------------------------ *
  * Runtime bump arena
@@ -286,6 +286,90 @@ void gfx_disc_a(int cx, int cy, int r, uint16_t c, uint8_t a)
 }
 
 /* ------------------------------------------------------------------ *
+ * Filled triangle
+ *
+ * Three vertices sorted by y, one long edge walked top to bottom and a
+ * short edge either side of the middle vertex.  All three edges are
+ * initialised with a single division and then stepped by addition, so
+ * the scanline loop never divides.
+ * ------------------------------------------------------------------ */
+
+/* 16.16 step per scanline along an edge of dx over dy rows (dy > 0). */
+static int32_t edge_step(int32_t dx, int32_t dy)
+{
+    uint32_t mag;
+    int neg = 0;
+
+    if (dx < 0) {
+        neg = 1;
+        dx = -dx;
+    }
+    mag = udiv32((uint32_t)dx << 16, (uint32_t)dy);
+    if (mag > 0x7FFFFFFFu)
+        mag = 0x7FFFFFFFu;
+    return neg ? -(int32_t)mag : (int32_t)mag;
+}
+
+static void tri_span(int32_t a, int32_t b, int y, uint16_t c)
+{
+    int l, r, i;
+    volatile uint16_t *p;
+
+    if (y < 0 || y >= GH)
+        return;
+    l = (int)((a + 0x8000) >> 16);          /* round to nearest */
+    r = (int)((b + 0x8000) >> 16);
+    if (l > r) {
+        int t = l;
+        l = r;
+        r = t;
+    }
+    if (r < 0 || l >= GW || r < l)
+        return;
+    if (l < 0) l = 0;
+    if (r > GW - 1) r = GW - 1;
+
+    p = BB + (unsigned)y * GW + (unsigned)l;
+    for (i = l; i <= r; i++)
+        p[i - l] = c;
+}
+
+void gfx_tri(int x0, int y0, int x1, int y1, int x2, int y2, uint16_t c)
+{
+    int32_t lx, s1, s2, lstep, d1, d2;
+    int y, t;
+
+    if (y0 > y1) { t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
+    if (y1 > y2) { t = x1; x1 = x2; x2 = t; t = y1; y1 = y2; y2 = t; }
+    if (y0 > y1) { t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
+
+    if (y2 == y0)
+        return;                             /* flat, nothing to fill */
+
+    lstep = edge_step(x2 - x0, y2 - y0);
+    lx    = (int32_t)((uint32_t)x0 << 16);
+
+    if (y1 > y0) {                          /* upper half: v0 -> v1 */
+        d1 = edge_step(x1 - x0, y1 - y0);
+        s1 = (int32_t)((uint32_t)x0 << 16);
+        for (y = y0; y < y1; y++) {
+            tri_span(lx, s1, y, c);
+            lx += lstep;
+            s1 += d1;
+        }
+    }
+    if (y2 > y1) {                          /* lower half: v1 -> v2 */
+        d2 = edge_step(x2 - x1, y2 - y1);
+        s2 = (int32_t)((uint32_t)x1 << 16);
+        for (y = y1; y < y2; y++) {
+            tri_span(lx, s2, y, c);
+            lx += lstep;
+            s2 += d2;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ *
  * 7x7 box blur, in place
  *
  * The region (plus a 3 px margin) is copied into the arena in vertical
@@ -412,11 +496,43 @@ void gfx_text(int x, int y, const char *s, uint16_t c)
     }
 }
 
+void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale)
+{
+    int cx = x;
+
+    if (scale < 1)
+        scale = 1;
+    for (; *s; s++) {
+        unsigned char ch = (unsigned char)*s;
+        int row, col;
+
+        if (ch == '\n') {
+            cx = x;
+            y += 9 * scale;
+            continue;
+        }
+        for (row = 0; row < 8; row++) {
+            unsigned char bits = font8x8[ch][row];
+            if (!bits)
+                continue;
+            for (col = 0; col < 8; col++)
+                if (bits & (0x80u >> col))
+                    gfx_fill(cx + col * scale, y + row * scale,
+                             scale + 1, scale + 1, c);
+        }
+        cx += 8 * scale;
+    }
+}
+
 /* ------------------------------------------------------------------ *
  * Present: median cut -> palette -> planar pack
  * ------------------------------------------------------------------ */
 
 #define NSAMP   12288u
+/* Stride that keeps a full-frame sample inside NSAMP: the raster grew
+ * from 256 to 512 rows, and a fixed stride would only ever reach the
+ * top half of the image (the palette would then ignore the taskbar). */
+#define SAMP_STRIDE (((GW * GH) / (int)NSAMP) + 1)
 #define NPAL    255u                    /* indices 0..254; LUT stores idx+1 */
 
 typedef struct {
@@ -526,8 +642,8 @@ void gfx_present(void)
     if (!samples || !boxes || !pal16 || !pal8)
         return;
 
-    /* stride-14 sample of the image: 11702 samples, ~24 KiB */
-    for (i = 0; i < (uint32_t)(GW * GH) && n < NSAMP; i += 14)
+    /* stride sample of the whole image: ~12100 samples, ~24 KiB */
+    for (i = 0; i < (uint32_t)(GW * GH) && n < NSAMP; i += SAMP_STRIDE)
         samples[n++] = bb[i];
 
     boxes[0].lo = 0;
@@ -619,6 +735,14 @@ void gfx_present(void)
             lut[i] = 0;
     }
 
+    /*
+     * Hold the fetchers while the frame is rewritten.  The palette below
+     * is uploaded first, so with bitplane DMA stopped the display shows
+     * COLOR00 -- slot 0 of the new palette, the wallpaper colour -- for
+     * the whole pack instead of a half-old/half-new scrambled picture.
+     */
+    amiga_display_hold(1);
+
     /* hardware palette */
     for (i = 0; i < npal; i++)
         amiga_set_color((unsigned)i, pal8[i * 3u], pal8[i * 3u + 1],
@@ -650,4 +774,6 @@ void gfx_present(void)
             }
         }
     }
+
+    amiga_display_hold(0);
 }
