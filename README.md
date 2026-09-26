@@ -104,9 +104,9 @@ detection ladder answer with the right model.
 - [x] systemd-style boot log with real hardware probes (CPU/MMU/FPU/memory/RTG)
 - [ ] Chainload delivery from a genuine AmigaOS 3.2.3 boot (bootblock vs.
       `S:Startup-Sequence` hunk executable)
-- [ ] Vista Aero-themed desktop scene: software glass frames over a pre-blurred
-      wallpaper, Vista palette/gradients, window chrome, start orb and gadgets
-      (640×256, 256 colours)
+- [x] Futuristic-clean desktop scene at 640×512: procedural wallpaper with a
+      faded logo watermark, a custom icon set, dark glass windows, dial and
+      monitor gadgets, and a taskbar with the mark-only start orb
 - [ ] Input handling and window management on top of the static scene
 
 ## License
