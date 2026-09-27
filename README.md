@@ -13,7 +13,7 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
   8 bitplanes (256 colours), driven directly by the chipset. No ROM calls, no OS
   underneath.
 - **Linux-style boot console** — a systemd-style detection log with the P1
-  phosphor green (`#33FF33`) palette and italic glyphs:
+  phosphor green (`#33FF33`) palette and an upright 80×32 bitmap console:
 
   ```
   NeoBench 0.1.0 m68k-aga

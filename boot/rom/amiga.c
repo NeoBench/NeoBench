@@ -389,9 +389,10 @@ void amiga_set_fg(unsigned idx)
 /*
  * Set one screen pixel to a planar colour index.
  *
- * The console font is drawn through this instead of whole bytes because the
- * glyphs are sheared (see amiga_putc): a sheared row no longer lines up with
- * a byte boundary, and the horizontal shift is different for every scanline.
+ * The console font is drawn through this instead of whole bytes because each
+ * font row is painted TEXT_YS times to stretch the 8x8 font over the 8x16
+ * cell, and because the cell has to be erased before it is inked.  Keeping
+ * erase and ink on one path means a repaint cannot leave a stale pixel.
  */
 static void fb_pixel(uint32_t x, uint32_t y, uint8_t idx)
 {
@@ -417,12 +418,8 @@ static void fb_pixel(uint32_t x, uint32_t y, uint8_t idx)
  * Draw one character to the console and mirror it to the serial port, so
  * boot progress is observable without needing a screenshot.
  *
- * Glyphs are rendered in italics: each scanline is shifted right by two
- * pixels at the cap height down to zero at the baseline (7-i)/3, the classic
- * bitmap-font shear.  Each row's cell is erased first, using exactly the
- * sheared footprint of that row, so a repaint clears the old glyph without
- * ever clipping the shear of the neighbouring cell (neighbour shear pixels
- * always land outside the footprint).
+ * Glyphs are drawn upright.  The cell is erased first, so a repaint clears
+ * the old glyph and cannot disturb the neighbouring cell.
  *
  * The raster is 512 lines but the console keeps its 80x32 grid, so each
  * font row is painted twice: the cell is 8x16 and the 8x8 font is
@@ -464,10 +461,6 @@ void amiga_putc(char c)
 
         for (i = 0; i < 8; i++)
         {
-            /* Shear per scanline: 2 px at the cap height, 0 at baseline.
-             * Table, not a divide: no libgcc in this freestanding link. */
-            static const uint8_t shear_tab[8] = { 2, 2, 1, 1, 1, 0, 0, 0 };
-            const uint32_t shear = shear_tab[i];
             const uint32_t yl = y0 + i * TEXT_YS;
             uint32_t k, d;
 
@@ -475,7 +468,7 @@ void amiga_putc(char c)
             {
                 /* erase */
                 for (d = 0; d < TEXT_YS; d++)
-                    fb_pixel(x0 + shear + k, yl + d, NB_COL_BLACK);
+                    fb_pixel(x0 + k, yl + d, NB_COL_BLACK);
             }
 
             for (k = 0; k < 8; k++)
@@ -483,7 +476,7 @@ void amiga_putc(char c)
                 if (glyph[i] & (uint8_t)(0x80U >> k))
                 {
                     for (d = 0; d < TEXT_YS; d++)
-                        fb_pixel(x0 + shear + k, yl + d, fg);        /* ink */
+                        fb_pixel(x0 + k, yl + d, fg);               /* ink */
                 }
             }
         }
