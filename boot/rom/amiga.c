@@ -42,7 +42,12 @@
 #define SERDAT      0x030
 #define SERPER      0x032
 #define SERDATR     0x018
+#define JOY0DAT     0x00a
 #define FMODE       0x1fc
+
+/* CIA-A port A, for the mouse buttons: bit 6 is the left button of port 0
+ * and reads low when it is down. */
+#define CIAA_PRA    0x00BFE001UL
 
 /* SERDATR status bits, NDK hardware/custom.i */
 #define SERDATF_TBE   0x2000U            /* transmit buffer empty    */
@@ -159,10 +164,12 @@ extern void nb_vbl_isr(void);
  * dropped on the floor.
  */
 volatile uint32_t nb_secs;
+volatile uint32_t nb_fields;
 static uint8_t nb_field_phase;
 
 void nb_vbl_tick(void)
 {
+    nb_fields++;
     if (++nb_field_phase >= 50U)
     {
         nb_field_phase = 0;
@@ -269,13 +276,15 @@ void amiga_display_init(void)
     REG16(BPLCON1) = 0x0000;
     REG16(BPLCON2) = 0x0000;
 
-    /* Console palette: black ground, phosphor green, and the two status
-     * colours the boot self-test reports with. */
+    /* Console palette: black ground, phosphor green, the two status
+     * colours the boot self-test reports with, and the dim grey a queued
+     * job is written in. */
     amiga_set_color(NB_COL_BLACK, 0x00, 0x00, 0x00);
     amiga_set_color(NB_COL_GREEN, 0x33, 0xff, 0x33);
     amiga_set_color(NB_COL_RED,   0xff, 0x50, 0x40);
     amiga_set_color(NB_COL_AMBER, 0xff, 0xb0, 0x00);
     amiga_set_color(NB_COL_WHITE, 0xe8, 0xf0, 0xf8);
+    amiga_set_color(NB_COL_GREY,  0x5f, 0x6a, 0x74);
 
     SCRATCH_COL = 0;
     SCRATCH_ROW = 0;
@@ -299,6 +308,14 @@ int amiga_display_ready(void)
 }
 
 /*
+ * Shadow of the hardware palette: 256 RGB triples plus an upload counter.
+ * Both are plain .bss -- zeroed by boot.S, no initializer to land in .data
+ * and be dropped by the ROM mapping.
+ */
+static uint8_t  nb_pal_rgb[256][3];
+static unsigned nb_pal_epoch;
+
+/*
  * Write one of the AGA's 256 hardware palette entries at full 8-bit depth.
  *
  * Denise keeps eight banks of 32 registers. BPLCON3 bits 15..13 select the
@@ -313,6 +330,9 @@ void amiga_set_color(unsigned idx, uint8_t r, uint8_t g, uint8_t b)
     const unsigned num  = idx & 31U;
     const uint16_t reg  = (uint16_t)(COLOR00 + num * 2U);
 
+    if (idx > 255u)
+        return;
+
     REG16(BPLCON3) = (uint16_t)(bank << 13);
     REG16(reg) = (uint16_t)(((uint16_t)(r >> 4) << 8) |
                             ((uint16_t)(g >> 4) << 4) | (b >> 4));
@@ -320,6 +340,32 @@ void amiga_set_color(unsigned idx, uint8_t r, uint8_t g, uint8_t b)
     REG16(BPLCON3) = (uint16_t)((bank << 13) | 0x0200U);
     REG16(reg) = (uint16_t)(((uint16_t)(r & 15U) << 8) |
                             ((uint16_t)(g & 15U) << 4) | (b & 15U));
+
+    /*
+     * The palette is write-only in hardware, so keep a copy.  Anything
+     * that has to *find* a colour in the live palette -- the pointer
+     * picking its fill out of whatever the quantiser produced -- can only
+     * ask the copy.  The epoch counts uploads, which is the signal that
+     * the copy has changed underneath a cached answer.
+     */
+    nb_pal_rgb[idx][0] = r;
+    nb_pal_rgb[idx][1] = g;
+    nb_pal_rgb[idx][2] = b;
+    nb_pal_epoch++;
+}
+
+void amiga_get_color(unsigned idx, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    if (idx > 255u)
+        idx = 0;
+    *r = nb_pal_rgb[idx][0];
+    *g = nb_pal_rgb[idx][1];
+    *b = nb_pal_rgb[idx][2];
+}
+
+unsigned amiga_pal_epoch(void)
+{
+    return nb_pal_epoch;
 }
 
 void amiga_display_clear(void)
@@ -381,6 +427,90 @@ void amiga_display_hold(int hold)
  * chooses which of those entries the next characters use, so the boot
  * self-test can report ok/fail/warning in green/red/amber on one screen.
  */
+static void fb_pixel(uint32_t x, uint32_t y, uint8_t idx);
+
+/*
+ * Public forms of the pixel path.
+ *
+ * amiga_fb_pixel() is for overlays that draw straight onto the planar
+ * frame buffer without owning any memory: the pointer borrows the frame
+ * under it and hands it back when it moves.  amiga_fb_get() reads an
+ * index back out, which is how that borrowing is undone -- the eight
+ * planes are reassembled into the colour that was there before.
+ */
+void amiga_fb_pixel(uint32_t x, uint32_t y, uint8_t idx)
+{
+    fb_pixel(x, y, idx);
+}
+
+uint8_t amiga_fb_get(uint32_t x, uint32_t y)
+{
+    uint32_t p;
+    uint8_t idx = 0;
+
+    if (x >= (uint32_t)TEXT_COLS * 8UL || y >= FB_ROWS)
+        return 0;
+
+    for (p = 0; p < FB_PLANES; p++)
+    {
+        const uint8_t *src = (const uint8_t *)(FRAMEBUF + p * FB_PLANE)
+                             + y * FB_PITCH + (x >> 3);
+
+        if (*src & (uint8_t)(0x80U >> (x & 7U)))
+            idx |= (uint8_t)(1U << p);
+    }
+    return idx;
+}
+
+/*
+ * Read the mouse: how far the counters turned since the last call, and
+ * which buttons are down.
+ *
+ * JOY0DAT carries two 8-bit quadrature counters, one per axis, which
+ * wrap at 256 -- so the answer is always a wrapped difference, never a
+ * position.  The buttons are on CIA-A PRA6 (left) and PRA7 (right),
+ * both active low, and both are reported as a mask so the desktop can
+ * tell one from the other.  A first call only latches the counters:
+ * there is no motion to report against yet.
+ */
+void amiga_mouse_poll(int *dx, int *dy, int *btn)
+{
+    static uint16_t prev;
+    static int seeded;
+    uint16_t j = REG16(JOY0DAT);
+    int now_x = (int)(j & 0xffu);
+    int now_y = (int)((j >> 8) & 0xffu);
+
+    if (!seeded)
+    {
+        prev = j;
+        seeded = 1;
+        *dx = 0;
+        *dy = 0;
+    }
+    else
+    {
+        int d;
+
+        d = (now_x - (int)(prev & 0xffu)) & 0xff;
+        *dx = (d & 0x80) ? d - 256 : d;
+        d = (now_y - (int)((prev >> 8) & 0xffu)) & 0xff;
+        *dy = (d & 0x80) ? d - 256 : d;
+        prev = j;
+    }
+
+    {
+        uint8_t pra = *(volatile uint8_t *)CIAA_PRA;
+        int m = 0;
+
+        if (!(pra & 0x40u))             /* PRA6: left, active low         */
+            m |= NB_BTN_L;
+        if (!(pra & 0x80u))             /* PRA7: right, active low        */
+            m |= NB_BTN_R;
+        *btn = m;
+    }
+}
+
 void amiga_set_fg(unsigned idx)
 {
     SCRATCH_FG = (uint8_t)idx;

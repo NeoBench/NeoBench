@@ -2,7 +2,7 @@
  * gfx.c - software compositor for the NeoBench desktop.
  *
  * Drawing happens in an RGB565 back buffer; gfx_present() quantises the
- * finished scene with median cut, uploads a 255-colour AGA palette and
+ * finished scene with median cut, uploads a 64-colour AGA palette and
  * bitplanes the result into the hardware frame buffer.
  *
  * No runtime library: no division (hand-rolled shift/subtract udiv and
@@ -13,6 +13,7 @@
 #include "gfx.h"
 #include "amiga.h"
 #include "font8x8.h"
+#include "fontxen9.h"
 
 #define GW  640
 #define GH  512
@@ -101,6 +102,45 @@ static int corner_ok(int px, int py, int x, int y, int w, int h, int r)
     return dx * dx + dy * dy <= r * r;
 }
 
+/* ------------------------------------------------------------------ *
+ * Row band
+ *
+ * A repaint that changes one window still used to redraw the whole
+ * raster: every glow, the gradient, the taskbar's blur, and then every
+ * row of the pack.  The scene above the change is already sitting in
+ * the back buffer and is identical row for row, so nothing outside the
+ * changed rows has to be touched at all.
+ *
+ * gfx_band(y0, y1) narrows drawing *and* packing to those rows; every
+ * primitive respects it, which is what makes the result pixel for pixel
+ * the same as a full pass would have produced.  gfx_band_all() puts the
+ * whole raster back -- the state a fresh boot starts in, since the flag
+ * comes out of cleared .bss.
+ * ------------------------------------------------------------------ */
+static int band_on, band_y0, band_y1;
+
+void gfx_band(int y0, int y1)
+{
+    if (y0 < 0) y0 = 0;
+    if (y1 > GH) y1 = GH;
+    if (y1 < y0) y1 = y0;
+    band_y0 = y0;
+    band_y1 = y1;
+    band_on = 1;
+}
+
+void gfx_band_all(void)
+{
+    band_on = 0;
+    band_y0 = 0;
+    band_y1 = 0;
+}
+
+static int band_ok(int y)
+{
+    return !band_on || (y >= band_y0 && y < band_y1);
+}
+
 /* Clamp a rect against the screen; returns 0 when empty. */
 static int clip(int *x, int *y, int *w, int *h)
 {
@@ -110,6 +150,13 @@ static int clip(int *x, int *y, int *w, int *h)
     if (*y < 0) { *h += *y; *y = 0; }
     if (*x + *w > GW) *w = GW - *x;
     if (*y + *h > GH) *h = GH - *y;
+    if (band_on) {                      /* and then against the band   */
+        int y1 = *y + *h;
+
+        if (*y < band_y0) *y = band_y0;
+        if (y1 > band_y1) y1 = band_y1;
+        *h = y1 - *y;
+    }
     return (*w > 0 && *h > 0);
 }
 
@@ -120,6 +167,8 @@ static int clip(int *x, int *y, int *w, int *h)
 void gfx_pixel(int x, int y, uint16_t c)
 {
     if (x < 0 || y < 0 || x >= GW || y >= GH)
+        return;
+    if (!band_ok(y))
         return;
     BB[(unsigned)y * GW + (unsigned)x] = c;
 }
@@ -253,7 +302,7 @@ static void disc_common(int cx, int cy, int r, uint16_t c, uint8_t a, int do_alp
 
     for (dy = -r; dy <= r; dy++) {
         int y = cy + dy;
-        if (y < 0 || y >= GH)
+        if (y < 0 || y >= GH || !band_ok(y))
             continue;
         for (dx = -r; dx <= r; dx++) {
             int x = cx + dx;
@@ -315,7 +364,7 @@ static void tri_span(int32_t a, int32_t b, int y, uint16_t c)
     int l, r, i;
     volatile uint16_t *p;
 
-    if (y < 0 || y >= GH)
+    if (y < 0 || y >= GH || !band_ok(y))
         return;
     l = (int)((a + 0x8000) >> 16);          /* round to nearest */
     r = (int)((b + 0x8000) >> 16);
@@ -372,9 +421,17 @@ void gfx_tri(int x0, int y0, int x1, int y1, int x2, int y2, uint16_t c)
 /* ------------------------------------------------------------------ *
  * 7x7 box blur, in place
  *
- * The region (plus a 3 px margin) is copied into the arena in vertical
- * stripes, blurred out of the copy and written back, so arbitrarily
- * tall panels fit in the 64 KiB arena.
+ * A box blur is separable: the forty-nine samples the window asks for
+ * are two runs of seven -- a horizontal sum down each row, then a
+ * vertical sum of those across each pixel.  Both runs are kept as a
+ * running sum, so a step costs the sample entering the window minus
+ * the one leaving it (clamped to the region, as the old per-sample
+ * test did) rather than seven reads and seven tests.  The sums are
+ * plain integers, so what comes out is the same picture the direct
+ * window painted, only quicker.
+ *
+ * The region (plus a 3 px margin) is held in vertical stripes, so
+ * arbitrarily tall panels fit in the 64 KiB arena.
  * ------------------------------------------------------------------ */
 
 void gfx_blur(int x, int y, int w, int h)
@@ -395,9 +452,9 @@ void gfx_blur(int x, int y, int w, int h)
     save = nb_arena;
     for (ox = x; ox < x + w; ) {
         uint32_t avail = NB_ARENA_END - nb_arena;
-        uint32_t maxw = avail / (uint32_t)(sh * 2);
-        int cs, ce, cw, i, j, px, py;
-        uint16_t *buf;
+        uint32_t maxw = avail / (uint32_t)(sh * 6u);
+        int cs, ce, cw, n, j, px, py;
+        uint16_t *hs;
 
         if (maxw > (uint32_t)(2 * m))
             maxw -= (uint32_t)(2 * m);
@@ -410,44 +467,95 @@ void gfx_blur(int x, int y, int w, int h)
 
         cs = ox - m; if (cs < sx) cs = sx;
         ce = ox + cw + m; if (ce > ex) ce = ex;
+        n = ce - cs;
 
-        buf = (uint16_t *)arena_get((uint32_t)(ce - cs) * (uint32_t)sh * 2u);
-        if (!buf)
+        /* three channel sums a pixel, six bytes each */
+        hs = (uint16_t *)arena_get((uint32_t)n * (uint32_t)sh * 6u);
+        if (!hs)
             break;
 
-        /* copy source stripe (margin included) */
+        /*
+         * Horizontal, straight out of the back buffer and into the
+         * sums: one running total a row.  Each step takes the sample
+         * entering the window and drops the one leaving it, clamped to
+         * the stripe exactly as the per-sample test used to clamp it
+         * -- seven reads become two, and the sum stays the same exact
+         * integer it was.
+         */
         for (j = 0; j < sh; j++) {
-            const volatile uint16_t *src =
+            const volatile uint16_t *s =
                 BB + (unsigned)(sy + j) * GW + (unsigned)cs;
-            uint16_t *dst = buf + (uint32_t)j * (uint32_t)(ce - cs);
-            for (i = 0; i < ce - cs; i++)
-                dst[i] = src[i];
+            uint16_t *h = hs + (uint32_t)j * (uint32_t)n * 3u;
+            unsigned r = 0, g = 0, b = 0;
+            int t, d;
+
+            for (d = -m; d <= m; d++) {         /* the window at t = 0   */
+                int xx = d;
+                unsigned p;
+
+                if (xx < 0) xx = 0;
+                if (xx > n - 1) xx = n - 1;
+                p = s[xx];
+                r += (p >> 11) & 31;
+                g += (p >> 5) & 63;
+                b += p & 31;
+            }
+            h[0] = (uint16_t)r;
+            h[1] = (uint16_t)g;
+            h[2] = (uint16_t)b;
+
+            for (t = 1; t < n; t++) {           /* and one step on each  */
+                int in = t + m, out = t - m - 1;
+                unsigned p;
+
+                if (in > n - 1) in = n - 1;
+                if (out < 0) out = 0;
+
+                p = s[in];
+                r += (p >> 11) & 31;
+                g += (p >> 5) & 63;
+                b += p & 31;
+                p = s[out];
+                r -= (p >> 11) & 31;
+                g -= (p >> 5) & 63;
+                b -= p & 31;
+
+                h[t * 3 + 0] = (uint16_t)r;
+                h[t * 3 + 1] = (uint16_t)g;
+                h[t * 3 + 2] = (uint16_t)b;
+            }
         }
 
-        /* blur the stripe's share of the region */
+        /*
+         * Vertical, out of the sums and back into the picture.  The
+         * seven rows a pixel draws on are the same for a whole scan
+         * line, so they are worked out once above the column loop and
+         * only the column moves.
+         */
         for (py = y; py < y + h; py++) {
             volatile uint16_t *op = BB + (unsigned)py * GW + (unsigned)ox;
-            for (px = 0; px < cw; px++) {
-                int x0 = ox + px;
-                unsigned sr = 0, sg = 0, sb = 0;
-                int ddx, ddy;
+            int yy = py - sy;
+            const uint16_t *rb[7];
+            int d;
 
-                for (ddy = -m; ddy <= m; ddy++) {
-                    int yy = py + ddy;
-                    const uint16_t *row;
-                    if (yy < sy) yy = sy;
-                    if (yy > ey - 1) yy = ey - 1;
-                    row = buf + (uint32_t)(yy - sy) * (uint32_t)(ce - cs);
-                    for (ddx = -m; ddx <= m; ddx++) {
-                        int xx = x0 + ddx;
-                        unsigned s;
-                        if (xx < cs) xx = cs;
-                        if (xx > ce - 1) xx = ce - 1;
-                        s = row[xx - cs];
-                        sr += (s >> 11) & 31;
-                        sg += (s >> 5) & 63;
-                        sb += s & 31;
-                    }
+            for (d = 0; d <= 2 * m; d++) {
+                int rr = yy - m + d;
+
+                if (rr < 0) rr = 0;
+                if (rr > sh - 1) rr = sh - 1;
+                rb[d] = hs + (uint32_t)rr * (uint32_t)n * 3u;
+            }
+
+            for (px = 0; px < cw; px++) {
+                const uint32_t col = (uint32_t)(ox + px - cs) * 3u;
+                unsigned sr = 0, sg = 0, sb = 0;
+
+                for (d = 0; d <= 2 * m; d++) {
+                    const uint16_t *q = rb[d] + col;
+
+                    sr += q[0];
+                    sg += q[1];
+                    sb += q[2];
                 }
                 /* /49: (sum * 334) >> 14  (334/16384 ~= 1/49) */
                 sr = (sr * 334u) >> 14;
@@ -470,25 +578,65 @@ void gfx_blur(int x, int y, int w, int h)
  * Text
  * ------------------------------------------------------------------ */
 
+/*
+ * The face in use.  Xen is NB_FONT_XEN, zero, and .bss starts zeroed,
+ * so the boot console is already setting type in Xen before Config/ has
+ * been read; a file can then move the selection to the console face or
+ * back again.  No initializer here: .data is write-only ROM.
+ */
+static int cur_font;
+
+void gfx_font(int face)
+{
+    cur_font = (face == NB_FONT_SYS) ? NB_FONT_SYS : NB_FONT_XEN;
+}
+
+int gfx_font_id(void)
+{
+    return cur_font;
+}
+
+int gfx_font_h(void)
+{
+    return (cur_font == NB_FONT_SYS) ? 8 : NB_XEN_H;
+}
+
+/* The nine (or eight) row bitmap of one character, with anything
+ * outside the face's range falling back to the hollow block. */
+static const unsigned char *glyph_rows(unsigned char ch, int *rows)
+{
+    if (cur_font == NB_FONT_SYS)
+    {
+        *rows = 8;
+        return font8x8[ch];
+    }
+    *rows = NB_XEN_H;
+    if (ch < NB_XEN_FIRST || ch > NB_XEN_LAST)
+        ch = (unsigned char)(NB_XEN_FIRST + NB_XEN_BOX);
+    return fontxen9[ch - NB_XEN_FIRST];
+}
+
 void gfx_text(int x, int y, const char *s, uint16_t c)
 {
     int cx = x;
 
     for (; *s; s++) {
         unsigned char ch = (unsigned char)*s;
-        int row, col;
+        int row, col, rows;
+        const unsigned char *bits;
 
         if (ch == '\n') {
             cx = x;
             y += 9;
             continue;
         }
-        for (row = 0; row < 8; row++) {
-            unsigned char bits = font8x8[ch][row];
-            if (!bits)
+        bits = glyph_rows(ch, &rows);
+        for (row = 0; row < rows; row++) {
+            unsigned char b = bits[row];
+            if (!b)
                 continue;
             for (col = 0; col < 8; col++) {
-                if (bits & (0x80u >> col))
+                if (b & (0x80u >> col))
                     gfx_pixel(cx + col, y + row, c);
             }
         }
@@ -504,19 +652,21 @@ void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale)
         scale = 1;
     for (; *s; s++) {
         unsigned char ch = (unsigned char)*s;
-        int row, col;
+        int row, col, rows;
+        const unsigned char *bits;
 
         if (ch == '\n') {
             cx = x;
             y += 9 * scale;
             continue;
         }
-        for (row = 0; row < 8; row++) {
-            unsigned char bits = font8x8[ch][row];
-            if (!bits)
+        bits = glyph_rows(ch, &rows);
+        for (row = 0; row < rows; row++) {
+            unsigned char b = bits[row];
+            if (!b)
                 continue;
             for (col = 0; col < 8; col++)
-                if (bits & (0x80u >> col))
+                if (b & (0x80u >> col))
                     gfx_fill(cx + col * scale, y + row * scale,
                              scale + 1, scale + 1, c);
         }
@@ -533,11 +683,64 @@ void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale)
  * from 256 to 512 rows, and a fixed stride would only ever reach the
  * top half of the image (the palette would then ignore the taskbar). */
 #define SAMP_STRIDE (((GW * GH) / (int)NSAMP) + 1)
-#define NPAL    255u                    /* indices 0..254; LUT stores idx+1 */
+#define NPAL    64u                     /* indices 0..63; LUT stores idx+1 */
 
+/*
+ * A box carries the extent it was born with.
+ *
+ * The first version of this pass recomputed the extent of *every* box on
+ * *every* iteration -- 255 trips over all 12288 samples, which is where
+ * nearly all of a present's time went -- but a box's extent cannot
+ * change once it exists: only a split makes a new range, and a split
+ * makes both halves of it at the same time.  Scanning samples is now
+ * something that happens to the one box being cut.
+ */
 typedef struct {
     uint32_t lo, hi;
+    int rmin, rmax, gmin, gmax, bmin, bmax;
 } nb_box_t;
+
+static void box_extent(nb_box_t *b, const uint16_t *samples)
+{
+    uint32_t k;
+    int rmin = 31, rmax = 0, gmin = 63, gmax = 0, bmin = 31, bmax = 0;
+
+    for (k = b->lo; k < b->hi; k++) {
+        uint16_t s = samples[k];
+        int r = (s >> 11) & 31, g = (s >> 5) & 63, b = s & 31;
+
+        if (r < rmin) rmin = r;
+        if (r > rmax) rmax = r;
+        if (g < gmin) gmin = g;
+        if (g > gmax) gmax = g;
+        if (b < bmin) bmin = b;
+        if (b > bmax) bmax = b;
+    }
+    b->rmin = rmin; b->rmax = rmax;
+    b->gmin = gmin; b->gmax = gmax;
+    b->bmin = bmin; b->bmax = bmax;
+}
+
+/* The split score: weighted volume in ~8-bit units, and the channel to
+ * cut it on -- the same arithmetic the old inner loop derived from the
+ * samples each time round, read out of the box instead. */
+static uint32_t box_score(const nb_box_t *b, int *chp)
+{
+    int er, eg, eb, ch = 0;
+
+    if (b->hi - b->lo < 2)
+        return 0;
+    er = b->rmax - b->rmin;
+    eg = b->gmax - b->gmin;
+    eb = b->bmax - b->bmin;
+    if (eg * 4 >= er * 8 && eg * 4 >= eb * 8)
+        ch = 1;
+    else if (eb * 8 >= er * 8)
+        ch = 2;
+    *chp = ch;
+    return (uint32_t)(er * 8 + 1) * (uint32_t)(eg * 4 + 1) *
+           (uint32_t)(eb * 8 + 1);
+}
 
 /* channel key of a 5-6-5 sample: r5, g6, b5 */
 static int skey(uint16_t s, int ch)
@@ -587,9 +790,15 @@ static void sort_range(uint16_t *a, uint32_t lo, uint32_t hi, int ch)
 }
 
 /* nearest palette colour for a 5-6-5 pixel, cached in a 15-bit LUT
- * (0 = uncomputed, stored value = palette index + 1) */
+ * (0 = uncomputed, stored value = palette index + 1)
+ *
+ * pd, when asked for, is the distance the answer came out at.  A cache
+ * hit reports zero: that entry was written against this same palette
+ * and was accepted when it was written, so what it cost has not
+ * changed -- which is what lets a present measure only its own new
+ * colours. */
 static uint8_t map15(uint16_t px, const uint16_t *pal, unsigned npal,
-                     uint8_t *lut)
+                     uint8_t *lut, unsigned *pd)
 {
     unsigned key = (((unsigned)(px >> 11) & 31u) << 10) |
                    (((unsigned)(px >> 6) & 31u) << 5) |
@@ -597,8 +806,11 @@ static uint8_t map15(uint16_t px, const uint16_t *pal, unsigned npal,
     unsigned r = (px >> 11) & 31, g = (px >> 5) & 63, b = px & 31;
     unsigned i, best = 0, bestd = 0xFFFFFFFFu;
 
-    if (lut && lut[key])
+    if (lut && lut[key]) {
+        if (pd)
+            *pd = 0;
         return (uint8_t)(lut[key] - 1);
+    }
 
     for (i = 0; i < npal; i++) {
         unsigned p = pal[i];
@@ -618,162 +830,294 @@ static uint8_t map15(uint16_t px, const uint16_t *pal, unsigned npal,
                 break;
         }
     }
+    if (pd)
+        *pd = bestd;
     if (lut)
         lut[key] = (uint8_t)(best + 1);
     return (uint8_t)best;
 }
 
+/*
+ * The palette, and the map of the frame onto it, both survive between
+ * presents.
+ *
+ * The scene is rebuilt out of the same handful of colours most of the
+ * time -- opening a window adds a few blends of teal over wallpaper, not
+ * a new colour family -- so a cut taken over one frame is still a good
+ * cut over the next.  And the 15-bit map is worth far more warm than the
+ * cut it saves: every colour it has not seen costs a 255-entry search,
+ * and a scene has thousands of distinct colours in it.
+ *
+ * PAL_FAR is how far a colour may land from that palette before the
+ * shortcut stops being true and a fresh cut is due.  The metric is the
+ * search's own -- red and blue squared against green squared, so a whole
+ * step of green counts for a quarter of a step of red.
+ */
+#define PAL_FAR  1024u
+
+static uint16_t pal_keep16[NPAL];
+static uint8_t  pal_keep8[NPAL * 3u];
+static unsigned npal_keep;              /* 0 until the first cut        */
+static unsigned pal_serial;             /* bumped by every cut          */
+static uint8_t  lut[32768u];            /* key -> palette index + 1     */
+static unsigned lut_serial;             /* the cut the map belongs to   */
+static int      pack0, pack1;           /* rows the last pack rewrote   */
+
+/* ------------------------------------------------------------------ *
+ * Development read-out: how long the last present took
+ *
+ * nb_fields is bumped by the vertical blank handler, which keeps
+ * running while gfx_present() has the CPU, so a before/after pair
+ * around the body measures the repaint in whole fields (20 ms each).
+ * Nothing is printed when a present fits inside one field: after the
+ * band work below that is the normal answer, and the line that does
+ * appear is then the interesting one.
+ * ------------------------------------------------------------------ */
+static void ser_num(uint32_t v)
+{
+    char b[12];
+    int i = 12;
+
+    do {
+        b[--i] = (char)('0' + (int)(v % 10u));     /* constant divisor */
+        v /= 10u;
+    } while (v && i);
+    for (; i < 12; i++)
+        amiga_serial_putc(b[i]);
+}
+
+static void ser_s(const char *s)
+{
+    while (*s)
+        amiga_serial_putc(*s++);
+}
+
+static void present_report(uint32_t f, unsigned cut, unsigned worst)
+{
+    ser_s(">present f=");
+    ser_num(f);
+    ser_s(" cut=");
+    ser_num(cut);
+    ser_s(" w=");
+    ser_num(worst);
+    amiga_serial_putc('\r');
+    amiga_serial_putc('\n');
+}
+
 void gfx_present(void)
 {
     const volatile uint16_t *bb = BB;
+    const uint32_t f0 = nb_fields;
     uint16_t *samples;
     nb_box_t *boxes;
-    uint16_t *pal16;
-    uint8_t *pal8, *lut;
+    uint16_t *pal16 = pal_keep16;
+    uint8_t *pal8 = pal_keep8;
     uint32_t n = 0, i, nbox = 1;
-    unsigned npal;
+    unsigned npal = 0, pass, worst = 0, cut = 0;
 
     gfx_init();                         /* full arena for the quantiser */
 
     samples = (uint16_t *)arena_get(NSAMP * 2u);
-    boxes   = (nb_box_t *)arena_get(256u * sizeof(nb_box_t));
-    pal16   = (uint16_t *)arena_get(NPAL * 2u);
-    pal8    = (uint8_t *)arena_get(NPAL * 3u);
-    if (!samples || !boxes || !pal16 || !pal8)
+    boxes   = (nb_box_t *)arena_get((uint32_t)NPAL * sizeof(nb_box_t));
+    if (!samples || !boxes)
         return;
 
     /* stride sample of the whole image: ~12100 samples, ~24 KiB */
     for (i = 0; i < (uint32_t)(GW * GH) && n < NSAMP; i += SAMP_STRIDE)
         samples[n++] = bb[i];
 
-    boxes[0].lo = 0;
-    boxes[0].hi = n;
-
-    /* median cut */
-    while (nbox < NPAL) {
-        uint32_t best = nbox, bestv = 0;
-        int bestch = 0;
-
-        for (i = 0; i < nbox; i++) {
-            uint32_t lo = boxes[i].lo, hi = boxes[i].hi, k;
-            int rmin = 31, rmax = 0, gmin = 63, gmax = 0, bmin = 31, bmax = 0;
-            int er, eg, eb, ch;
-            uint32_t v;
-
-            if (hi - lo < 2)
-                continue;
-            for (k = lo; k < hi; k++) {
-                uint16_t s = samples[k];
-                int r = (s >> 11) & 31, g = (s >> 5) & 63, b = s & 31;
-                if (r < rmin) rmin = r;
-                if (r > rmax) rmax = r;
-                if (g < gmin) gmin = g;
-                if (g > gmax) gmax = g;
-                if (b < bmin) bmin = b;
-                if (b > bmax) bmax = b;
-            }
-            er = rmax - rmin;
-            eg = gmax - gmin;
-            eb = bmax - bmin;
-            /* scale to ~8-bit units for a fair "widest channel" pick */
-            ch = 0;
-            if (eg * 4 >= er * 8 && eg * 4 >= eb * 8)
-                ch = 1;
-            else if (eb * 8 >= er * 8)
-                ch = 2;
-            v = (uint32_t)(er * 8 + 1) * (uint32_t)(eg * 4 + 1) *
-                (uint32_t)(eb * 8 + 1);
-            if (v > bestv) {
-                bestv = v;
-                best = i;
-                bestch = ch;
-            }
-        }
-        if (best >= nbox || bestv <= 1)
-            break;                      /* nothing left to split */
-
-        sort_range(samples, boxes[best].lo, boxes[best].hi, bestch);
-        {
-            uint32_t lo = boxes[best].lo, hi = boxes[best].hi;
-            uint32_t mid = lo + (hi - lo) / 2;
-
-            boxes[nbox].lo = mid;
-            boxes[nbox].hi = hi;
-            boxes[best].hi = mid;
-            nbox++;
-        }
-    }
-
-    /* representative colour = median member of each box */
-    npal = 0;
-    for (i = 0; i < nbox && npal < NPAL; i++) {
-        uint32_t lo = boxes[i].lo, hi = boxes[i].hi;
-        uint16_t s;
-        unsigned r, g, b;
-
-        if (hi == lo)
-            continue;
-        s = samples[lo + (hi - lo) / 2];
-        r = (s >> 11) & 31;
-        g = (s >> 5) & 63;
-        b = s & 31;
-        pal16[npal] = (uint16_t)((r << 11) | (g << 5) | b);
-        pal8[npal * 3u]     = (uint8_t)((r << 3) | (r >> 2));   /* expand */
-        pal8[npal * 3u + 1] = (uint8_t)((g << 2) | (g >> 4));
-        pal8[npal * 3u + 2] = (uint8_t)((b << 3) | (b >> 2));
-        npal++;
-    }
-    if (npal == 0) {
-        pal16[0] = 0;
-        npal = 1;
-    }
-
-    /* 15-bit nearest-colour cache */
-    lut = (uint8_t *)arena_get(32768u);
-    if (lut) {
-        for (i = 0; i < 32768u; i++)
-            lut[i] = 0;
-    }
-
     /*
-     * Hold the fetchers while the frame is rewritten.  The palette below
-     * is uploaded first, so with bitplane DMA stopped the display shows
-     * COLOR00 -- slot 0 of the new palette, the wallpaper colour -- for
-     * the whole pack instead of a half-old/half-new scrambled picture.
+     * At most three goes.  The first takes the palette on offer -- a
+     * probe through the warm map, where the samples it has not seen cost
+     * exactly the search the pack would have paid for anyway -- and
+     * packs.  If that pack trips over a colour the sample stride
+     * stepped over and the colour is a long way from the palette, cut
+     * again and pack once more.  One retry is the ordinary worst case;
+     * two would mean the scene really did change colour family.
      */
-    amiga_display_hold(1);
+    for (pass = 0; pass < 3u; pass++) {
+        int recut = 0;
 
-    /* hardware palette */
-    for (i = 0; i < npal; i++)
-        amiga_set_color((unsigned)i, pal8[i * 3u], pal8[i * 3u + 1],
-                        pal8[i * 3u + 2]);
-    for (; i < 256u; i++)
-        amiga_set_color((unsigned)i, 0, 0, 0);
+        if (npal_keep == 0) {
+            recut = 1;
+        } else if (pass == 0) {
+            npal = npal_keep;
+            worst = 0;
+            for (i = 0; i < n; i++) {
+                unsigned d;
 
-    /* planar pack: 8 pixels -> one byte per plane */
-    for (i = 0; i < (uint32_t)GH; i++) {
-        const volatile uint16_t *row = bb + i * (uint32_t)GW;
-        uint32_t bx;
-
-        for (bx = 0; bx < (uint32_t)(GW / 8); bx++) {
-            uint8_t idx[8];
-            unsigned p, k;
-            uint32_t px = bx * 8u;
-
-            for (k = 0; k < 8; k++)
-                idx[k] = map15(row[px + k], pal16, npal, lut);
-            for (p = 0; p < 8; p++) {
-                unsigned byte = 0;
-                volatile uint8_t *dst;
-                for (k = 0; k < 8; k++)
-                    byte = (byte << 1) | ((idx[k] >> p) & 1u);
-                dst = (volatile uint8_t *)(uintptr_t)(
-                    NB_FB_BASE + (uint32_t)p * NB_PLANE_SIZE +
-                    i * NB_PLANE_PITCH + bx);
-                *dst = (uint8_t)byte;
+                (void)map15(samples[i], pal16, npal, lut, &d);
+                if (d > worst) worst = d;
             }
+            if (worst > PAL_FAR)
+                recut = 1;
+        } else {
+            recut = 1;                  /* the pack found a stray colour */
         }
+
+        if (recut) {
+            boxes[0].lo = 0;
+            boxes[0].hi = n;
+            box_extent(&boxes[0], samples);
+
+            /* median cut */
+            nbox = 1;
+            while (nbox < NPAL) {
+                uint32_t best = nbox, bestv = 0;
+                int bestch = 0;
+
+                for (i = 0; i < nbox; i++) {
+                    int ch;
+                    uint32_t v = box_score(&boxes[i], &ch);
+
+                    if (v > bestv) {
+                        bestv = v;
+                        best = i;
+                        bestch = ch;
+                    }
+                }
+                if (best >= nbox || bestv <= 1)
+                    break;              /* nothing left to split */
+
+                sort_range(samples, boxes[best].lo, boxes[best].hi,
+                           bestch);
+                {
+                    uint32_t lo = boxes[best].lo, hi = boxes[best].hi;
+                    uint32_t mid = lo + (hi - lo) / 2;
+
+                    boxes[nbox].lo = mid;
+                    boxes[nbox].hi = hi;
+                    box_extent(&boxes[nbox], samples);
+                    boxes[best].hi = mid;
+                    box_extent(&boxes[best], samples);
+                    nbox++;
+                }
+            }
+
+            /* representative colour = median member of each box */
+            npal = 0;
+            for (i = 0; i < nbox && npal < NPAL; i++) {
+                uint32_t lo = boxes[i].lo, hi = boxes[i].hi;
+                uint16_t s;
+                unsigned r, g, b;
+
+                if (hi == lo)
+                    continue;
+                s = samples[lo + (hi - lo) / 2];
+                r = (s >> 11) & 31;
+                g = (s >> 5) & 63;
+                b = s & 31;
+                pal16[npal] = (uint16_t)((r << 11) | (g << 5) | b);
+                pal8[npal * 3u]     = (uint8_t)((r << 3) | (r >> 2));
+                pal8[npal * 3u + 1] = (uint8_t)((g << 2) | (g >> 4));
+                pal8[npal * 3u + 2] = (uint8_t)((b << 3) | (b >> 2));
+                npal++;
+            }
+            if (npal == 0) {
+                pal16[0] = 0;
+                npal = 1;
+            }
+
+            npal_keep = npal;
+            pal_serial++;
+            if (lut_serial != pal_serial) {     /* the map is now stale */
+                for (i = 0; i < 32768u; i++)
+                    lut[i] = 0;
+                lut_serial = pal_serial;
+            }
+            worst = 0;
+            cut = 1;
+        }
+
+        /*
+         * Hold the fetchers while the frame is rewritten.  The palette
+         * goes up first, so with bitplane DMA stopped the display shows
+         * COLOR00 -- slot 0 of the new palette, the wallpaper colour --
+         * for the whole pack instead of a half-old/half-new scrambled
+         * picture.  It is only uploaded when it has actually changed:
+         * the hardware already holds the last one, and a repaint that
+         * keeps the palette keeps the picture continuous too.
+         */
+        amiga_display_hold(1);
+
+        if (cut) {                      /* hardware palette            */
+            for (i = 0; i < npal; i++)
+                amiga_set_color((unsigned)i, pal8[i * 3u],
+                                pal8[i * 3u + 1], pal8[i * 3u + 2]);
+            for (; i < 256u; i++)
+                amiga_set_color((unsigned)i, 0, 0, 0);
+        }
+
+        /* planar pack: 8 pixels -> one byte per plane
+         *
+         * A fresh palette re-colours every index in the frame, so rows
+         * outside the band have to be repacked too or they would be
+         * read through numbers that no longer mean what they did.  That
+         * is what keeps the band an optimisation and never a change of
+         * picture: either the palette stands, and only the band moves,
+         * or it does not, and the whole raster moves with it.
+         */
+        {
+            uint32_t y0 = (cut || !band_on) ? 0 : (uint32_t)band_y0;
+            uint32_t y1 = (cut || !band_on) ? (uint32_t)GH
+                                            : (uint32_t)band_y1;
+
+            for (i = y0; i < y1; i++) {
+                const volatile uint16_t *row = bb + i * (uint32_t)GW;
+                uint32_t bx;
+
+                for (bx = 0; bx < (uint32_t)(GW / 8); bx++) {
+                    uint8_t idx[8];
+                    unsigned p, k;
+                    uint32_t px = bx * 8u;
+
+                    for (k = 0; k < 8; k++) {
+                        unsigned d;
+
+                        idx[k] = map15(row[px + k], pal16, npal, lut, &d);
+                        if (d > worst)
+                            worst = d;
+                    }
+                    for (p = 0; p < 8; p++) {
+                        unsigned byte = 0;
+                        volatile uint8_t *dst;
+                        for (k = 0; k < 8; k++)
+                            byte = (byte << 1) | ((idx[k] >> p) & 1u);
+                        dst = (volatile uint8_t *)(uintptr_t)(
+                            NB_FB_BASE + (uint32_t)p * NB_PLANE_SIZE +
+                            i * NB_PLANE_PITCH + bx);
+                        *dst = (uint8_t)byte;
+                    }
+                }
+            }
+
+            pack0 = (int)y0;
+            pack1 = (int)y1;
+        }
+
+        amiga_display_hold(0);
+
+        if (worst <= PAL_FAR)
+            break;
     }
 
-    amiga_display_hold(0);
+    {
+        uint32_t f = nb_fields - f0;
+
+        if (f)                          /* under one field: nothing to say */
+            present_report(f, cut, worst);
+    }
+}
+
+/*
+ * The rows the last present actually rewrote -- the band it was handed,
+ * or the whole raster when a fresh palette made every row's indices
+ * mean something else.  Anything that keeps its own pixels in the frame
+ * over a present (the pointer overlay) reads this to know which of them
+ * are still standing.
+ */
+void gfx_packed(int *y0, int *y1)
+{
+    *y0 = pack0;
+    *y1 = pack1;
 }

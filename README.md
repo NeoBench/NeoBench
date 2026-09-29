@@ -16,12 +16,12 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
   phosphor green (`#33FF33`) palette and an upright 80×32 bitmap console:
 
   ```
-  NeoBench 0.1.0 m68k-aga
+  NeoBench 0.1.3 m68k-aga
   [  OK  ] CPU detected (Motorola 68060)
   [  OK  ] RTG detected (hires 640x512 lace, 8 bpp)
   [  OK  ] MMU detected
   [  OK  ] FPU detected
-  [  OK  ] Memory detected (10 MB)
+  [  OK  ] Memory detected (80 MB fast, 80 MB preferred)
   [  OK  ] UART detected (9600 baud)
   [  OK  ] System detected.
   ```
@@ -37,7 +37,10 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
     does (`PFLUSHA`, `FNOP`) and catching the trap when it doesn't. A 68060
     powers up with its FPU disabled, so the boot clears PCR bit 1 first.
   - *Memory* — write/read patterns at the last long of each megabyte of
-    expansion space; the first gap ends the count.
+    expansion space, then above the chipset window once the low map has filled;
+    the first gap ends the count. The result is reported as **fast** RAM
+    because that is what the startup requirement is written against:
+    `[FAILED]` below the 50 MB floor, `[ WARN ]` below the 80 MB preferred.
   - *RTG / UART* — framebuffer readback with pixel restore; the serial port's
     presence is asserted by the console that has been using it since reset.
   - All instruction traps are caught by a temporary exception shim (vectors 4,
@@ -95,6 +98,7 @@ detection ladder answer with the right model.
 | `boot/rom/` | The boot ROM: reset code, chipset bring-up, font, hardware probes (`fline.S`, `probe.c`), linker script, Makefile |
 | `kernel/` | Kernel core: entry (`kernel_main.c`), boot banner and detection log (`banner.c`), text console, drivers, filesystems |
 | `user/` | Userland (coreutils and friends) |
+| `system/` | The tree packed into the ROM and browsed by the desktop: `Apps/`, `Config/`, `Core/` (Bench, Docs, Media), `Home/` (Desktop, Documents, Music, Pictures, Videos) and `Temp/` — where downloads land, because NeoBench has no RAM disk |
 | `docs/` | Specifications (filesystem, ABI) |
 | `tools/` | Host-side utilities (NBFS image tools, disassembler, …) |
 

@@ -1,0 +1,14 @@
+NeoBench applications
+=====================
+
+Programs do not live here yet: everything the desktop can open is
+linked into the ROM image and started by the kernel, so there is
+nothing to install and nothing to launch from a path.
+
+The directory is kept so the tree has somewhere to put them when one
+arrives as a file of its own -- an archive unpacked into the store, or
+a fetch that landed in Temp/ and was moved here afterwards.  Until
+that happens it holds this note and nothing else.
+
+  Files, Clock, Monitor, About   built in, opened from the start bar
+  the rest                       not written yet

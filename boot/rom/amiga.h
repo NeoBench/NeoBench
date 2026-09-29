@@ -38,6 +38,7 @@
 #define NB_COL_RED      2U              /* status: fail                      */
 #define NB_COL_AMBER    3U              /* status: warning                   */
 #define NB_COL_WHITE    4U
+#define NB_COL_GREY     5U              /* the queued `Starting ...` line   */
 
 /*
  * Seconds since boot, bumped by the vertical blank handler.  Nothing in
@@ -45,6 +46,15 @@
  * than a wall time it has no way to know.
  */
 extern volatile uint32_t nb_secs;
+
+/*
+ * Fields since boot, one per vertical blank -- 50 on PAL.  The sound
+ * driver samples it when a buffer starts and reports the delta when the
+ * channel runs dry: how long a buffer took is the one measurement that
+ * says which clock Paula's period register is divided by, and it is
+ * taken on the machine rather than assumed.
+ */
+extern volatile uint32_t nb_fields;
 
 void nb_vbl_tick(void);
 void amiga_serial_init(void);
@@ -57,5 +67,23 @@ void amiga_display_hold(int hold);
 void amiga_set_color(unsigned idx, uint8_t r, uint8_t g, uint8_t b);
 void amiga_set_fg(unsigned idx);
 int  amiga_display_ready(void);
+
+/* Frame-buffer overlay access: the pointer draws onto the planar image
+ * directly and restores what it covered from the eight planes. */
+void amiga_fb_pixel(uint32_t x, uint32_t y, uint8_t idx);
+uint8_t amiga_fb_get(uint32_t x, uint32_t y);
+
+/* Write-only hardware palette, read back from the copy kept in RAM.
+ * amiga_pal_epoch() changes on every upload, so a cached answer can tell
+ * when it has gone stale. */
+void amiga_get_color(unsigned idx, uint8_t *r, uint8_t *g, uint8_t *b);
+unsigned amiga_pal_epoch(void);
+
+/* Mouse deltas since the previous call, and the buttons that are down.
+ * CIA-A PRA, active low: bit 6 is the left button of port 0 and bit 7
+ * the right one, so the answer arrives as a mask rather than a flag. */
+#define NB_BTN_L  1
+#define NB_BTN_R  2
+void amiga_mouse_poll(int *dx, int *dy, int *btn);
 
 #endif /* NB_AMIGA_H */

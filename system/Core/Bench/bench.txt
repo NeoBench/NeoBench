@@ -1,0 +1,18 @@
+NeoBench bench
+==============
+
+A NeoBench-specific benchmark harness, not a port of anything written
+for AmigaDOS.  Everything here measures the machine directly:
+
+  mips        integer loop against the 68060 at the detected clock
+  fpu         double precision add/mul/div through the FPU probe path
+  mem         sequential and random access across fast RAM
+  chip        chip RAM bandwidth under eight-plane fetch
+  blit        chipset blitter fill and copy, 32-bit fetch
+  gfx         back-buffer composite and median-cut present, the cost
+              the desktop pays on every repaint
+
+Results are reported in the boot log style: [  OK  ] against the
+reference machine, [ WARN ] when the board is slow, [ FAILED ] when
+the measurement could not be taken at all.
+

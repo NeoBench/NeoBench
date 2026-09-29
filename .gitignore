@@ -12,3 +12,7 @@ images/*.img
 images/*.nbfs
 tools/nbfs/mkfs/*.img
 tools/nbfs/mkfs/*.nbfs
+
+# Python bytecode
+__pycache__/
+*.pyc

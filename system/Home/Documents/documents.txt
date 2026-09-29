@@ -1,0 +1,9 @@
+NeoBench Documents
+==================
+
+Writing goes here.
+
+NeoBench can walk a directory and show you everything in it; it
+cannot write a file yet, so this folder is where files that arrive
+from outside end up -- unpacked out of an archive, or fetched into
+Temp/ and moved here afterwards.

@@ -44,15 +44,43 @@ void gfx_tri(int x0, int y0, int x1, int y1, int x2, int y2, uint16_t c);
  * underneath the glass panels). Scratch comes from the arena. */
 void gfx_blur(int x, int y, int w, int h);
 
-/* 8x8 bitmap text, MSB-left, from font8x8.h. */
+/*
+ * Text faces.  Xen is the standard -- eight pixel advance, nine rows,
+ * one pixel strokes -- with the 8x8 console face kept behind it for
+ * comparison.  Config/screen.cfg chooses with "font ="; the face
+ * selected here is the one every gfx_text() caller gets, so one
+ * preference restyles the whole desktop.
+ */
+#define NB_FONT_XEN   0
+#define NB_FONT_SYS   1
+
+void gfx_font(int face);
+int  gfx_font_id(void);
+int  gfx_font_h(void);
+
+/* Bitmap text, MSB-left, eight pixels of advance either way. */
 void gfx_text(int x, int y, const char *s, uint16_t c);
 
 /* Same, but every font pixel becomes a scale x scale block and the
  * advance is 8 * scale.  Used for the scaled-up NEOBENCH wordmark. */
 void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale);
 
+/*
+ * Restrict drawing *and* packing to a band of rows -- y0 inclusive, y1
+ * exclusive -- so a repaint of one window does not pay for the whole
+ * raster.  gfx_band_all() puts every row back; that is the state a boot
+ * starts in.
+ */
+void gfx_band(int y0, int y1);
+void gfx_band_all(void);
+
 /* Median-cut the back buffer to 256 colours, upload the AGA palette
  * and pack the RGB565 image into the eight bitplanes. */
 void gfx_present(void);
+
+/* The rows the last gfx_present() actually rewrote: the band it was
+ * handed, or 0..GH when a fresh palette forced every row's indices to
+ * be repacked. */
+void gfx_packed(int *y0, int *y1);
 
 #endif /* NB_GFX_H */

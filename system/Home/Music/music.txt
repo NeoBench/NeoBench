@@ -1,0 +1,9 @@
+NeoBench Music
+==============
+
+Audio goes here.
+
+The startup chime does not live in this directory.  It ships in
+Core/Media as startup.snd and is played by the kernel, because it
+has to be there before there is a store to look in and a sound
+card to ask about it.

@@ -1,0 +1,9 @@
+NeoBench Pictures
+=================
+
+Still images go here.
+
+The wallpaper is not a picture and is not in this directory: the
+desktop draws its own backdrop out of a gradient, three glows, a
+hairline grid and the NeoBench mark, all of it composited in the
+ROM rather than read from a file.

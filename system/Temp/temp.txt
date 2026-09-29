@@ -1,0 +1,13 @@
+NeoBench Temp
+=============
+
+This is where NeoBench puts what it downloads.
+
+There is no RAM disk.  A fetch is written straight into Temp/ as it
+arrives, so what you are left with is a file in a directory you can
+browse, move and delete like any other, rather than a copy parked in
+memory that a reset would take away with it.
+
+An interrupted fetch keeps the name it was asked for, so it is still
+there to look at afterwards instead of vanishing.  Clearing Temp/ out
+is always safe: nothing in NeoBench reads itself back out of here.

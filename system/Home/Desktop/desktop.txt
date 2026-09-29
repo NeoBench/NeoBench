@@ -1,0 +1,12 @@
+NeoBench Desktop
+================
+
+What the desktop would hold: things you have put down somewhere easy
+to reach, and shortcuts to the places you use most.
+
+Nothing is here today.  The desktop NeoBench draws is the backdrop
+and the bar -- the places that used to be a column of icons on it
+are entries in the start menu the orb opens -- so there is nothing
+to put here until something can write a file into the store, and
+there is nothing that can do that yet.  Until then this directory
+holds this note and nothing else.

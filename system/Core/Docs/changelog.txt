@@ -1,0 +1,70 @@
+NeoBench changelog
+==================
+
+0.1.3
+  NeoBench's own directory structure, not one borrowed from anywhere:
+    Apps/ for programs, Config/ for settings, Core/ for Bench, Docs and
+    Media, Home/ for your own content and Temp/ where downloads land --
+    and nothing is kept on a RAM disk, because there is none to keep it
+    on.  The four configuration files are Config/boot.cfg,
+    Config/pointer.cfg, Config/screen.cfg and Config/sound.cfg, all
+    read straight out of the ROM image at boot.
+  Hardware detection at boot: every bus is walked and a driver is
+    started for each device that answers.  Gayle IDE carries the fixed
+    disks and the CD-ROM, and an IDENTIFY word that says the unit is
+    removable is what turns a compact flash or SD adapter into a card
+    reader rather than a hard disk.  The buses an A1200 or A4000T
+    cannot carry -- SCSI, USB, SATA and networking -- report the
+    machine's own answer instead of a scan that could not be told from
+    a rumour.  "scan" in boot.cfg switches the walk off.
+  The startup chime sounds exactly once, then the boot log is held for
+    three seconds ("hold" in boot.cfg), and only then does the desktop
+    take the screen.
+  The bar along the bottom is cut the way Aero cuts the Windows 7
+    taskbar: a pane of tinted glass laid over the backdrop with a lit
+    edge along the top of it, rounded buttons instead of bevelled
+    gadgets, a clock set in two lines, and a sliver on the very edge
+    that takes the desktop away.  "bar" in screen.cfg cuts the same
+    furniture the flat Workbench way instead, and "glass" says how
+    much of the backdrop the pane shows through.
+  Windows and the start menu keep the Workbench they were drawn with:
+    opaque frames, the blue caption of whatever is on top, and a list
+    view that reverses the chosen row.  The backdrop stays NeoBench's
+    own -- white falling to mint, with the three glows, the hairline
+    grid, the mark and the wordmark.
+  The places that used to be icons down the top-left corner -- Home,
+    Core, Bench, Docs and Media -- are entries at the top of the start
+    menu the orb opens, with the programs underneath a rule below them,
+    so the desktop itself is the backdrop and nothing else.  Everything
+    in the menu is reached the same way it was from an icon: one press
+    names it, the second opens it.
+  Start bar halved to 22 pixels, icon tiles halved to 24 pixels, and
+    the palette limited to 64 colours cut from the finished frame.
+  Xen, a nine pixel reconstruction of the Amiga face of that name,
+    sets type everywhere and is asked for with "font" in
+    Config/screen.cfg.
+  One press names an item; the second press, inside half a second and
+    twenty-four pixels, opens it.  The orb, the crosses, the task
+    buttons and the sliver are controls and still answer to one press,
+    and the right-button menu stays open across several choices.
+  The startup chime is the user's own neoboot.wav, converted to NSND,
+    and it sounds exactly once.  Paula reloads the address and the
+    length when the counter runs out and plays the buffer again, so
+    the pass is timed against the sample rather than left to the
+    hardware, and the sample carries the silence the stop lands in.
+  The boot log is phosphor green with systemd-style status lines and
+    carries NeoBench's own units only.
+
+0.1.1
+  Prefs/ directory in the ROM: pointer.prefs and screen.prefs are
+    loaded before the desktop is composited.
+  Hardware-driven pointer with a preference file.
+  Fast RAM readout fixed: an accelerator's memory no longer needs a
+    pass above the 16 MB chip bus gate to be counted.
+
+0.1.0
+  Futuristic-clean desktop scene on 640x512 interlaced AGA, 256
+    colours: wallpaper, icon set, glass windows, gadgets, taskbar.
+  Boot log drawn upright with systemd-style status lines.
+  Chainload path: AmigaOS 3.2.3 ROM boots, then NeoBench takes the
+    machine from the ROM image.

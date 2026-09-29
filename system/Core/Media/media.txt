@@ -1,0 +1,15 @@
+NeoBench media
+==============
+
+The desktop is composited at run time: there are no bitmaps in the
+ROM image.  Every mark, tile and glyph on screen is built from the
+gfx primitives in boot/rom/gfx.c and quantised into the AGA palette
+by a median cut over the finished back buffer.
+
+  screen      hires 640x512, interlaced, eight bitplanes
+  colours     64, produced per frame rather than chosen by hand
+  font        Xen, nine pixels, a reconstruction of the Amiga face
+  logo        vector, drawn from the same primitives as the icons
+
+Wallpaper colours, the grid and the horizon glows are all preference
+values -- see Config/screen.cfg.

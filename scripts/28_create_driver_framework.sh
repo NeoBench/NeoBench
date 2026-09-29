@@ -77,13 +77,12 @@ done
 # Storage Drivers
 ###############################################################################
 
-mkdir -p kernel/drivers/storage/{ata,sata,scsi,nvme,ramdisk}
+mkdir -p kernel/drivers/storage/{ata,sata,scsi,nvme}
 
 touch kernel/drivers/storage/ata/ata.c
 touch kernel/drivers/storage/sata/sata.c
 touch kernel/drivers/storage/scsi/scsi.c
 touch kernel/drivers/storage/nvme/nvme.c
-touch kernel/drivers/storage/ramdisk/ramdisk.c
 
 ###############################################################################
 # Network Drivers

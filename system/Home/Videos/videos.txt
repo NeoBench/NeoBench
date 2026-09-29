@@ -1,0 +1,9 @@
+NeoBench Videos
+===============
+
+Moving pictures go here.
+
+Nothing can play one yet.  Everything NeoBench puts on the screen
+is drawn a frame at a time out of the ROM -- the backdrop, the
+windows and the bar -- and there is nothing that can decode a movie
+into those frames.
