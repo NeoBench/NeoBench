@@ -106,13 +106,16 @@ detection ladder answer with the right model.
 
 - [x] AGA hires 8bpp framebuffer and native text console
 - [x] systemd-style boot log with real hardware probes (CPU/MMU/FPU/memory/RTG)
-- [ ] Chainload delivery from a genuine AmigaOS 3.2.3 boot (bootblock vs.
-      `S:Startup-Sequence` hunk executable)
+- [x] Chainload delivery from a genuine AmigaOS 3.2.3 boot: a Hunk
+      executable run from `S:Startup-Sequence`, which arrives with the
+      chipset programmed and the OS owning the vectors
 - [x] Futuristic-clean desktop scene at 640×512: procedural wallpaper with a
-      faded logo watermark, a custom icon set, dark glass windows, dial and
-      monitor gadgets, and a taskbar with the mark-only start orb
+      faded logo watermark, an Aero taskbar of tinted glass over the backdrop
+      (with `bar = classic` for the flat Workbench field), a start menu
+      carrying the custom icon set and the programs, opaque Workbench
+      windows, and dial and monitor gadgets
 - [ ] Input handling and window management on top of the static scene
 
-## License
+## Licence
 
 See [LICENSE](LICENSE).
