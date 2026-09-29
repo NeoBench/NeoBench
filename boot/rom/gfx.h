@@ -34,6 +34,8 @@ void gfx_line(int x0, int y0, int x1, int y1, uint16_t c);
 void gfx_fill(int x, int y, int w, int h, uint16_t c);
 void gfx_fill_r(int x, int y, int w, int h, int r, uint16_t c);
 void gfx_vgrad(int x, int y, int w, int h, uint16_t c0, uint16_t c1);
+void gfx_vgrad_r(int x, int y, int w, int h, int r,
+                 uint16_t c0, uint16_t c1);
 void gfx_alpha(int x, int y, int w, int h, uint16_t c, uint8_t a);
 void gfx_alpha_r(int x, int y, int w, int h, int r, uint16_t c, uint8_t a);
 void gfx_disc(int cx, int cy, int r, uint16_t c);

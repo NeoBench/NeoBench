@@ -40,6 +40,15 @@ NeoBench changelog
     names it, the second opens it.
   Start bar halved to 22 pixels, icon tiles halved to 24 pixels, and
     the palette limited to 64 colours cut from the finished frame.
+  A new icon set, in MUI's manner rather than the modern plate and
+    mark: a rounded tile ramped from a light tint to a deep one, a
+    white rim, an arc of light across the top, and the mark cut out of
+    the ramp in white.  One routine draws the tile at 24, 16, 14 and
+    12 pixels, so the places, the pinned launchers, the programs and
+    the directory rows are the same icon four times.  Five hues for
+    the places and the programs, a slate for an ordinary file, and the
+    pinned launchers on the glass are the tiles themselves now -- no
+    button behind them, because that is how Aero pins an icon.
   Xen, a nine pixel reconstruction of the Amiga face of that name,
     sets type everywhere and is asked for with "font" in
     Config/screen.cfg.

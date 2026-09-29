@@ -98,18 +98,34 @@ extern unsigned nb_probe_fast_mb(void);
 #define C_GRID    NB_RGB(21, 58, 28)     /* hairline grid               */
 
 /*
- * The icon plates are drawn the way a GTK4 desktop draws its icons: an
- * off-white tile with a hairline edge and a soft shadow under it, and
- * one flat brand colour for the mark.  The name underneath is dark and
- * flat -- type set over the light wash does not need a drop of its own.
+ * The icon set is MUI's manner rather than the modern plate-and-mark:
+ * a rounded tile whose body ramps from a saturated tint at the top to
+ * a deep one at the foot, a white rim round it, an arc of light across
+ * the top, and the mark cut out of the ramp in white.  The ramps stop
+ * at about five to one against white because that is what the mark --
+ * which straddles the whole tile -- has to read on at its lightest.
+ *
+ * Five hues, two stops each, and the same five serve the 24 pixel
+ * place icons, the 14 pixel program glyphs, the 16 pixel launchers and
+ * the 12 pixel browser rows, so one ramp pair is one colour of the set
+ * at whatever size it is drawn.  The slate pair is the sixth: it is
+ * what a plain file is drawn in, so a file never wears a hue that
+ * means somewhere or something else.
  */
-#define C_IC_PLATE NB_RGB(30, 62, 30)    /* #F7F9F7 plate               */
-#define C_IC_EDGE  NB_RGB(26, 55, 27)    /* #D6DDDD hairline            */
-#define C_IC_NAME  NB_RGB(4, 9, 7)       /* #212439 name under a plate  */
-#define C_IC_BLUE  NB_RGB(6, 33, 28)     /* #3185E6 System              */
-#define C_IC_AMBER NB_RGB(30, 46, 3)     /* #F7B919 Docs                */
-#define C_IC_PINK  NB_RGB(30, 24, 10)    /* #F76152 Media               */
-#define C_IC_VIO   NB_RGB(17, 23, 30)    /* #8B5CF6 Home                */
+#define MUI_CUT   NB_RGB(1, 2, 6)        /* what a mark is cut out in    */
+
+#define MUI_VIO_T NB_RGB(15, 14, 29)     /* #7C3AED violet, lit   Home   */
+#define MUI_VIO_B NB_RGB(9, 7, 18)       /* #4C1D95 violet, deep         */
+#define MUI_BLU_T NB_RGB(5, 24, 29)      /* #2563EB blue, lit      Core  */
+#define MUI_BLU_B NB_RGB(4, 14, 17)      /* #1E3A8A blue, deep           */
+#define MUI_GRN_T NB_RGB(3, 32, 7)       /* #15803D green, lit     Bench */
+#define MUI_GRN_B NB_RGB(1, 11, 3)       /* #052E16 green, deep          */
+#define MUI_AMB_T NB_RGB(22, 21, 1)      /* #B45309 amber, lit     Docs  */
+#define MUI_AMB_B NB_RGB(15, 13, 2)      /* #78350F amber, deep          */
+#define MUI_ROS_T NB_RGB(27, 7, 9)       /* #E11D48 rose, lit      Media */
+#define MUI_ROS_B NB_RGB(17, 5, 7)       /* #881337 rose, deep           */
+#define MUI_GRY_T NB_RGB(11, 29, 17)     /* #5B7488 slate, lit     file  */
+#define MUI_GRY_B NB_RGB(4, 14, 9)       /* #24384A slate, deep          */
 
 /* ------------------------------------------------------------------ *
  * Small helpers
@@ -258,65 +274,155 @@ static void wallpaper(void)
 }
 
 /* ------------------------------------------------------------------ *
- * Icons -- a GTK4-flavoured set: an off-white plate with a hairline
- * edge under every mark, the mark itself flat and in one brand colour,
- * and a dark name below it.  All five are built from the same
- * primitives the NeoBench logo is, so the set reads as one family.
+ * Icons -- the MUI manner: a rounded tile that ramps from a saturated
+ * tint to a deep one, a white rim, an arc of light along the top, and
+ * the mark cut out of the ramp in white.  One primitive, mui_plate(),
+ * draws the tile at every size the set is used at; every mark is then
+ * positioned against the ramp, never against a flat plate, so all four
+ * sizes read as one family.
  * ------------------------------------------------------------------ */
 
-static void icon_tile(int x, int y)
+/*
+ * A tile of the side s at (x, y) with corner radius r: a drop under
+ * it, the white rim, the ramp inside the rim, then the highlight arc.
+ * The arc keeps the rim's radius, which is what gives it the lens
+ * shape a gel highlight has -- it curves away at both ends instead of
+ * stopping square.  It is a quarter of the tile tall, except on the
+ * small tiles, where a quarter would eat the band the mark is cut in,
+ * so those two get a two pixel hairline instead.
+ */
+static void mui_plate(int x, int y, int s, int r,
+                      uint16_t c_top, uint16_t c_bot)
 {
-    gfx_alpha_r(x + 1, y + 2, 24, 24, 6, C_SHADOW, 64);
-    gfx_fill_r(x, y, 24, 24, 6, C_IC_EDGE);
-    gfx_fill_r(x + 1, y + 1, 22, 22, 5, C_IC_PLATE);
+    int gl = (s >= 16) ? s / 4 : 2;
+
+    gfx_alpha_r(x + 1, y + 2, s, s, r + 1, C_SHADOW, 76);
+    gfx_fill_r(x, y, s, s, r, C_INK);
+    gfx_vgrad_r(x + 1, y + 1, s - 2, s - 2, r - 1, c_top, c_bot);
+    gfx_alpha_r(x + 1, y + 1, s - 2, gl, r - 1, C_INK, 104);
 }
 
-/* Home: a house -- violet roof and walls, the doorway left open */
+/* the mark of a place, on the 24 pixel tile it is drawn on */
+
+/* Home: a house -- white roof and walls, the doorway cut dark */
 static void icon_home(int x, int y)
 {
-    icon_tile(x, y);
-    gfx_tri(x + 4, y + 12, x + 12, y + 5, x + 20, y + 12, C_IC_VIO);
-    gfx_fill(x + 6, y + 12, 12, 8, C_IC_VIO);
-    gfx_fill(x + 10, y + 15, 4, 5, C_IC_PLATE);
+    mui_plate(x, y, 24, 6, MUI_VIO_T, MUI_VIO_B);
+    gfx_tri(x + 4, y + 14, x + 12, y + 7, x + 20, y + 14, C_INK);
+    gfx_fill(x + 6, y + 14, 12, 6, C_INK);
+    gfx_fill(x + 10, y + 16, 4, 4, MUI_CUT);
 }
 
-/* System: a monitor -- navy frame, blue panel, navy stand */
+/* Core: a monitor -- white bezel, the screen cut dark and lit with two
+   lines of type, then the stand */
 static void icon_screen(int x, int y)
 {
-    icon_tile(x, y);
-    gfx_fill_r(x + 4, y + 5, 16, 12, 2, LOGO_NAVY);
-    gfx_fill_r(x + 5, y + 6, 14, 10, 1, C_IC_BLUE);
-    gfx_alpha(x + 6, y + 7, 12, 3, C_INK, 46);
-    gfx_fill(x + 10, y + 17, 4, 2, LOGO_NAVY);
-    gfx_fill(x + 8, y + 19, 8, 1, LOGO_NAVY);
+    mui_plate(x, y, 24, 6, MUI_BLU_T, MUI_BLU_B);
+    gfx_fill_r(x + 4, y + 7, 16, 11, 2, C_INK);
+    gfx_fill_r(x + 5, y + 8, 14, 9, 1, MUI_CUT);
+    gfx_fill(x + 7, y + 11, 8, 1, C_INK);
+    gfx_fill(x + 7, y + 13, 5, 1, C_INK);
+    gfx_fill(x + 11, y + 18, 2, 2, C_INK);
+    gfx_fill(x + 9, y + 20, 6, 1, C_INK);
 }
 
 /* Bench: a rising bar chart standing on a baseline */
 static void icon_bench(int x, int y)
 {
-    icon_tile(x, y);
-    gfx_fill(x + 5, y + 17, 14, 1, LOGO_NAVY);
-    gfx_fill(x + 7, y + 13, 2, 4, C_GREEN);
-    gfx_fill(x + 10, y + 10, 2, 7, C_GREEN);
-    gfx_fill(x + 13, y + 7, 2, 10, C_GREEN);
-    gfx_fill(x + 16, y + 4, 2, 13, C_GREEN);
+    mui_plate(x, y, 24, 6, MUI_GRN_T, MUI_GRN_B);
+    gfx_fill(x + 7, y + 16, 2, 3, C_INK);
+    gfx_fill(x + 10, y + 13, 2, 6, C_INK);
+    gfx_fill(x + 13, y + 10, 2, 9, C_INK);
+    gfx_fill(x + 16, y + 8, 2, 11, C_INK);
+    gfx_fill(x + 5, y + 19, 14, 1, C_INK);
 }
 
 /* Docs: a folder, tab and all, with the front flap shaded */
 static void icon_docs(int x, int y)
 {
-    icon_tile(x, y);
-    gfx_fill(x + 5, y + 6, 7, 3, C_IC_AMBER);
-    gfx_fill_r(x + 4, y + 8, 16, 12, 2, C_IC_AMBER);
-    gfx_alpha(x + 4, y + 16, 16, 4, LOGO_NAVY, 44);
+    mui_plate(x, y, 24, 6, MUI_AMB_T, MUI_AMB_B);
+    gfx_fill(x + 5, y + 8, 7, 3, C_INK);
+    gfx_fill_r(x + 4, y + 10, 16, 10, 2, C_INK);
+    gfx_alpha(x + 4, y + 15, 16, 5, MUI_CUT, 150);
 }
 
-/* Media: a play badge */
+/* Media: a play badge -- white disc with the triangle cut out of it */
 static void icon_media(int x, int y)
 {
-    icon_tile(x, y);
-    gfx_disc(x + 12, y + 12, 8, C_IC_PINK);
-    gfx_tri(x + 9, y + 8, x + 9, y + 16, x + 17, y + 12, C_INK);
+    mui_plate(x, y, 24, 6, MUI_ROS_T, MUI_ROS_B);
+    gfx_disc(x + 12, y + 14, 7, C_INK);
+    gfx_tri(x + 10, y + 10, x + 10, y + 18, x + 18, y + 14, MUI_CUT);
+}
+
+/*
+ * The program glyphs of the start menu -- the same tile at 14 pixels
+ * with a mark that fits the eight rows the hairline leaves clear.
+ * Files shares Core's blue, the clock takes Docs' amber, the monitor
+ * Bench's green and About Home's violet, so every hue in the set is
+ * the same hue wherever it turns up and none of them is invented for
+ * a single place.
+ */
+static void menu_glyph(int i, int x, int y)
+{
+    switch (i)
+    {
+    case 0:                                          /* Files  */
+        mui_plate(x, y, 14, 4, MUI_BLU_T, MUI_BLU_B);
+        gfx_fill(x + 3, y + 4, 5, 2, C_INK);         /* tab    */
+        gfx_fill_r(x + 3, y + 6, 9, 6, 1, C_INK);    /* body   */
+        gfx_alpha(x + 3, y + 9, 9, 3, MUI_CUT, 150); /* flap   */
+        break;
+    case 1:                                          /* Clock  */
+        mui_plate(x, y, 14, 4, MUI_AMB_T, MUI_AMB_B);
+        gfx_disc(x + 7, y + 7, 4, C_INK);
+        gfx_fill(x + 7, y + 5, 1, 3, MUI_CUT);       /* hand   */
+        gfx_fill(x + 7, y + 7, 3, 1, MUI_CUT);
+        break;
+    case 2:                                          /* Monitor */
+        mui_plate(x, y, 14, 4, MUI_GRN_T, MUI_GRN_B);
+        gfx_fill_r(x + 2, y + 4, 10, 6, 1, C_INK);
+        gfx_fill(x + 3, y + 5, 8, 4, MUI_CUT);
+        gfx_fill(x + 6, y + 10, 2, 1, C_INK);
+        gfx_fill(x + 4, y + 11, 6, 1, C_INK);
+        break;
+    default:                                         /* About  */
+        mui_plate(x, y, 14, 4, MUI_VIO_T, MUI_VIO_B);
+        gfx_disc(x + 7, y + 7, 4, C_INK);
+        gfx_fill(x + 7, y + 4, 1, 1, MUI_CUT);       /* the i  */
+        gfx_fill(x + 7, y + 6, 1, 3, MUI_CUT);
+        break;
+    }
+}
+
+/*
+ * The rows of the file browser: the same tile at 12 pixels, the
+ * smallest the set is drawn at, so the marks are kept to the eight
+ * rows the hairline leaves.  Going up a level wears violet because it
+ * is an action rather than a place, a directory wears Core's blue and
+ * an ordinary file wears the slate that means neither.
+ */
+static void row_glyph(int kind, int x, int y)
+{
+    if (kind == 0)                                  /* up one level   */
+    {
+        mui_plate(x, y, 12, 3, MUI_VIO_T, MUI_VIO_B);
+        gfx_tri(x + 3, y + 3, x + 7, y + 3, x + 5, y + 7, C_INK);
+        gfx_fill(x + 4, y + 6, 3, 5, C_INK);
+    }
+    else if (kind == 1)                             /* a directory     */
+    {
+        mui_plate(x, y, 12, 3, MUI_BLU_T, MUI_BLU_B);
+        gfx_fill(x + 2, y + 3, 4, 2, C_INK);
+        gfx_fill_r(x + 2, y + 5, 7, 6, 1, C_INK);
+        gfx_alpha(x + 2, y + 8, 7, 3, MUI_CUT, 150);
+    }
+    else                                            /* a file          */
+    {
+        mui_plate(x, y, 12, 3, MUI_GRY_T, MUI_GRY_B);
+        gfx_fill_r(x + 2, y + 3, 7, 8, 1, C_INK);
+        gfx_fill(x + 3, y + 5, 5, 1, MUI_CUT);
+        gfx_fill(x + 3, y + 7, 5, 1, MUI_CUT);
+    }
 }
 
 /*
@@ -829,8 +935,7 @@ static void window_files(void)
     /* row 0: up one level */
     on = (sel_kind == SEL_ROW && sel_idx == 0);
     row_light(0);
-    gfx_fill_r(x + 10, y + FILES_ROW0 + 1, 12, 12, 3, C_ACC_D);
-    gfx_alpha(x + 11, y + FILES_ROW0 + 2, 10, 4, C_INK, 70);
+    row_glyph(0, x + 10, y + FILES_ROW0 + 1);
     text_d(x + 30, y + FILES_ROW0 + 3, "..", on ? C_INK : C_TEXT);
     col_r(x + w - 10, y + FILES_ROW0 + 3, "up");
 
@@ -846,8 +951,7 @@ static void window_files(void)
         nd = &nb_pfs_nodes[child];
         on = (sel_kind == SEL_ROW && sel_idx == i);
         row_light(i);
-        gfx_fill_r(x + 10, ry + 1, 12, 12, 3, nd->dir ? C_ACC : C_ACC_D);
-        gfx_alpha(x + 11, ry + 2, 10, 4, C_INK, 70);
+        row_glyph(nd->dir ? 1 : 2, x + 10, ry + 1);
         text_d(x + 30, ry + 3, nd->name, on ? C_INK : C_TEXT);
         if (nd->dir)
             col_r(x + w - 10, ry + 3, "<DIR>");
@@ -1382,10 +1486,12 @@ static void start_orb(void)
  * The pinned launchers: three Workbench buttons -- hard edge, grey
  * body, lit along the top and the left and shaded along the other two
  * -- each carrying the glyph of what it starts.  Geometry is the
- * panel's own: eighteen square, two apart, clear of the orb.  On the
- * glass they become three rounded panes of a lighter blue grey, which
- * is what Aero does with a pinned launcher: no bevel, only a rim and a
- * line of light, because the bar under them is already glass.
+ * panel's own: eighteen square, two apart, clear of the orb.
+ *
+ * On the glass the launcher *is* the icon, which is how Aero pins its
+ * own: no button round it, only a tile of the set with the bar
+ * showing through the drop under it.  The three take blue, rose and
+ * green, the order the three glyphs have always been drawn in.
  */
 static void quick_launch(void)
 {
@@ -1397,7 +1503,34 @@ static void quick_launch(void)
 
         if (aero_on())
         {
-            aero_btn(x, 492, 18, 18, 0);
+            static const uint16_t top[3] = {
+                MUI_BLU_T, MUI_ROS_T, MUI_GRN_T
+            };
+            static const uint16_t bot[3] = {
+                MUI_BLU_B, MUI_ROS_B, MUI_GRN_B
+            };
+            int px = x + 1;                      /* the 16 pixel tile */
+
+            mui_plate(px, 493, 16, 4, top[i], bot[i]);
+
+            if (i == 0)                          /* documents           */
+            {
+                gfx_fill_r(px + 4, 498, 8, 10, 1, C_INK);
+                gfx_fill(px + 5, 500, 6, 1, MUI_CUT);
+                gfx_fill(px + 5, 502, 6, 1, MUI_CUT);
+                gfx_fill(px + 5, 504, 4, 1, MUI_CUT);
+            }
+            else if (i == 1)                     /* media               */
+            {
+                gfx_disc(px + 8, 503, 4, C_INK);
+                gfx_tri(px + 6, 500, px + 6, 506, px + 11, 503, MUI_CUT);
+            }
+            else                                 /* telemetry           */
+            {
+                gfx_fill(px + 4, 505, 3, 3, C_INK);
+                gfx_fill(px + 7, 502, 3, 6, C_INK);
+                gfx_fill(px + 10, 499, 3, 9, C_INK);
+            }
             continue;
         }
 
@@ -1411,6 +1544,9 @@ static void quick_launch(void)
         gfx_fill(x + 1, 508, 16, 1, C_WB_SHADE);
         gfx_fill(x + 16, 493, 1, 16, C_WB_SHADE);
     }
+
+    if (aero_on())
+        return;
 
     gfx_fill_r(63, 496, 8, 10, 2, C_ACC);            /* documents      */
     gfx_fill(64, 498, 6, 1, C_WB_LINE);
@@ -1730,21 +1866,21 @@ static void menu_place(int i, int sel)
  * right-hand end, which is what makes the menu a list of what is
  * running as well as a list of what can be started: pressing an entry
  * toggles it, so the dot is also the way a gadget gets dismissed again.
+ * The glyph is the tile the set draws everywhere -- here at 14 pixels --
+ * and keeps its own hue whether the entry is chosen or not, because the
+ * blue field behind it is what says that, not a second recolouring.
  * Nothing here is drawn until the orb asks for it.
  */
 static void menu_item(int i, const char *label, int open, int sel)
 {
     const int x = MENU_X + 6;
     const int y = MENU_G0 + i * MENU_ITEMH;
-    uint16_t glyph = (open || sel) ? C_ACC :
-                     (aero_on() ? C_AERO_RIM : C_ACC_D);
-    uint16_t ring  = aero_on() ? C_AERO_RIM : C_WB_LINE;
+    uint16_t ring = aero_on() ? C_AERO_RIM : C_WB_LINE;
 
     if (sel)
         gfx_fill(x, y, MENU_ITEMW, 30, C_WB_BLUE);
 
-    gfx_fill_r(x + 8, y + 8, 14, 14, 3, glyph);
-    gfx_alpha(x + 9, y + 9, 12, 4, C_INK, 70);
+    menu_glyph(i, x + 8, y + 8);
     text_d(x + 30, y + 11, label, sel ? C_INK : menu_ink());
 
     if (open) {

@@ -112,7 +112,9 @@ detection ladder answer with the right model.
 - [x] Futuristic-clean desktop scene at 640×512: procedural wallpaper with a
       faded logo watermark, an Aero taskbar of tinted glass over the backdrop
       (with `bar = classic` for the flat Workbench field), a start menu
-      carrying the custom icon set and the programs, opaque Workbench
+      carrying an MUI-style icon set -- ramped tiles with a white rim,
+      a highlight arc and the mark cut out in white, drawn at four
+      sizes -- and the programs, opaque Workbench
       windows, and dial and monitor gadgets
 - [ ] Input handling and window management on top of the static scene
 

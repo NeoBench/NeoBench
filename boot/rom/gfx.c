@@ -250,6 +250,50 @@ void gfx_vgrad(int x, int y, int w, int h, uint16_t c0, uint16_t c1)
     }
 }
 
+/*
+ * The same ramp, cut to a rounded rectangle: the tile every icon in the
+ * set is drawn on.  gfx_vgrad answers per row and lets the row decide
+ * its own colour; this lets each pixel of that row also decide whether
+ * the corner curve takes it, which is exactly what gfx_fill_r does to a
+ * single colour.  Both halves in one pass is what stops the ramp
+ * showing square corners round the tile -- drawing the ramp and then
+ * clipping it afterwards cannot be done with the primitives there are.
+ */
+void gfx_vgrad_r(int x, int y, int w, int h, int r,
+                 uint16_t c0, uint16_t c1)
+{
+    int j, y0 = y, hh = h;
+    int r0 = (c0 >> 11) & 31, g0 = (c0 >> 5) & 63, b0 = c0 & 31;
+    int r1 = (c1 >> 11) & 31, g1 = (c1 >> 5) & 63, b1 = c1 & 31;
+    int dr = r1 - r0, dg = g1 - g0, db = b1 - b0;
+
+    if (!clip(&x, &y, &w, &h))
+        return;
+    if (hh < 2) {
+        gfx_fill_r(x, y, w, h, r, c0);
+        return;
+    }
+    for (j = 0; j < h; j++) {
+        int row = (y + j) - y0;          /* row within the original rect */
+        int rr = r0, gg = g0, bb = b0, i;
+        uint16_t c;
+        volatile uint16_t *p = BB + (unsigned)(y + j) * GW + (unsigned)x;
+
+        if (dr >= 0) rr += (int)udiv32((uint32_t)(row * dr), (uint32_t)(hh - 1));
+        else         rr -= (int)udiv32((uint32_t)(row * -dr), (uint32_t)(hh - 1));
+        if (dg >= 0) gg += (int)udiv32((uint32_t)(row * dg), (uint32_t)(hh - 1));
+        else         gg -= (int)udiv32((uint32_t)(row * -dg), (uint32_t)(hh - 1));
+        if (db >= 0) bb += (int)udiv32((uint32_t)(row * db), (uint32_t)(hh - 1));
+        else         bb -= (int)udiv32((uint32_t)(row * -db), (uint32_t)(hh - 1));
+
+        c = (uint16_t)(((rr & 31) << 11) | ((gg & 63) << 5) | (bb & 31));
+        for (i = 0; i < w; i++) {
+            if (corner_ok(x + i, y + j, x, y, w, h, r))
+                p[i] = c;
+        }
+    }
+}
+
 void gfx_alpha(int x, int y, int w, int h, uint16_t c, uint8_t a)
 {
     int i, j;

@@ -70,6 +70,15 @@ desktop used to carry down its left edge -- Home, Core, Bench, Docs
 and Media -- are entries at the top of the start menu the orb opens,
 and the programs are entries under a rule beneath them.
 
+The icons themselves are drawn the way MUI drew its own: a rounded
+tile whose body ramps from a saturated tint to a deep one, a white rim
+round it, an arc of light along the top of it, and the mark cut out of
+the ramp in white.  One routine draws the tile at every size it is
+used at -- 24 pixels in the menu, 16 on the bar, 14 for the programs,
+12 in a directory row -- so the set stays one set as it gets smaller.
+Five hues carry the places, a sixth of slate carries an ordinary file,
+and no icon wears two colours for the same thing.
+
 One press names an entry; the second press, inside half a second and
 twenty-four pixels, opens it.  The orb, the window crosses, the task
 buttons and the sliver are controls and answer to one press, and the
