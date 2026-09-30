@@ -1,6 +1,9 @@
 #include "../include/console.h"
 #include "../../boot/rom/amiga.h"
 #include "../../boot/rom/ata.h"
+#include "../../boot/rom/dev.h"
+#include "../../boot/rom/probe.h"
+#include "../../boot/rom/zz9000.h"
 
 /*
  * systemd-style boot log.
@@ -20,7 +23,6 @@ extern int  nb_probe_cpu(void);     /* 20/30/40/60 for 68020..68060 */
 extern void nb_fpu_enable_060(void); /* PCR: switch the 68060 FPU on */
 extern unsigned nb_probe_fpu(void);
 extern unsigned nb_probe_mmu(void);
-extern unsigned nb_probe_fast_mb(void);
 
 static void status_line(const char *tag, unsigned color, const char *msg)
 {
@@ -87,6 +89,66 @@ static char *put_num(char *d, unsigned v)
             *d++ = (char)('0' + digit);
         }
     }
+    *d = '\0';
+    return d;
+}
+
+/*
+ * Exactly `digits` hexadecimal digits, for addresses and version words
+ * where the width carries the meaning: a base address is eight digits
+ * because it is a long, a firmware version is four because it is a word.
+ */
+static char *put_hex(char *d, unsigned v, int digits)
+{
+    static const char hex[] = "0123456789abcdef";
+    int i;
+
+    for (i = 0; i < digits; i++)
+        d[i] = hex[(v >> ((digits - 1 - i) * 4)) & 15u];
+    d[digits] = '\0';
+    return d + digits;
+}
+
+/*
+ * `status $xx, identify $xxxx`: what the bus answered when it was asked
+ * and gave no device back.  $FF is a bus nobody is driving, $00 a bus
+ * every line is pulled down, and an identify word of $FFFF means no
+ * result was offered at all -- so this is the difference between a line
+ * that says "not here" and one that says why.  Both device lines report
+ * it the same way, so a failure reads the same whichever unit it came
+ * from.  The caller adds the brackets.
+ */
+static char *put_st_id(char *d, unsigned st, unsigned idv)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    int nibble;
+
+    d = put_str(d, "status $");
+    *d++ = hex[(st >> 4) & 0xf];
+    *d++ = hex[st & 0xf];
+    d = put_str(d, ", identify $");
+    for (nibble = 12; nibble >= 0; nibble -= 4)
+        *d++ = hex[(idv >> nibble) & 0xf];
+    *d = '\0';
+    return d;
+}
+
+/*
+ * `signature $14/$EB`: the two cylinder registers as the unit left them
+ * on selection.  A packet device marks itself there whatever else it
+ * does -- including refusing IDENTIFY outright -- so this is what tells
+ * a drive that will not be questioned apart from a bus with no drive.
+ */
+static char *put_sig(char *d, unsigned sig)
+{
+    static const char hex[] = "0123456789ABCDEF";
+
+    d = put_str(d, "signature $");
+    *d++ = hex[(sig >> 12) & 0xf];
+    *d++ = hex[(sig >> 8) & 0xf];
+    d = put_str(d, "/");
+    *d++ = hex[(sig >> 4) & 0xf];
+    *d++ = hex[sig & 0xf];
     *d = '\0';
     return d;
 }
@@ -205,8 +267,8 @@ void kernel_detect(void)
 
     /*
      * NeoBench runs on fast RAM, so the requirement is stated against
-     * that figure and not the machine total: 50 MB is the floor it will
-     * not run below, 80 MB is what it is built for.  The line reads the
+     * that figure and not the machine total: 128 MB is the floor it will
+     * not run below, 136 MB is what it is built for.  The line reads the
      * same either way -- the tag colour is what says whether this
      * machine can take the rest of the boot, exactly as for the CPU.
      */
@@ -240,13 +302,13 @@ void kernel_detect(void)
     d = put_str(msg, "Memory detected (");
     d = put_num(d, fast);
     d = put_str(d, " MB fast, ");
-    d = put_num(d, fast < 50 ? 50 : 80);
-    d = put_str(d, fast < 50 ? " MB required)" : " MB preferred)");
+    d = put_num(d, fast < NB_FAST_FLOOR ? NB_FAST_FLOOR : NB_FAST_PREFERRED);
+    d = put_str(d, fast < NB_FAST_FLOOR ? " MB required)" : " MB preferred)");
     *d = '\0';
 
-    if (fast < 50)
+    if (fast < NB_FAST_FLOOR)
         kernel_fail(msg);
-    else if (fast < 80)
+    else if (fast < NB_FAST_PREFERRED)
         kernel_warn(msg);
     else
         kernel_ok(msg);
@@ -280,12 +342,127 @@ void kernel_detect(void)
  * machine can have.  The two counts at the end count drivers actually
  * started, and nothing else.
  */
+/*
+ * Read one sector back through the device table, so that a storage line
+ * in the log is backed by a transfer that really happened.  IDENTIFY
+ * says a drive is there; this says its sectors come off it -- the two
+ * are different claims, and the second one is what the rest of the
+ * system will be standing on.
+ *
+ * The buffer is poisoned first, so a read that quietly left it alone
+ * cannot pass for a read.  The serial line carries the measurement --
+ * device, address and the first sixteen bytes exactly as they came
+ * back -- while the log carries the verdict, and says what the device
+ * reported when the verdict is no.
+ */
+static void serial_line(const char *s)
+{
+    while (*s)
+        amiga_serial_putc(*s++);
+    amiga_serial_putc('\r');
+    amiga_serial_putc('\n');
+}
+
+static void report_read(const struct nb_dev *d, unsigned lba, uint8_t *buf)
+{
+    static const char hex[] = "0123456789abcdef";
+    char line[80];
+    char *p;
+    unsigned i;
+    int ok;
+
+    for (i = 0; i < d->secsize; i++)
+        buf[i] = 0xde;
+
+    ok = d->read && nb_dev_read(d->name, 0, lba, buf, 1);
+
+    p = put_str(line, ">blk ");
+    p = put_str(p, d->name);
+    p = put_str(p, " u=0 lba=");
+    p = put_num(p, lba);
+    p = put_str(p, ok ? " ok " : " fail st=$");
+    if (ok)
+    {
+        for (i = 0; i < 16; i++)
+        {
+            *p++ = hex[buf[i] >> 4];
+            *p++ = hex[buf[i] & 15u];
+        }
+    }
+    else
+        p = put_hex(p, nb_ata_status(), 2);
+    *p = '\0';
+    serial_line(line);
+
+    p = put_str(line, "block read: ");
+    p = put_str(p, d->name);
+    p = put_str(p, " sector ");
+    p = put_num(p, lba);
+    if (ok)
+    {
+        p = put_str(p, " (");
+        p = put_num(p, d->secsize);
+        p = put_str(p, " bytes)");
+        *p = '\0';
+        kernel_ok(line);
+    }
+    else
+    {
+        p = put_str(p, " would not read (status $");
+        p = put_hex(p, nb_ata_status(), 2);
+        p = put_str(p, ")");
+        *p = '\0';
+        kernel_warn(line);
+    }
+}
+
+static void dev_selftest(void)
+{
+    uint8_t buf[2048];
+    const struct nb_dev *d;
+
+    d = nb_dev_find("ata.device");
+    if (d && d->units && d->read && d->secsize <= sizeof buf)
+        report_read(d, 0, buf);            /* sector 0: where a disk boots */
+
+    d = nb_dev_find("atapi.device");
+    if (d && d->units && d->read && d->secsize <= sizeof buf)
+        report_read(d, 16, buf);           /* 16: the CD's volume header   */
+}
+
+/*
+ * Serial only, and before anything has been judged: what each unit left
+ * on the task file when it was selected.  The boot log has one line per
+ * device and no room for the unit that answered but would not identify,
+ * which is exactly the case worth seeing -- a drive that is there and a
+ * bus that is not can leave the same status behind, and it takes the
+ * signature to tell them apart.
+ */
+static void report_ident(unsigned unit, const struct nb_ata_id *id)
+{
+    char line[72];
+    char *p;
+
+    p = put_str(line, ">ide u=");
+    p = put_num(p, unit);
+    p = put_str(p, " st=$");
+    p = put_hex(p, id->status, 2);
+    p = put_str(p, " sig=$");
+    p = put_hex(p, id->sig, 4);
+    p = put_str(p, " id=$");
+    p = put_hex(p, id->ident, 4);
+    *p = '\0';
+    serial_line(line);
+}
+
 void kernel_drivers(void)
 {
     struct nb_ata_id dev[2];
     const char *cd_model = 0;
     const char *card_model = 0;
     unsigned card_i = 0;
+    unsigned disk_i = 0;
+    unsigned cd_i = 0;
     unsigned ndisk = 0;
     unsigned ncd = 0;
     unsigned ncard = 0;
@@ -297,6 +474,8 @@ void kernel_drivers(void)
 
     nb_ata_identify(0, &dev[0]);
     nb_ata_identify(1, &dev[1]);
+    report_ident(0, &dev[0]);
+    report_ident(1, &dev[1]);
 
     for (i = 0; i < 2; i++)
     {
@@ -304,19 +483,26 @@ void kernel_drivers(void)
             continue;
         if (dev[i].atapi)
         {
+            if (!ncd)                   /* the first CD is this device's 0 */
+                cd_i = i;
             ncd++;
             if (!cd_model)
                 cd_model = dev[i].model;
         }
         else if (dev[i].ident & 0x80u)          /* IDENTIFY word 0, bit 7 */
         {
+            if (!ncard)
+                card_i = i;
             ncard++;
-            card_i = i;
             if (!card_model)
                 card_model = dev[i].model;
         }
         else
+        {
+            if (!ndisk)
+                disk_i = i;
             ndisk++;
+        }
     }
 
     /* ---- ide: the controller, then each fixed disk behind it ------- */
@@ -327,21 +513,8 @@ void kernel_drivers(void)
     }
     else
     {
-        /* $FF is a bus nobody is driving, $00 a bus every line is pulled
-         * down, and an identify word of $FFFF means no result was offered
-         * at all.  A failed probe reports what it saw, not just that it
-         * failed, so the line is worth reading when something is wrong. */
-        static const char hex[] = "0123456789ABCDEF";
-        unsigned st = dev[0].status;
-        unsigned idv = dev[0].ident;
-        int nibble;
-
-        d = put_str(msg, "ata.device: no device on the IDE bus (status $");
-        *d++ = hex[(st >> 4) & 0xf];
-        *d++ = hex[st & 0xf];
-        d = put_str(d, ", identify $");
-        for (nibble = 12; nibble >= 0; nibble -= 4)
-            *d++ = hex[(idv >> nibble) & 0xf];
+        d = put_str(msg, "ata.device: no device on the IDE bus (");
+        d = put_st_id(d, dev[0].status, dev[0].ident);
         d = put_str(d, ")");
         *d = '\0';
         kernel_warn(msg);
@@ -374,7 +547,22 @@ void kernel_drivers(void)
     }
     else
     {
-        kernel_warn("atapi.device: no CD-ROM on the IDE bus");
+        /*
+         * The unit that announced itself as a packet device, or else the
+         * second one, which is where a CD sits when the bus also carries
+         * a disk.  Either way, what that unit said when it was asked is
+         * the whole difference between a bus with nothing on it and a
+         * drive that is there but not answering yet.
+         */
+        unsigned cu = dev[0].sig == 0x14ebu ? 0 : 1;
+
+        d = put_str(msg, "atapi.device: no CD-ROM on the IDE bus (");
+        d = put_sig(d, dev[cu].sig);
+        d = put_str(d, ", ");
+        d = put_st_id(d, dev[cu].status, dev[cu].ident);
+        d = put_str(d, ")");
+        *d = '\0';
+        kernel_warn(msg);
     }
 
     /* ---- card reader: a removable unit on the same bus ------------- */
@@ -396,6 +584,192 @@ void kernel_drivers(void)
     else
         kernel_warn("sdcard.device: no removable card in the IDE socket");
 
+    /*
+     * ---- zz9000: MNT Research's Zorro card and its AX module --------
+     *
+     * The one bus on this machine that can still turn up with something
+     * on it, so it is asked rather than assumed.  zz9000.c reads the
+     * autoconfig window, matches the card by manufacturer and product,
+     * gives it an address from the map the probe already walked, and
+     * then polls the card's own registers; everything this reports
+     * therefore comes from the card or from the window it sits in, and
+     * nothing from a table of what the machine is believed to hold.
+     *
+     * A card that is absent is a WARN and not a FAILED: no AGA machine
+     * ships with one, and the driver has no reason to hold up the rest
+     * of the boot.  A card that parses but cannot be given a window, or
+     * that does not answer once it has one, is reported as that rather
+     * than as absent, because the three are different faults and only
+     * the first means "nothing there".
+     */
+    {
+        const struct nb_zz9000 *zz = nb_zz9000_probe();
+
+        if (zz->bound)
+        {
+            d = put_str(msg, "zz9000.device: MNT ZZ9000, Zorro ");
+            *d++ = (char)('0' + zz->zorro);
+            d = put_str(d, ", ");
+            d = put_num(d, zz->size / 0x100000ul);
+            d = put_str(d, " MB at $");
+            d = put_hex(d, zz->base, 8);
+            *d = '\0';
+            kernel_ok(msg);
+            pbound++;
+        }
+        else if (zz->present && zz->base)
+        {
+            d = put_str(msg, "zz9000.device: MNT ZZ9000 present, no register");
+            d = put_str(d, " response at $");
+            d = put_hex(d, zz->base, 8);
+            *d = '\0';
+            kernel_warn(msg);
+        }
+        else if (zz->present)
+        {
+            d = put_str(msg, "zz9000.device: MNT ZZ9000 present, no free");
+            d = put_str(d, " window of ");
+            d = put_num(d, zz->size / 0x100000ul);
+            d = put_str(d, " MB");
+            *d = '\0';
+            kernel_warn(msg);
+        }
+        else
+        {
+            kernel_warn("zz9000.device: no MNT ZZ9000 in the autoconfig"
+                        " window");
+        }
+
+        /*
+         * The AX is not a second board but a module the card reports in
+         * one bit of one register, so it can only be asked once the card
+         * has an address -- which is exactly the order this runs in.
+         */
+        if (zz->bound)
+        {
+            d = put_str(msg, "zz9000ax.audio: ");
+            if (zz->ax)
+                d = put_str(d, "AX module fitted (firmware $");
+            else
+                d = put_str(d, "no AX module on the card (firmware $");
+            d = put_hex(d, zz->fw, 4);
+            d = put_str(d, ")");
+            *d = '\0';
+            if (zz->ax)
+            {
+                kernel_ok(msg);
+                pbound++;
+            }
+            else
+                kernel_warn(msg);
+        }
+        else
+            kernel_warn("zz9000ax.audio: needs a configured ZZ9000");
+    }
+
+    /*
+     * ---- the device table: what NeoBench has bound for itself --------
+     *
+     * The lines above say a driver started; this is where the system goes
+     * to use one.  Each device that answered gets an entry carrying the
+     * driver behind it and the units it may be asked for, so a caller
+     * reads a sector by name rather than by knowing which controller the
+     * name happens to sit on.
+     *
+     * A device that did not answer gets no entry at all.  A name that
+     * could be looked up but would never work is worse than no name, and
+     * it is the difference between "not on this machine" and "broken",
+     * which the boot log above already draws.
+     */
+    {
+        struct nb_dev d;
+
+        d.name = 0;
+        d.units = 0;
+        d.base = 0;
+        d.secsize = 0;
+        d.read = 0;
+        d.write = 0;
+
+        if (ndisk || ncard)                 /* the controller itself     */
+        {
+            d.name = "ata.device";
+            d.units = ndisk;
+            d.base = disk_i;
+            d.secsize = 512;
+            d.read = nb_ata_read;
+            d.write = nb_ata_write;
+            nb_dev_add(&d);
+        }
+        if (ncd)
+        {
+            d.name = "atapi.device";
+            d.units = ncd;
+            d.base = cd_i;
+            d.secsize = 2048;
+            d.read = nb_atapi_read;
+            d.write = 0;                     /* a CD-ROM is read only     */
+            nb_dev_add(&d);
+        }
+        if (ncard)
+        {
+            d.name = "sdcard.device";
+            d.units = ncard;
+            d.base = card_i;
+            d.secsize = 512;
+            d.read = nb_ata_read;
+            d.write = nb_ata_write;
+            nb_dev_add(&d);
+        }
+
+        /*
+         * Paula is on every machine this boots on, so its driver is
+         * bound whether or not anything has been loaded to play through
+         * it.  It has no sectors, which is what a null read and write
+         * with a zero secsize say.
+         */
+        d.name = "sound.device";
+        d.units = 1;
+        d.base = 0;
+        d.secsize = 0;
+        d.read = 0;
+        d.write = 0;
+        nb_dev_add(&d);
+
+        /*
+         * The Zorro card is in the table only when it took an address
+         * and answered: nb_zz9000_probe() is one call per boot, so
+         * asking it again here costs nothing and cannot disagree with
+         * the lines above.
+         */
+        {
+            const struct nb_zz9000 *zz = nb_zz9000_probe();
+
+            d.name = 0;
+            d.units = 0;
+            d.base = 0;
+            d.secsize = 0;
+            d.read = 0;
+            d.write = 0;
+
+            if (zz->bound)
+            {
+                d.name = "zz9000.device";
+                d.units = 1;
+                nb_dev_add(&d);
+            }
+            if (zz->bound && zz->ax)
+            {
+                d.name = "zz9000ax.audio";
+                d.units = 1;
+                nb_dev_add(&d);
+            }
+        }
+    }
+
+    nb_dev_dump();
+    dev_selftest();
+
     /* ---- buses this machine cannot carry --------------------------- */
     kernel_warn("scsi.device: no SCSI host adapter on AGA");
     kernel_warn("usb.device: no USB host controller on AGA");
@@ -411,7 +785,7 @@ void kernel_drivers(void)
         kernel_warn(msg);
 
     d = put_num(msg, pbound);
-    d = put_str(d, " of 2 peripheral drivers bound");
+    d = put_str(d, " of 3 peripheral drivers bound");
     *d = '\0';
     if (pbound)
         kernel_ok(msg);

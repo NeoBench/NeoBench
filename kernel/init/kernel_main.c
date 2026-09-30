@@ -149,6 +149,18 @@ void kernel_main(const nb_bootinfo_t *boot)
         int pressed;
 
         nb_sound_poll();
+
+        /* XXX SPIKE: echo anything the receiver hands us */
+        for (;;)
+        {
+            int c = amiga_serial_poll();
+
+            if (c < 0)
+                break;
+            amiga_serial_putc('<');
+            amiga_serial_putc((char)c);
+        }
+
         pressed = nb_pointer_frame();
 
         if (pressed &&

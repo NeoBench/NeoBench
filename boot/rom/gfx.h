@@ -7,7 +7,7 @@
  * Software compositor for the futuristic desktop scene.
  *
  * Everything is drawn into an RGB565 back buffer in Chip RAM, then
- * quantised to 256 colours and packed into the AGA planar frame buffer
+ * quantised to 128 colours and packed into the AGA planar frame buffer
  * by gfx_present().
  *
  *   $060000..$100000  RGB565 back buffer   (640 x 512 x 2)
@@ -76,7 +76,7 @@ void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale);
 void gfx_band(int y0, int y1);
 void gfx_band_all(void);
 
-/* Median-cut the back buffer to 256 colours, upload the AGA palette
+/* Median-cut the back buffer to 128 colours, upload the AGA palette
  * and pack the RGB565 image into the eight bitplanes. */
 void gfx_present(void);
 

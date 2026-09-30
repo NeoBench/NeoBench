@@ -21,7 +21,7 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
   [  OK  ] RTG detected (hires 640x512 lace, 8 bpp)
   [  OK  ] MMU detected
   [  OK  ] FPU detected
-  [  OK  ] Memory detected (80 MB fast, 80 MB preferred)
+  [  OK  ] Memory detected (136 MB fast, 136 MB preferred)
   [  OK  ] UART detected (9600 baud)
   [  OK  ] System detected.
   ```
@@ -36,13 +36,27 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
   - *MMU / FPU* — by executing an instruction that only exists when the feature
     does (`PFLUSHA`, `FNOP`) and catching the trap when it doesn't. A 68060
     powers up with its FPU disabled, so the boot clears PCR bit 1 first.
-  - *Memory* — write/read patterns at the last long of each megabyte of
-    expansion space, then above the chipset window once the low map has filled;
-    the first gap ends the count. The result is reported as **fast** RAM
-    because that is what the startup requirement is written against:
-    `[FAILED]` below the 50 MB floor, `[ WARN ]` below the 80 MB preferred.
+  - *Memory* — two different patterns written to the last two longs of each
+    megabyte, each of which has to survive the other's write: a single pass
+    hands back whatever the bus last carried and calls a hole RAM. The low
+    map, `$200000` up, ends at its first gap; above the chipset window the
+    whole map is walked instead, because a Blizzard board answers at
+    `$48000000` past a gigabyte of nothing, and each megabyte is counted once
+    — a second window onto the same bank is a mirror, not more memory. The
+    result is reported as **fast** RAM because that is what the startup
+    requirement is written against: `[FAILED]` below the 128 MB floor,
+    `[ WARN ]` below the 136 MB preferred.
   - *RTG / UART* — framebuffer readback with pixel restore; the serial port's
     presence is asserted by the console that has been using it since reset.
+  - *Zorro / ZZ9000* — a read-only walk of the autoconfig space at `$E80000`
+    and `$FF000000`, one 64-byte slot at a time, each checked for structure
+    before it is believed and matched on manufacturer `$6D6E` with products
+    3/4/5 before a single byte is written — there is no shutup write. FS-UAE
+    drains the autoconfig chain at reset, so nothing is found there by design:
+    this is proved by `tools/tests/test_zorro`, a host test over recorded slot
+    images, together with an emulated Zorro III card decode. Whether a real
+    ZZ9000 is still on the bus after a genuine AmigaOS 3.2.3 boot has **not**
+    been established.
   - All instruction traps are caught by a temporary exception shim (vectors 4,
     11 and 61) that rewrites the saved PC to a recovery label — a negative
     result is a caught trap, never a fault-stub halt.
@@ -50,6 +64,51 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
 Verified generation by generation in FS-UAE: 68060 reports green `CPU
 detected (Motorola 68060)`; 68040/68030/68020 each report red `CPU is not
 68060 (Motorola 680x0)` and boot continues.
+
+### Devices
+
+NeoBench does not borrow AmigaOS's drivers. The `.device` layer is NeoBench's
+own: a device is in the table because the hardware it names answered, and it
+says plainly what it can do.
+
+```
+>dev n=3
+>dev ata.device u=1 b=0 s=512 io=read,write
+>dev atapi.device u=1 b=1 s=2048 io=read
+>dev sound.device u=1 b=0 s=0 io=none
+[  OK  ] ata.device: Gayle IDE controller (PIO mode 0)
+[  OK  ]   hda: UAE-IDE New Disk.hdf, 1024 MB
+[  OK  ] atapi.device: AU-ETAPA I
+[  OK  ] block read: ata.device sector 0 (512 bytes)
+[  OK  ] block read: atapi.device sector 16 (2048 bytes)
+```
+
+`ata.device` and `atapi.device` drive Gayle in PIO mode 0 — the task file
+programmed directly, DRQ polled under a bound, the data register moved a byte
+at a time so a buffer at an odd address is legal. Nothing on the bus is taken
+on trust: a unit is selected before its status is believed, because status
+belongs to the *selected* unit, and a driver that asks before it selects has
+already decided "nothing here" about a device that is perfectly well there —
+which is how a CD that is still coming ready becomes an empty bus. The word
+order is measured rather than guessed: the first sector of a rigid disk starts
+`RDSK`, and reading it the other way hands the caller `DRKS` — close enough to
+look plausible, and wrong in a way nothing downstream would survive. IDENTIFY
+is decoded in the byte order word 0 pins down (`$0040` disk, `$848A` card,
+`$80C0`-style packet) rather than by asking which reading of the model name
+looks like text, which cannot settle it: exchanging the bytes inside a field
+leaves its count of letters exactly where it was, so both readings score the
+same. A CD is taken at its word in the cylinder registers (`$14/$EB`) and read
+with ATAPI READ(10) in 2048-byte blocks; `sdcard.device` is the same bus one
+unit along; `sound.device` is Paula; `zz9000.device` binds only to a card that
+was actually found. A driver with no sector path reports `io=none` rather than
+passing itself off as a disk.
+
+Every path is bounded — a missing, slow or wedged unit answers "no" under a
+poll bound and the boot carries on. The one thing never done at boot is a
+write: with the byte order wrong there, sector 0 of the boot disk would be
+corrupted. That path was proved once against a scratch file — a pattern
+written, read back, and compared against the file as it sat on the host — and
+is deliberately left out of the shipped self-test.
 
 ## Building
 
@@ -88,6 +147,21 @@ Two gotchas both cost a debugging session each:
    autoconfig board, mapped only when an OS enumerates it. NeoBench probes
    memory directly, so the direct-map mode is what makes it visible.
 
+To put something on the IDE bus for the device layer to find:
+
+```ini
+hard_drive_0 = /path/to/disk.hdf
+hard_drive_0_controller = ide0
+cdrom_drive_0 = /path/to/disc.iso
+cdrom_drive_0_controller = ide0
+```
+
+The image goes in `cdrom_drive_0`: `cdrom_image_0` on its own is read by the
+frontend and never reaches the drive, so the bus reports an empty unit. The
+drive then arrives as the second unit on the channel the disk is on, which is
+where Gayle can reach it — and `[  OK  ] block read: atapi.device sector 16`
+is the ISO 9660 volume descriptor coming off it.
+
 Swap `cpu =` between `68020`, `68030`, `68040` and `68060` to watch the CPU
 detection ladder answer with the right model.
 
@@ -116,6 +190,11 @@ detection ladder answer with the right model.
       a highlight arc and the mark cut out in white, drawn at four
       sizes -- and the programs, opaque Workbench
       windows, and dial and monitor gadgets
+- [x] NeoBench's own `.device` drivers — `ata.device`, `atapi.device`,
+      `sdcard.device`, `sound.device`, `zz9000.device` — bound because the
+      hardware answered, each saying what it can do (`io=read,write`,
+      `io=read`, `io=none`), with a boot self-test that reads sector 0 of
+      the disk and the volume header of a CD
 - [ ] Input handling and window management on top of the static scene
 
 ## Licence

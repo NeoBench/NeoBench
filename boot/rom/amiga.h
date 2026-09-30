@@ -61,6 +61,9 @@ void amiga_serial_init(void);
 void amiga_display_init(void);
 void amiga_putc(char c);
 void amiga_serial_putc(char c);
+
+/* One received byte, or -1 when the receiver holds nothing. */
+int amiga_serial_poll(void);
 void amiga_display_clear(void);
 void amiga_display_vsync(void);
 void amiga_display_hold(int hold);

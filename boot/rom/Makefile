@@ -39,6 +39,9 @@ OBJS := \
     vbl.o \
     probe.o \
     ata.o \
+    dev.o \
+    zorro.o \
+    zz9000.o \
     gfx.o \
     lib32.o \
     pfs.o \

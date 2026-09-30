@@ -52,6 +52,7 @@
 /* SERDATR status bits, NDK hardware/custom.i */
 #define SERDATF_TBE   0x2000U            /* transmit buffer empty    */
 #define SERDATF_TSRE  0x1000U            /* shift register empty     */
+#define SERDATF_RBF   0x4000U            /* receive buffer full      */
 
 /* DMA write bits, from NDK hardware/dmabits.i */
 #define DMAF_SETCLR  0x8000U
@@ -124,6 +125,27 @@ void amiga_serial_putc(char c)
     }
 
     *(volatile uint16_t *)(CUSTOM_BASE + SERDAT) = (uint16_t)(uint8_t)c;
+}
+
+/*
+ * Take one byte out of the receiver, or -1 when there is none.
+ *
+ * Reading SERDATR is what takes the buffer-full condition with it, so
+ * a byte can only be claimed once.  Nothing here touches INTENA: the
+ * port is polled from the main loop like the pointer is, because the
+ * one interrupt this code owns is the vertical blank and handing the
+ * serial port a vector of its own would mean re-arming a source the
+ * ROM we chainloaded from installed.
+ */
+int amiga_serial_poll(void)
+{
+    volatile uint16_t * const sr =
+        (volatile uint16_t *)(CUSTOM_BASE + SERDATR);
+    uint16_t v = *sr;
+
+    if (!(v & SERDATF_RBF))
+        return -1;
+    return (int)(v & 0x00ffU);
 }
 
 /*

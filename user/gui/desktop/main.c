@@ -9,7 +9,7 @@
  * Freestanding m68k rules apply throughout -- no libgcc and no floating
  * point.  Division is either by a constant the compiler folds into a
  * shift, or through the ROM's own lib32.c helpers (the RAM gauge divides
- * by the 80 MB NeoBench is built for); the numbers that have to move
+ * by the 136 MB NeoBench is built for); the numbers that have to move
  * without either -- the uptime -- are made by subtracting instead.
  *
  * The scene, top to bottom:
@@ -41,10 +41,8 @@
 #include "../../../boot/rom/prefs.h"
 #include "../../../boot/rom/pfs.h"
 #include "../../../boot/rom/pointer.h"
+#include "../../../boot/rom/probe.h"
 #include "logo.h"
-
-/* boot/rom/probe.c: megabytes of expansion space, and of fast RAM. */
-extern unsigned nb_probe_fast_mb(void);
 
 /* ------------------------------------------------------------------ *
  * Palette
@@ -1343,25 +1341,27 @@ static void bar(int x, int y, int w, int fill)
 /*
  * The system monitor.
  *
- * The RAM bar is not decoration: its full scale is the 80 MB of fast
+ * The RAM bar is not decoration: its full scale is the 136 MB of fast
  * RAM NeoBench is built for, and the white tick cut through it marks the
- * 50 MB floor it will not run below -- 5/8 of the track, which is
- * exactly (tw >> 1) + (tw >> 3).  One glance therefore answers "is this
- * machine above the floor, and has it reached the preferred size",
- * which is the same question the boot log's tag colour asks.  The CPU
- * bar keeps its old fixed position: there is no load figure to report
- * yet, only the model, and the log already carries that.
+ * 128 MB floor it will not run below -- both figures taken straight out
+ * of probe.h, so the gauge cannot come to disagree with the boot log's
+ * tag colour about the same question: "is this machine above the floor,
+ * and has it reached the preferred size".  The CPU bar keeps its old
+ * fixed position: there is no load figure to report yet, only the model,
+ * and the log already carries that.
  */
 static void gadget_monitor(int x, int y, int w, int h)
 {
     int tw = w - 56;
     int full = tw - 2;                         /* the track's inner width */
     int c1 = (tw >> 2) + (tw >> 3);            /* 37.5 %, shifts only     */
-    int lo = (full >> 1) + (full >> 3);        /* 50 MB of the 80 MB      */
-    int c2 = (full * (int)nb_probe_fast_mb()) / 80;
+    int lo = (full * (int)NB_FAST_FLOOR) / (int)NB_FAST_PREFERRED;
+    int c2 = (full * (int)nb_probe_fast_mb()) / (int)NB_FAST_PREFERRED;
 
     if (c2 > full)
         c2 = full;
+    if (lo > full)
+        lo = full;
 
     panel(x, y, w, h, "System");
 
@@ -1370,7 +1370,7 @@ static void gadget_monitor(int x, int y, int w, int h)
 
     text_d(x + 8, y + 35, "RAM", C_MUTE);
     bar(x + 46, y + 33, tw, c2);
-    gfx_fill(x + 47 + lo, y + 33, 1, 10, C_WB_LINE); /* 50 MB floor  */
+    gfx_fill(x + 47 + lo, y + 33, 1, 10, C_WB_LINE); /* the 128 MB floor */
 }
 
 /* ------------------------------------------------------------------ *

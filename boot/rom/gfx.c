@@ -2,7 +2,7 @@
  * gfx.c - software compositor for the NeoBench desktop.
  *
  * Drawing happens in an RGB565 back buffer; gfx_present() quantises the
- * finished scene with median cut, uploads a 64-colour AGA palette and
+ * finished scene with median cut, uploads a 128-colour AGA palette and
  * bitplanes the result into the hardware frame buffer.
  *
  * No runtime library: no division (hand-rolled shift/subtract udiv and
@@ -727,7 +727,7 @@ void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale)
  * from 256 to 512 rows, and a fixed stride would only ever reach the
  * top half of the image (the palette would then ignore the taskbar). */
 #define SAMP_STRIDE (((GW * GH) / (int)NSAMP) + 1)
-#define NPAL    64u                     /* indices 0..63; LUT stores idx+1 */
+#define NPAL    128u                    /* indices 0..127; LUT stores idx+1 */
 
 /*
  * A box carries the extent it was born with.
