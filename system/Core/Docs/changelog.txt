@@ -1,7 +1,7 @@
 NeoBench changelog
 ==================
 
-0.1.3
+0.1.6
   NeoBench's own directory structure, not one borrowed from anywhere:
     Apps/ for programs, Config/ for settings, Core/ for Bench, Docs and
     Media, Home/ for your own content and Temp/ where downloads land --
@@ -63,6 +63,20 @@ NeoBench changelog
     hardware, and the sample carries the silence the stop lands in.
   The boot log is phosphor green with systemd-style status lines and
     carries NeoBench's own units only.
+  NeoBench's own .device layer, so the drivers are written here rather
+    than borrowed: ata.device and atapi.device drive Gayle in PIO mode
+    0, sdcard.device is the same bus one unit along, sound.device is
+    Paula, and zz9000.device binds only to a card that was actually
+    found.  A driver with no sector path reports io=none instead of
+    passing itself off as a disk, and a device is in the table only
+    because the hardware it named answered.
+  Input from three sources into one queue: the Amiga keyboard on
+    CIA-A, the serial port on Paula, and a USB HID parser, which has
+    no hardware dependency at all and so is tested on the host -- AGA
+    has no PCI bus for USB to appear on.  The Amiga keys open the
+    start menu as the orb does, Escape puts down whatever is lit, the
+    cursor keys walk the list that is standing, and Return opens what
+    is lit: the second press, taken from the keyboard.
 
 0.1.1
   Prefs/ directory in the ROM: pointer.prefs and screen.prefs are

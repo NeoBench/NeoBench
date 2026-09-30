@@ -2,7 +2,7 @@
 
 Notable changes to NeoBench, newest first. British English throughout.
 
-## 0.1.3
+## 0.1.6
 
 ### Boot
 

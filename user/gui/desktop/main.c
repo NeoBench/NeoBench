@@ -604,7 +604,7 @@ static void window_main(void)
 
     glass_window(x, y, w, h, 20, "NeoBench", 3);
 
-    text_d(x + 10, y + 28, "NeoBench 0.1.3", C_TEXT);
+    text_d(x + 10, y + 28, "NeoBench 0.1.6", C_TEXT);
     text_d(x + 10, y + 42, "Futuristic desktop on AGA", C_MUTE);
     text_d(x + 10, y + 56, "(c) lord_protector 2026 & MiMo", C_MUTE);
     text_d(x + 10, y + 70, "060 AGA/RTG only (A1200/T A4000/T)", C_MUTE);

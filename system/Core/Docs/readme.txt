@@ -1,4 +1,4 @@
-NEOBENCH 0.1.3 -- m68k / AGA
+NEOBENCH 0.1.6 -- m68k / AGA
 ============================
 
 NeoBench is an operating system for 68060 AGA and RTG Amigas

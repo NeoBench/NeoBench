@@ -16,7 +16,7 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
   phosphor green (`#33FF33`) palette and an upright 80×32 bitmap console:
 
   ```
-  NeoBench 0.1.3 m68k-aga
+  NeoBench 0.1.6 m68k-aga
   [  OK  ] CPU detected (Motorola 68060)
   [  OK  ] RTG detected (hires 640x512 lace, 8 bpp)
   [  OK  ] MMU detected
