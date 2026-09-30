@@ -65,7 +65,17 @@ void amiga_serial_putc(char c);
 /* One received byte, or -1 when the receiver holds nothing. */
 int amiga_serial_poll(void);
 void amiga_display_clear(void);
-void amiga_display_vsync(void);
+/*
+ * Has a field gone by since this was last asked?  The wait for the next
+ * field is a loop over this rather than a spin on the request bit,
+ * because the level-3 handler clears that bit a few microseconds after
+ * the hardware sets it and a caller with the keyboard and the serial port
+ * to read while it waits would have to be lucky to catch it: every miss
+ * is another field.  The counter is bumped once per field by that same
+ * handler, so this asks the same question once per field, for exactly the
+ * caller that asked.
+ */
+int  amiga_vbl_pending(void);
 void amiga_display_hold(int hold);
 void amiga_set_color(unsigned idx, uint8_t r, uint8_t g, uint8_t b);
 void amiga_set_fg(unsigned idx);

@@ -3,6 +3,7 @@
 #include "../../boot/rom/ata.h"
 #include "../../boot/rom/dev.h"
 #include "../../boot/rom/probe.h"
+#include "../../boot/rom/usb.h"
 #include "../../boot/rom/zz9000.h"
 
 /*
@@ -737,6 +738,27 @@ void kernel_drivers(void)
         nb_dev_add(&d);
 
         /*
+         * Input, and the wire it can arrive on.  Neither is a bus with a
+         * card to find: the keyboard is on CIA-A and the receiver is on
+         * Paula, both there from the moment the machine came up, so both
+         * drivers are bound whether or not anything has asked them for a
+         * key.  They take no place in the storage or the peripheral
+         * counts either -- not because they are less bound, but because
+         * those two counts are about cards that may or may not have
+         * answered, and there is no card to answer here (kbd.c).
+         */
+        d.name = "input.device";
+        d.units = 1;
+        d.base = 0;
+        d.secsize = 0;
+        d.read = 0;
+        d.write = 0;
+        nb_dev_add(&d);
+
+        d.name = "serial.device";
+        nb_dev_add(&d);
+
+        /*
          * The Zorro card is in the table only when it took an address
          * and answered: nb_zz9000_probe() is one call per boot, so
          * asking it again here costs nothing and cannot disagree with
@@ -770,9 +792,21 @@ void kernel_drivers(void)
     nb_dev_dump();
     dev_selftest();
 
+    /*
+     * Input says where it is listening.  Unlike the lines below this one
+     * is not a bus being asked a question -- it is two receivers on
+     * hardware every machine this boots on has, polled rather than
+     * interrupt driven because the one interrupt NeoBench owns is the
+     * vertical blank (kbd.c).
+     */
+    kernel_ok("input.device: Amiga keyboard on CIA-A, port on Paula");
+
     /* ---- buses this machine cannot carry --------------------------- */
     kernel_warn("scsi.device: no SCSI host adapter on AGA");
-    kernel_warn("usb.device: no USB host controller on AGA");
+    d = put_str(msg, "usb.device: ");
+    d = put_str(d, nb_usb_probe());
+    *d = '\0';
+    kernel_warn(msg);
     kernel_warn("sata.device: no PCI bus, unavailable on AGA");
     kernel_warn("net.device: no network controller on AGA");
 

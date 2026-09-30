@@ -50,7 +50,41 @@ Notable changes to NeoBench, newest first. British English throughout.
 - Host unit test `tools/tests/test_zorro` over recorded slot images, since
   FS-UAE drains the autoconfig chain at reset and so never shows a card.
 
+### Input
+
+- Three backends into one queue of 64 keys (`boot/rom/kbd.c`): the Amiga
+  keyboard on CIA-A, the serial port on Paula, and a USB HID boot-protocol
+  parser. Each answers for itself, and every key that arrives is logged by
+  source, raw code and what it decoded to, so a missing key says which of the
+  three never sent it.
+- The handshake the hardware asks for: a code is read from the SDR, split into
+  code and break (bit 0), then acknowledged by pulsing SPMODE — `$00` in the
+  SDR first, the mode bit held for a bounded spin, then cleared with CRA's
+  other bits read back so Timer A is not disturbed. One code is outstanding
+  at a time, which is what the protocol's mode 0 requires, and CIA-A's serial
+  interrupt is polled through the ICR, which returns the flags and clears
+  them — a level to check, not an edge to count.
+- `input.device` and `serial.device` are registered always, like
+  `sound.device`, and are not counted as bound: they are not disks, and the
+  counters count disks. The new boot line reports the keyboard, and
+  `usb.device`'s warning is built from an actual Zorro walk rather than a
+  constant.
+- The keymap is the ROM's USA0 default plus the British national keys — `#`
+  and `~` on the key beside Return, `\` and `|` beside Left Shift. Caps Lock
+  flips letters only; the keypad parens have no Amiga key and answer nothing.
+- The HID parser has no hardware dependency at all, which is what makes it
+  testable: `tools/tests/test_hid` runs it on the host. On AGA it is
+  unreachable by construction — AGA has no PCI bus — and `nb_kbd_usb()`, the
+  entry a host controller would call, is documented as never called there.
+- The desktop takes keys: the Amiga keys open the start menu as the orb does,
+  Escape dismisses the menu before it dismisses a selection, Up and Down walk
+  the standing list, and Return activates what is lit through the same call a
+  double press makes — one path to an activation, nothing to keep in step.
+- The main loop polls the input stack while it waits for the field, so keys
+  are read a pass at a time instead of only between frames.
+
 ### Documentation
 
-- README: the device layer, the ZZ9000 probe, and the caveats that belong to
-  both — what is proven, and what is merely implemented.
+- README: the device layer, the ZZ9000 probe, the input stack, and the
+  caveats that belong to all three — what is proven, and what is merely
+  implemented.

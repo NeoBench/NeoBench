@@ -49,6 +49,9 @@ OBJS := \
     prefs.o \
     pointer.o \
     audio.o \
+    kbd.o \
+    hid.o \
+    usb.o \
     $(KERNEL_DIR)/init/kernel_main.o \
     $(KERNEL_DIR)/init/banner.o \
     $(KERNEL_DIR)/init/console.o \

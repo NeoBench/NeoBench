@@ -110,6 +110,48 @@ corrupted. That path was proved once against a scratch file — a pattern
 written, read back, and compared against the file as it sat on the host — and
 is deliberately left out of the shipped self-test.
 
+### Input
+
+Three sources feed one queue of 64 keys (`boot/rom/kbd.c`), each answering for
+itself, and each key is logged by source, raw code and what it decoded to — so
+a key that does nothing says which of the three never sent it.
+
+```
+>kbd cia-a=$bfec01 ack=pulse queue=64 recv=kbd,ser
+[  OK  ] input.device: Amiga keyboard on CIA-A, port on Paula
+[ WARN ] usb.device: no host controller (AGA has no PCI bus; Zorro: 0 cards)
+>key src=kbd raw=$4d got=$0101 name=down
+>key src=kbd raw=$44 got=$0104 name=ret
+>key src=ser raw=$61 got=0061 ch=a
+```
+
+The keyboard is read from CIA-A's serial data register, split into code and
+break (bit 0), and acknowledged the way the hardware asks: `$00` in the SDR,
+SPMODE set for a bounded spin, then cleared — with CRA's other bits read back
+first so Timer A is not disturbed. One code is outstanding at a time, which is
+what the protocol's mode 0 requires. CIA-A's serial interrupt is masked in at
+init and polled through the ICR, which returns the flags and clears them — so
+a level is checked rather than an edge counted. Serial bytes arrive from Paula
+one at a time; `\r \n \t`, Escape, backspace and delete are given a key
+meaning and everything else is what it says.
+
+The USB HID parser (`boot/rom/hid.c`) is the boot-protocol half — eight bytes,
+six key slots, rollover handled — with no hardware dependency at all, which is
+the whole reason it can be tested: `tools/tests/test_hid` runs it on the host.
+On AGA it is unreachable by construction, since AGA has no PCI bus and
+`nb_usb_probe()` reports the Zorro walk it made instead. `nb_kbd_usb()` is the
+join a host controller would call, and is documented as never called on AGA.
+
+The keymap is the ROM's USA0 default plus the British national keys — `#` and
+`~` on the key beside Return, `\` and `|` beside Left Shift — because those are
+the keys a British keyboard has that USA0 does not draw. Caps Lock flips
+letters only; the keypad parens have no Amiga key to press and answer nothing.
+
+Keys reach the desktop through `nb_desktop_key()`: the Amiga keys open the
+start menu as the orb does, Escape dismisses the menu before it dismisses a
+selection, Up and Down walk the standing list, and Return activates what is lit
+through the same call a double press makes — one path to an activation.
+
 ## Building
 
 The ROM is freestanding m68k code — no libc, no libgcc (no runtime division:
@@ -139,13 +181,24 @@ fast_memory = 8
 uae_fastmem_autoconfig = false # fast RAM for a bare ROM: no OS runs Zorro autoconfig to map it
 ```
 
-Two gotchas both cost a debugging session each:
+Three gotchas, each of which cost a debugging session:
 
 1. `cpu = 68060` — the FS-UAE frontend reads `cpu`; `cpu_type` never reaches
    the core and the A1200 preset quietly stays at a 68020.
 2. `uae_fastmem_autoconfig = false` — fast memory is otherwise a Zorro II
    autoconfig board, mapped only when an OS enumerates it. NeoBench probes
    memory directly, so the direct-map mode is what makes it visible.
+3. The cursor keys arrive as joystick directions, not as keys: FS-UAE's
+   built-in keyboard-joystick device claims them by default, so Up/Down never
+   reach the emulated keyboard — letters, Return and Escape arrive fine and
+   only the arrows are silent. Bind them back to the Amiga cursor keys:
+
+   ```ini
+   keyboard_key_up = action_key_cursor_up
+   keyboard_key_down = action_key_cursor_down
+   keyboard_key_left = action_key_cursor_left
+   keyboard_key_right = action_key_cursor_right
+   ```
 
 To put something on the IDE bus for the device layer to find:
 

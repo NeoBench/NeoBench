@@ -400,26 +400,33 @@ void amiga_display_clear(void)
 }
 
 /*
- * Wait for the next vertical blank.
+ * Has a field gone by since this was last asked?
  *
- * BPLxPT is a running counter, not a base register: Agnus advances it by
- * the number of bytes fetched on every line and nothing in the hardware
- * ever rewinds it.  That rewind belongs to the level-3 handler now (see
- * vbl.S), because it has to pick the field's starting row as well and it
- * has to run whatever the CPU happens to be busy with.  Acknowledging
- * INTF_VERTB from here would race the handler -- clear the request before
- * it dispatches and that field is never rewound -- so this only watches
- * the request bit.
+ * Not the request bit: BPLxPT's rewind belongs to the level-3 handler
+ * (vbl.S), which acknowledges INTF_VERTB a few microseconds after the
+ * hardware sets it, so the window a spin on that bit is looking at is the
+ * interrupt latency and nothing else.  The main loop's wait does real
+ * work while it waits -- the keyboard and the serial port are read in the
+ * gap -- and code that does work misses windows.  The field counter is
+ * bumped once per field by that same handler, so asking it is asking the
+ * same question with no window to miss: the answer is true once per
+ * field, and true only for whoever asked.
+ *
+ * The static is the field of the previous answer.  It starts at zero in
+ * .bss like everything else this link is allowed to initialise, which
+ * makes the first call true -- one field early costs nothing, and a first
+ * call that answered false would wait for a second field nobody asked
+ * for.
  */
-void amiga_display_vsync(void)
+int amiga_vbl_pending(void)
 {
-    uint32_t spins = 0;
+    static uint32_t seen;
+    uint32_t now = nb_fields;
 
-    while ((REG16(INTREQR) & INTF_VERTB) == 0)
-    {
-        if (++spins > 4000000UL)            /* bounded: never hang the boot */
-            break;
-    }
+    if (now == seen)
+        return 0;
+    seen = now;
+    return 1;
 }
 
 /*

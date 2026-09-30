@@ -2,6 +2,7 @@
 #include "../include/console.h"
 #include "../../boot/rom/amiga.h"
 #include "../../boot/rom/audio.h"
+#include "../../boot/rom/kbd.h"
 #include "../../boot/rom/prefs.h"
 #include "../../boot/rom/pfs.h"
 
@@ -16,6 +17,7 @@ extern void kernel_started(const char *unit);
 extern void kernel_target(const char *target);
 extern void nb_desktop_render(void);
 extern int  nb_desktop_click(int x, int y, int btn);
+extern int  nb_desktop_key(int c);
 extern void nb_pointer_enable(void);
 extern void nb_pointer_after_present(void);
 extern int  nb_pointer_frame(void);
@@ -56,6 +58,17 @@ void kernel_main(const nb_bootinfo_t *boot)
     kernel_starting("NeoBench Kernel Initialisation");
     nb_sound_init();
     amiga_serial_putc('C');
+    /*
+     * Input is armed with the kernel rather than with the desktop,
+     * because what it takes away belongs to the ROM underneath: the
+     * keyboard's interrupt mask is cleared here, which is the moment the
+     * chainloaded system stops seeing keys and NeoBench starts.  It is
+     * early and it is deliberately not repeated -- the receivers are
+     * polled from the first field onwards, and there is nothing to arm
+     * a second time (kbd.c).
+     */
+    nb_kbd_init();
+    nb_kbd_dump();
     kernel_started("NeoBench Kernel Initialisation");
 
     kernel_starting("Detect Hardware");
@@ -147,18 +160,39 @@ void kernel_main(const nb_bootinfo_t *boot)
     for (;;)
     {
         int pressed;
+        int c;
 
         nb_sound_poll();
 
-        /* XXX SPIKE: echo anything the receiver hands us */
-        for (;;)
-        {
-            int c = amiga_serial_poll();
+        /*
+         * The wait for the next field is where the receivers are read.
+         * Paula carries one received byte and the next arrival overwrites
+         * it, so a character typed between two fields has to be taken
+         * here rather than 20 ms later, and the keyboard is read in the
+         * same loop because the queue is what the two have in common.
+         *
+         * The one stretch nothing reads is a present, which lasts as long
+         * as the repaint behind it: the keyboard's code waits for the
+         * handshake either way, and the byte on the wire is the one that
+         * can be lost there.
+         */
+        while (!amiga_vbl_pending())
+            nb_kbd_poll();
 
-            if (c < 0)
-                break;
-            amiga_serial_putc('<');
-            amiga_serial_putc((char)c);
+        /*
+         * What was typed, from whichever receiver it came from, handed to
+         * the scene as a key.  The scene takes it the way it takes a
+         * press and says whether anything changed, so a key that lands
+         * where nothing is lit costs no present.
+         */
+        while ((c = nb_kbd_get()) >= 0)
+        {
+            if (nb_desktop_key(c))
+            {
+                nb_desktop_render();
+                nb_pointer_after_present();
+                nb_desktop_dump();      /* which programs are on screen     */
+            }
         }
 
         pressed = nb_pointer_frame();
@@ -170,7 +204,5 @@ void kernel_main(const nb_bootinfo_t *boot)
             nb_pointer_after_present();
             nb_desktop_dump();      /* which programs are on screen     */
         }
-
-        amiga_display_vsync();
     }
 }

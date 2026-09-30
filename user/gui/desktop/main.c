@@ -38,6 +38,7 @@
 
 #include "../../../boot/rom/gfx.h"
 #include "../../../boot/rom/amiga.h"
+#include "../../../boot/rom/kbd.h"
 #include "../../../boot/rom/prefs.h"
 #include "../../../boot/rom/pfs.h"
 #include "../../../boot/rom/pointer.h"
@@ -897,6 +898,26 @@ static unsigned row_target(int i)
 }
 
 /*
+ * How many rows the list is standing: row 0 is always the level above,
+ * and the rest are the children as far as they run out or the window
+ * does.  A pointer finds this out by landing on nothing, which is a
+ * luxury the keyboard does not have -- it has to know where the list
+ * ends before it moves, or it walks the light off the bottom.
+ */
+static int row_count(void)
+{
+    unsigned child = pfs_first_child(cur_dir);
+    int n = 1;
+
+    while (child != PFS_NONE && n < FILES_ROWS)
+    {
+        n++;
+        child = pfs_next_child(cur_dir, child);
+    }
+    return n;
+}
+
+/*
  * The chosen list row's light: a wash across its full width, under the
  * name and the size, so the double click's first press is visible on
  * the line it landed on rather than only in the serial log.
@@ -1294,6 +1315,151 @@ int nb_desktop_click(int x, int y, int btn)
     if (sel_clear())
         changed = 1;
     return changed;
+}
+
+/*
+ * Where the lit item is, for the pass that follows: the point a press on
+ * it would land on, and the field it was lit in.
+ *
+ * A key names an item exactly as a press does, so it has to leave the
+ * double press where the press left it -- the window and the drift
+ * nb_desktop_click measures against are read from here, and neither knows
+ * about the keyboard unless this puts the answer in front of them.  The
+ * geometry is the click pass's own, kept beside it: a menu place, a
+ * program row, or a line of the browser's list.
+ */
+static void sel_mark(void)
+{
+    if (sel_kind == SEL_MENU)
+    {
+        int iy, ih;
+
+        if (sel_idx < N_PLACES)
+        {
+            iy = MENU_P0 + sel_idx * MENU_PH;
+            ih = MENU_PH;
+        }
+        else
+        {
+            iy = MENU_G0 + (sel_idx - N_PLACES) * MENU_ITEMH;
+            ih = MENU_ITEMH;        /* the row's own pitch, as band_select */
+        }
+        sel_x = MENU_X + 6 + MENU_ITEMW / 2;
+        sel_y = iy + ih / 2;
+    }
+    else if (sel_kind == SEL_ROW)
+    {
+        sel_x = FILES_X + FILES_W / 2;
+        sel_y = FILES_Y + FILES_ROW0 + sel_idx * FILES_ROWH +
+                FILES_ROWH / 2;
+    }
+    sel_t = (unsigned)nb_fields;
+}
+
+/*
+ * The keyboard pass: the same scene, named by keys instead of by the
+ * pointer.
+ *
+ * A key does what a press does and nothing else.  The two exist because
+ * a pointer is not always the quickest way to say something, not because
+ * they are two different scenes -- so the two Amiga keys open the start
+ * menu the way the orb opens it, Escape puts down whatever is lit the way
+ * a press on the wallpaper does, Up and Down walk the list that is
+ * standing (the menu while it is up, the browser's rows when it is not)
+ * and are a single press on whatever they land on, and Return runs what
+ * is lit, which is the second.
+ *
+ * It answers in the same terms as nb_desktop_click -- non-zero when the
+ * answer changed what should be on screen -- and takes its bands the same
+ * way, which is what makes a key that lands where nothing is lit cost no
+ * present, and the two safe to call in either order.
+ */
+int nb_desktop_key(int c)
+{
+    int count, kind, walk, from, down;
+
+    /*
+     * The two Amiga keys are the orb, one on either side of the
+     * keyboard, and they open the ordinary transient menu.  The right
+     * button's sticky menu is a gesture the keyboard has no way to make,
+     * and two menus would be two ways of saying one thing.
+     */
+    if (c == NB_KEY_LAMIGA || c == NB_KEY_RAMIGA)
+    {
+        if (!nb_prefs.taskbar)
+            return 0;
+
+        menu_open = !menu_open;
+        menu_sticky = 0;
+        band_menu();
+        if (!menu_open && sel_kind == SEL_MENU)
+            sel_kind = SEL_NONE;    /* the panel took the entry with it */
+        return 1;
+    }
+
+    if (c == NB_KEY_ESC)
+    {
+        if (!menu_open)
+            return sel_clear();     /* on the wallpaper: drop the choice */
+
+        menu_open = 0;              /* the menu first, as anywhere else   */
+        band_menu();
+        if (sel_kind == SEL_MENU)
+            sel_kind = SEL_NONE;
+        return 1;
+    }
+
+    /*
+     * Return is the second press: the light already says which entry, so
+     * this opens it through the very call a double press makes -- one
+     * path to an activation, and nothing to keep in step.
+     */
+    if (c == NB_KEY_RET)
+    {
+        if (sel_kind == SEL_NONE)
+            return 0;               /* nothing is lit: the key is nothing */
+        return activate(sel_kind, sel_idx);
+    }
+
+    if (c != NB_KEY_UP && c != NB_KEY_DOWN)
+        return 0;
+
+    down = (c == NB_KEY_DOWN);
+
+    if (menu_open)
+    {
+        count = MENU_ITEMS;
+        kind  = SEL_MENU;
+    }
+    else if (files_open)
+    {
+        count = row_count();
+        kind  = SEL_ROW;
+    }
+    else
+        return 0;                   /* neither list is standing           */
+
+    if ((kind == SEL_MENU && sel_kind == SEL_MENU) ||
+        (kind == SEL_ROW  && sel_kind == SEL_ROW))
+        from = sel_idx;             /* the light is already in this list  */
+    else
+        from = -1;                  /* nothing lit: start at the top      */
+
+    walk = (from >= 0) ? from : (down ? -1 : count);
+    walk += down ? 1 : -1;
+    if (walk < 0)
+        walk = 0;
+    else if (walk >= count)
+        walk = count - 1;
+    if (walk == from && from >= 0)
+        return 0;                   /* against the end of the list        */
+
+    sel_clear();
+    sel_kind = kind;
+    sel_idx  = walk;
+    sel_mark();
+    band_select(sel_kind, sel_idx);
+    return 1;
 }
 
 /* ------------------------------------------------------------------ *
