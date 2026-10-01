@@ -115,6 +115,7 @@ static int mx, my;                 /* hot spot, screen pixels           */
 static int ov_x, ov_y, ov_w, ov_h; /* overlay rect currently borrowed   */
 static int have_ov;
 static int last_x, last_y, last_w, last_h;   /* rect last drawn         */
+static int held;                    /* buttons down as of the last field  */
 static uint8_t save[PTR_MAX_W * PTR_MAX_H];
 static int btn_prev;
 static int fg_idx, bg_idx;
@@ -415,6 +416,11 @@ int nb_pointer_y(void)
     return my;
 }
 
+int nb_pointer_held(void)
+{
+    return held;
+}
+
 int nb_pointer_frame(void)
 {
     int dx, dy, btn;
@@ -422,6 +428,7 @@ int nb_pointer_frame(void)
     int nx, ny;
 
     amiga_mouse_poll(&dx, &dy, &btn);
+    held = btn;
 
     if (dx || dy)
     {

@@ -1,4 +1,4 @@
-NEOBENCH 0.1.6 -- m68k / AGA
+NEOBENCH 0.1.7 -- m68k / AGA
 ============================
 
 NeoBench is an operating system for 68060 AGA and RTG Amigas
@@ -18,8 +18,9 @@ the root to see it.
     boot.cfg             how long the boot is held, and whether the
                          hardware is walked before drivers are bound
     pointer.cfg          mouse pointer: shape, scale, speed, colour
-    screen.cfg           wallpaper, grid, glows, taskbar, bar style,
-                         how much of the backdrop the bar shows, face
+    screen.cfg           wallpaper, grid, glows, which of the five
+                         washes paints it, taskbar, bar style, how much
+                         of the backdrop the bar shows, face
     sound.cfg            the startup chime and its level
   Core/                  the operating system itself
     Bench/               the benchmark harness
@@ -84,6 +85,47 @@ twenty-four pixels, opens it.  The orb, the window crosses, the task
 buttons and the sliver are controls and answer to one press, and the
 right button opens the menu in the sticky form that stays up across
 several choices.
+
+The programs
+------------
+
+  Files        the directory browser, reading the store the image was
+               built with; choosing a file in it runs NeoText
+  Clock        an analogue dial
+  Monitor      two bars: fast memory in use, and the uptime
+  About        what this build is
+  Preferences  the backdrop, and the grid and the glow over it
+  NeoText      the reader
+
+Preferences offers five backdrops -- wash, paper, azure, dusk and
+slate -- and paints the one you choose at once; "backdrop" in
+Config/screen.cfg says which the machine comes up with.  The grid and
+the glow are check boxes in the same pane.  All five are the same
+light field in five hues, so the mark, the wordmark and the chrome
+over them read alike on every one.
+
+NeoText opens any file: plain text as it is written, a PDF with its
+text lifted out of the page, and anything else as the bytes it is,
+eight to a line.  It follows the caret as you type and says on its
+status line what it is showing and where you are in it.  The store
+has no write path yet, so a file you have typed into is labelled
+edited but not saved.
+
+The windows are drawn in Aero terms -- a pane of glass across the
+caption with the backdrop still reading through it, a light steel rim
+round the frame, and a shadow thrown below and to the right -- over
+Workbench's grey body and white field.  Press the caption anywhere
+that is not one of its three buttons and the window goes where the
+pointer goes until the button comes back up, taking the keyboard with
+it on the way.  The clamp keeps the caption on the screen rather than
+the frame, so a window may stand half off an edge and still be picked
+up by again.  All six move: the four program windows by their
+captions, the dial and the monitor by their own bodies.
+
+The keyboard follows the window you are in: the cursor keys walk the
+list that is standing or move the caret, Return opens what is lit or
+starts a new line, and Escape puts down whichever program has the
+keyboard.
 
 Building
 --------

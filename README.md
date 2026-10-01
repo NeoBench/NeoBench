@@ -16,7 +16,7 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
   phosphor green (`#33FF33`) palette and an upright 80×32 bitmap console:
 
   ```
-  NeoBench 0.1.6 m68k-aga
+  NeoBench 0.1.7 m68k-aga
   [  OK  ] CPU detected (Motorola 68060)
   [  OK  ] RTG detected (hires 640x512 lace, 8 bpp)
   [  OK  ] MMU detected
@@ -151,6 +151,59 @@ Keys reach the desktop through `nb_desktop_key()`: the Amiga keys open the
 start menu as the orb does, Escape dismisses the menu before it dismisses a
 selection, Up and Down walk the standing list, and Return activates what is lit
 through the same call a double press makes — one path to an activation.
+
+### Desktop
+
+Workbench-3.2-shaped chrome over NeoBench's own backdrop: a list view that
+reverses the chosen row, icons on a 24 px tile, and the start bar at half
+height. The windows themselves are drawn in the Aero terms the bar and the
+start menu already use — a pane of glass across the caption with the backdrop
+still reading through it, a light steel rim, a shadow thrown below and to the
+right, and Workbench's grey body and white field sunk inside it. The scene is
+rebuilt from the flags and only the rows a change touched are presented, so
+two windows standing over each other cost nothing; a window's body is opaque,
+and only its caption is glass.
+
+Every window can be picked up and carried: press the caption — anywhere in
+the strip that is not one of its three buttons — and it goes where the
+pointer goes until the button comes back up, taking the keyboard with it on
+the way, as a press inside a window always does. The clamp is on the caption
+rather than the frame, so a window may stand half off an edge, as windows do
+on any desktop, but enough of the strip stays on the screen to be picked up
+by again. All six move: the four program windows by their captions, the dial
+and the monitor by their own bodies.
+
+Six programs. Files reads the store the image was built with; Clock is an
+analogue dial; Monitor shows fast memory in use; About says what this build
+is; **Preferences** carries the backdrop and the two layers over it; and
+**NeoText** opens any file in the store — plain text as written, a PDF with
+its text lifted out of the page, anything else as a hex view of the bytes it
+is, eight to a line.
+
+PDF text is read here rather than borrowed (`boot/rom/pdf.c`): page streams
+are inflated by `boot/rom/inflate.c`, a raw DEFLATE decoder with no zlib
+header, no allocation and no recursion, and the text operators are walked so
+the lines of the page come out as the lines of the reader — `Tj`, `TJ`, `'`
+and `"` show their strings, `T*` and `Td`/`TD` and a `Tm` that moves down the
+page put the breaks back, two moves in a row give the blank line between
+paragraphs, and kerning narrow enough to be a space becomes one. Image and
+embedded-font streams are skipped rather than decoded; a document set through
+a font NeoBench cannot read falls back to the hex view instead of showing
+nonsense. `system/Core/Docs/guide.pdf` ships as a document to open.
+
+```text
+text  row 12 of 84                    (store is read-only)
+```
+
+`backdrop = wash|paper|azure|dusk|slate` in `Config/screen.cfg` says which of
+the five the machine comes up with, and the Preferences pane chooses one for
+the session and repaints at once. The five are five hues of one light field,
+so the mark, the wordmark, the horizon glows and the chrome over them read
+the same on every one.
+
+The keyboard follows the window you are in: the cursor keys walk the list
+that is standing or move the caret, Return opens what is lit or starts a new
+line, and Escape puts down whichever program has the keyboard.
 
 ## Building
 

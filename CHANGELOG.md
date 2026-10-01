@@ -2,6 +2,76 @@
 
 Notable changes to NeoBench, newest first. British English throughout.
 
+## 0.1.7
+
+### Documents
+
+- **NeoText**, the reader, opens every file in the store: plain text as
+  written, a PDF with its text lifted out of the page, and anything else — an
+  executable, a sound, an archive — as a hex view of the bytes it is, eight to
+  a line. A file chosen in Files runs it, and the start menu starts it too.
+- **PDF text extraction** (`boot/rom/pdf.c`): page streams are inflated by
+  `boot/rom/inflate.c`, a raw DEFLATE decoder written for the purpose — no
+  zlib header, no allocation, no recursion, every bounds check made — and the
+  text operators are walked. `Tj`, `TJ`, `'` and `"` show their strings, `T*`
+  and `Td`/`TD` and a `Tm` that moves down the page put the line breaks back,
+  two moves in a row give the blank line between paragraphs, and kerning
+  narrow enough to be a space becomes one. Image and embedded-font streams are
+  skipped rather than guessed at; a document set through a font NeoBench
+  cannot read falls back to the hex view instead of pretending.
+- `system/Core/Docs/guide.pdf` ships as a real document to open: two pages,
+  Flate content streams, a real cross-reference table, written for the reader
+  to read.
+- The reader is honest about the store: a text file can be typed into and says
+  so on its status line — edited, not saved — because PFS has no write path
+  yet.
+
+### Preferences
+
+- **A Preferences pane** carrying the backdrop: wash, paper, azure, dusk and
+  slate, chosen with one press and painted at once, with the hairline grid and
+  the horizon glows as check boxes beside it. `backdrop = ...` in
+  `Config/screen.cfg` says which one the machine comes up with; only the file
+  says that, and the pane decides for the session.
+- The four fixed pairs are five hues of one light field rather than four new
+  desktops, so the mark, the wordmark, the glows and the Workbench chrome over
+  them read the same on every one.
+
+### Desktop
+
+- **Windows can be picked up and carried.** Press the caption — anywhere in
+  the strip that is not one of its three buttons — and the window goes where
+  the pointer goes until the button comes back up, taking the keyboard with
+  it on the way, as a press inside a window always does. The clamp is on the
+  caption rather than the frame, so a window may stand half off an edge, as
+  windows do on any desktop, but enough of the strip stays on the screen to
+  be picked up by again. All six move: the four program windows by their
+  captions, the dial and the monitor by their own bodies.
+- **The windows are drawn in Aero**, which is what the bar and the start menu
+  were already drawn in: a pane of glass across the caption with the backdrop
+  still reading through it, a light steel rim, a shadow thrown below and to
+  the right, and Workbench's grey body and white field inside. The monitor's
+  caption follows the same terms, so one corner of the screen does not carry
+  two desktops at once.
+- Two more programs in the start menu and six buttons on the task row, with
+  the row dropping the buttons that no longer fit rather than running off the
+  end of the bar.
+- Escape now puts down whichever program has the keyboard — the cross does it
+  for the pointer, and the keyboard has the same answer.
+- Choosing a file in Files opens it in NeoText instead of stepping into the
+  node, which is what it used to do whether the node was a directory or not.
+- The draw and click passes order the windows by the keyboard: the one being
+  used is painted last and asked first, so a window that covers another never
+  passes a press down to the one it covers.
+
+### Tests
+
+- `tools/tests/test_pdf` drives both new readers from the host: stored, fixed
+  and dynamic blocks against data zlib produced, every error path, and a
+  four-object PDF — a compressed page, an image that must be skipped, an
+  unfiltered page and a stream that is not text — with the expected extraction
+  written out in full.
+
 ## 0.1.6
 
 ### Boot

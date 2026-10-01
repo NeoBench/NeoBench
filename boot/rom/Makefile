@@ -46,6 +46,8 @@ OBJS := \
     lib32.o \
     pfs.o \
     pfs_data.o \
+    inflate.o \
+    pdf.o \
     prefs.o \
     pointer.o \
     audio.o \

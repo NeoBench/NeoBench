@@ -164,6 +164,74 @@ static int name_is(const char *v, const char *want)
     return !v[i];
 }
 
+/* ------------------------------------------------------------------ *
+ * Backdrops
+ * ------------------------------------------------------------------ */
+
+static const char *const bd_name[NB_BD_COUNT] = {
+    "wash", "paper", "azure", "dusk", "slate"
+};
+
+const char *nb_bd_name(int i)
+{
+    if (i < 0 || i >= NB_BD_COUNT)
+        i = NB_BD_WASH;
+    return bd_name[i];
+}
+
+int nb_bd_index(const char *v)
+{
+    int i;
+
+    for (i = 0; i < NB_BD_COUNT; i++)
+        if (name_is(v, bd_name[i]))
+            return i;
+    return -1;
+}
+
+/*
+ * The pair of colours the gradient is painted with.  Wash takes the two
+ * Config/screen.cfg carries, so a file that sets them and says nothing
+ * about the backdrop has exactly the desktop it had before there were
+ * backdrops to choose from -- and the four fixed pairs are all light
+ * fields, because the mark, the wordmark, the horizon glows and the
+ * Workbench chrome over them were drawn against one.  They differ by
+ * hue rather than by weight: a cream, a sky, a peach falling to lilac
+ * and a cool grey-blue, against wash's white and mint.
+ */
+void nb_bd_colours(int i, uint16_t *top, uint16_t *bot)
+{
+    if (i < 0 || i >= NB_BD_COUNT)
+        i = NB_BD_WASH;
+
+    if (i == NB_BD_WASH)
+    {
+        *top = nb_prefs.bg_top;
+        *bot = nb_prefs.bg_bot;
+        return;
+    }
+
+    switch (i)
+    {
+    case NB_BD_PAPER:                       /* warm cream                 */
+        *top = NB_RGB(31, 62, 30);          /* #FDFBF4                   */
+        *bot = NB_RGB(29, 57, 26);          /* #EDE5D3                   */
+        break;
+    case NB_BD_AZURE:                       /* pale sky                   */
+        *top = NB_RGB(29, 61, 31);          /* #E8F4FF                   */
+        *bot = NB_RGB(23, 54, 30);          /* #BBD9F2                   */
+        break;
+    case NB_BD_DUSK:                        /* peach falling to lilac     */
+        *top = NB_RGB(31, 57, 26);          /* #FCE7D6                   */
+        *bot = NB_RGB(27, 52, 30);          /* #DDD2F0                   */
+        break;
+    default:                                /* cool slate grey            */
+        *top = NB_RGB(28, 58, 29);          /* #E3E8EF                   */
+        *bot = NB_RGB(23, 48, 25);          /* #B9C2CE                   */
+        break;
+    }
+}
+
 static void set_key(const char *k, unsigned klen, const char *v)
 {
     if (key_is(k, klen, "width"))          nb_prefs.w       = to_u(v, 640);
@@ -215,6 +283,15 @@ static void set_key(const char *k, unsigned klen, const char *v)
     }
     else if (key_is(k, klen, "bg_top"))    nb_prefs.bg_top  = to_rgb(v, nb_prefs.bg_top);
     else if (key_is(k, klen, "bg_bot"))    nb_prefs.bg_bot  = to_rgb(v, nb_prefs.bg_bot);
+    else if (key_is(k, klen, "backdrop"))
+    {
+        /* named, so a file can be read months later without knowing
+         * what number the pane has since put the choice at */
+        int i = nb_bd_index(v);
+
+        if (i >= 0)
+            nb_prefs.backdrop = i;
+    }
     else if (key_is(k, klen, "font"))
         copy_str(nb_prefs.font, (unsigned)sizeof(nb_prefs.font), v);
     else if (key_is(k, klen, "shape"))     to_shape(v);
@@ -319,6 +396,7 @@ static void defaults(void)
      * read: white over mint */
     nb_prefs.bg_top  = NB_RGB(31, 63, 31);
     nb_prefs.bg_bot  = NB_RGB(27, 59, 28);
+    nb_prefs.backdrop = NB_BD_WASH;
 
     nb_prefs.shape   = NB_PTR_ARROW;
     nb_prefs.scale   = 1;
@@ -439,6 +517,8 @@ void nb_prefs_dump(void)
     put(nb_prefs.bar_style == BAR_CLASSIC ? " bar=classic" : " bar=aero");
     put(" glass=");
     put_u(nb_prefs.bar_glass);
+    put(" backdrop=");
+    put(nb_bd_name(nb_prefs.backdrop));
     put(" font=");
     put(nb_prefs.font);
     put("\n\r");

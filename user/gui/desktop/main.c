@@ -29,11 +29,14 @@
  * Nothing on the wallpaper at all -- the five places the desktop used
  * to show as a column of icons down its left edge are entries in the
  * start menu the orb opens, and so are the directory browser, the
- * clock, the monitor and the about panel.  Each program is a flag set
- * by that menu and tested in the draw pass below, so what is on screen
- * is exactly what the user asked for.  Config/screen.cfg carries
- * "bar = aero | classic" (the flat Workbench field the bar was drawn
- * with first) and "glass", how much of the backdrop the pane shows.
+ * clock, the monitor, the about panel, Preferences and NeoText.  Each
+ * program is a flag set by that menu and tested in the draw pass below,
+ * so what is on screen is exactly what the user asked for.
+ * Config/screen.cfg carries "bar = aero | classic" (the flat Workbench
+ * field the bar was drawn with first), "glass", how much of the
+ * backdrop the pane shows, and "backdrop", which of the five washes the
+ * desktop paints -- Preferences changes the same choice at once, but
+ * only the file decides what the machine comes up with.
  */
 
 #include "../../../boot/rom/gfx.h"
@@ -41,6 +44,7 @@
 #include "../../../boot/rom/kbd.h"
 #include "../../../boot/rom/prefs.h"
 #include "../../../boot/rom/pfs.h"
+#include "../../../boot/rom/pdf.h"
 #include "../../../boot/rom/pointer.h"
 #include "../../../boot/rom/probe.h"
 #include "logo.h"
@@ -220,13 +224,21 @@ static void text_right(int right, int y, const char *s, uint16_t c)
  * ------------------------------------------------------------------ */
 
 /*
- * The backdrop, and this one is NeoBench's own: the white-to-mint wash
- * with three soft mint discs laid over it, then the hairline grid, and
- * the mark and the wordmark on top of all of it.  Nothing is sunk into
- * anything: against a light field the artwork carries itself, so it
- * goes down last and at full strength.  The wordmark is navy where it
- * used to be teal, because navy is what still reads as type on white --
- * the teal behind it is only its shadow now.
+ * The backdrop, and this one is NeoBench's own: the wash -- white
+ * falling to mint by default -- with three soft discs laid over it,
+ * then the hairline grid, and the mark and the wordmark on top of all
+ * of it.  Nothing is sunk into anything: against a light field the
+ * artwork carries itself, so it goes down last and at full strength.
+ * The wordmark is navy where it used to be teal, because navy is what
+ * still reads as type on white -- the teal behind it is only its
+ * shadow now.
+ *
+ * Which wash it is, is one of the five the Preferences pane offers and
+ * Config/screen.cfg names: wash is this white-to-mint one, and the
+ * other four are a cream, a sky, a peach falling to lilac and a cool
+ * grey-blue.  They all carry the same glows, the same grid and the
+ * same artwork, which is why they are five hues of one field rather
+ * than five different desktops.
  *
  * The Workbench this desktop takes its chrome from lays a plain blue
  * ramp behind everything; that is the one part of it that is not
@@ -249,8 +261,10 @@ static void glow(int cx, int cy, int r, uint16_t c, uint8_t a)
 static void wallpaper(void)
 {
     int i;
+    uint16_t top, bot;
 
-    gfx_vgrad(0, 0, 640, 512, nb_prefs.bg_top, nb_prefs.bg_bot);
+    nb_bd_colours(nb_prefs.backdrop, &top, &bot);
+    gfx_vgrad(0, 0, 640, 512, top, bot);
 
     if (nb_prefs.glow)
     {
@@ -357,9 +371,11 @@ static void icon_media(int x, int y)
  * The program glyphs of the start menu -- the same tile at 14 pixels
  * with a mark that fits the eight rows the hairline leaves clear.
  * Files shares Core's blue, the clock takes Docs' amber, the monitor
- * Bench's green and About Home's violet, so every hue in the set is
- * the same hue wherever it turns up and none of them is invented for
- * a single place.
+ * Bench's green, About Home's violet and Preferences Media's rose, so
+ * every hue in the set is the same hue wherever it turns up and none of
+ * them is invented for a single place.  NeoText takes the slate that is
+ * neither: it is the colour a plain file wears in the browser, and the
+ * reader that opens plain files wears it too.
  */
 static void menu_glyph(int i, int x, int y)
 {
@@ -384,11 +400,27 @@ static void menu_glyph(int i, int x, int y)
         gfx_fill(x + 6, y + 10, 2, 1, C_INK);
         gfx_fill(x + 4, y + 11, 6, 1, C_INK);
         break;
-    default:                                         /* About  */
+    case 3:                                          /* About  */
         mui_plate(x, y, 14, 4, MUI_VIO_T, MUI_VIO_B);
         gfx_disc(x + 7, y + 7, 4, C_INK);
         gfx_fill(x + 7, y + 4, 1, 1, MUI_CUT);       /* the i  */
         gfx_fill(x + 7, y + 6, 1, 3, MUI_CUT);
+        break;
+    case 4:                                          /* Preferences */
+        /* two sliders, one above the other: the marks the pane itself
+         * draws, so the glyph is the program at a size it fits in */
+        mui_plate(x, y, 14, 4, MUI_ROS_T, MUI_ROS_B);
+        gfx_fill(x + 3, y + 6, 8, 1, C_INK);
+        gfx_fill(x + 3, y + 10, 8, 1, C_INK);
+        gfx_fill(x + 5, y + 4, 2, 5, C_INK);         /* knobs */
+        gfx_fill(x + 8, y + 8, 2, 5, C_INK);
+        break;
+    default:                                         /* NeoText */
+        mui_plate(x, y, 14, 4, MUI_GRY_T, MUI_GRY_B);
+        gfx_fill_r(x + 3, y + 4, 8, 8, 1, C_INK);    /* the sheet */
+        gfx_fill(x + 4, y + 6, 6, 1, MUI_CUT);       /* three lines */
+        gfx_fill(x + 4, y + 8, 6, 1, MUI_CUT);
+        gfx_fill(x + 4, y + 10, 4, 1, MUI_CUT);
         break;
     }
 }
@@ -534,45 +566,103 @@ static void wb_frame(int x, int y, int w, int h)
     gfx_fill(x + w - 2, y + 1, 1, h - 2, C_WB_SHADE);
 }
 
-/* caption button: 0 minimise (floor bar), 1 maximise (square),
- * 2 close (cross) -- a Workbench gadget, bevelled grey and set into
- * the blue of the title it belongs to */
+/*
+ * A caption button, in Aero's terms rather than Workbench's: a rounded
+ * cell of glass with a light steel rim and a line of light along its
+ * own top edge, and the glyph cut into it in the type colour the glass
+ * is set in.  It stands on the caption's glass, so it is laid down as
+ * alphas -- there is no colour of its own to cover, only the wash the
+ * window is standing on, which is what keeps it part of the pane
+ * instead of a grey plate stuck to one.
+ *
+ * The cells are 13 wide on a pitch of 15 and the right-most is close,
+ * which is the geometry on_close() reads back; the glyphs are the
+ * Workbench ones, because a floor bar and a cross say minimise and
+ * close on any desktop and a new symbol would only have to be learned.
+ */
 static void cap_btn(int x, int y, int kind)
 {
-    gfx_fill(x, y, 13, 11, C_WB_GREY);
-    gfx_fill(x, y, 13, 1, C_WB_LINE);
-    gfx_fill(x, y + 10, 13, 1, C_WB_LINE);
-    gfx_fill(x, y, 1, 11, C_WB_LINE);
-    gfx_fill(x + 12, y, 1, 11, C_WB_LINE);
-    gfx_fill(x + 1, y + 1, 11, 1, C_INK);
-    gfx_fill(x + 1, y + 1, 1, 9, C_INK);
+    gfx_alpha_r(x, y, 13, 11, 3, C_AERO_RIM, 205);
+    gfx_alpha_r(x + 1, y + 1, 11, 9, 2, C_AERO_BTN, 225);
+    gfx_alpha(x + 2, y + 1, 9, 1, C_INK, 92);
 
     if (kind == 2) {
-        gfx_line(x + 4, y + 3, x + 9, y + 8, C_TEXT);
-        gfx_line(x + 4, y + 8, x + 9, y + 3, C_TEXT);
+        gfx_line(x + 4, y + 3, x + 9, y + 8, C_AERO_TXT);
+        gfx_line(x + 4, y + 8, x + 9, y + 3, C_AERO_TXT);
     } else if (kind == 1) {
-        gfx_fill(x + 4, y + 3, 6, 6, C_TEXT);
+        gfx_fill(x + 4, y + 3, 6, 6, C_AERO_TXT);
     } else {
-        gfx_fill(x + 4, y + 7, 6, 2, C_TEXT);
+        gfx_fill(x + 4, y + 7, 6, 2, C_AERO_TXT);
     }
 }
 
 /*
- * Workbench's window: the frame above, a title reversed into the
- * Workbench blue along the top of it, the caption gadgets bevelled
- * into that blue, and a white field sunk into the middle for the
- * program to draw in.
+ * An Aero window.
+ *
+ * A pane of glass across the caption, a light steel rim round the
+ * frame, a shadow thrown onto the backdrop below and to the right of
+ * it, and Workbench's grey body and white field inside -- the bar and
+ * the start menu are already drawn in these terms, and a window that
+ * disagreed with them would read as a foreign object on the same
+ * desktop.
+ *
+ * The caption is laid over the scene as the scene stands: nothing is
+ * painted into that strip before the glass is, so the alpha composites
+ * with the wash the wallpaper is carrying, or with the window this one
+ * overlaps, and the caption carries what is behind it rather than
+ * hiding it under a colour that only looks like glass.  The body below
+ * is opaque, as a body has to be -- there is a program's own drawing
+ * going on in it.
+ *
+ * The rim is square along its runs and stepped at the corners: one
+ * pixel of steel turning the corner in two steps reads as round at
+ * this size, and it needs no primitive that would fill the middle of
+ * the frame and take the transparency with it.
  */
 static void glass_window(int x, int y, int w, int h, int th,
                          const char *title, int nbtn)
 {
     int i, bx;
 
-    wb_frame(x, y, w, h);
+    /* the shadow, before the frame so it never lands on the frame: a
+     * falloff down and to the right, the way the light falls on the
+     * rest of the chrome */
+    for (i = 0; i < 4; i++)
+        gfx_alpha(x + 3, y + h + i, w, 1, C_SHADOW, 96 - i * 24);
+    for (i = 0; i < 4; i++)
+        gfx_alpha(x + w + i, y + 4, 1, h - 3, C_SHADOW, 96 - i * 24);
 
-    /* caption */
-    gfx_fill(x + 2, y + 2, w - 4, th - 2, C_WB_BLUE);
-    text_d(x + 14, y + (th - 8) / 2, title, C_INK);
+    /* the caption's glass, over whatever the scene had put there */
+    gfx_alpha(x + 1, y + 1, w - 2, th - 1, C_AERO, 200);
+
+    /* the body, opaque, from where the caption stops */
+    gfx_fill(x, y + th, w, h - th, C_WB_GREY);
+
+    /* the rim: light steel along the runs, stepped at the four corners,
+     * with the corner pixels themselves left to the backdrop because
+     * that is what makes the corner read as cut away rather than filled */
+    gfx_fill(x + 3, y, w - 6, 1, C_AERO_RIM);
+    gfx_fill(x + 3, y + h - 1, w - 6, 1, C_AERO_RIM);
+    gfx_fill(x, y + 3, 1, h - 6, C_AERO_RIM);
+    gfx_fill(x + w - 1, y + 3, 1, h - 6, C_AERO_RIM);
+
+    gfx_fill(x + 1, y, 2, 1, C_AERO_RIM);
+    gfx_fill(x, y + 1, 1, 2, C_AERO_RIM);
+    gfx_fill(x + 1, y + h - 1, 2, 1, C_AERO_RIM);
+    gfx_fill(x, y + h - 3, 1, 2, C_AERO_RIM);
+    gfx_fill(x + w - 3, y, 2, 1, C_AERO_RIM);
+    gfx_fill(x + w - 2, y + 1, 1, 2, C_AERO_RIM);
+    gfx_fill(x + w - 3, y + h - 1, 2, 1, C_AERO_RIM);
+    gfx_fill(x + w - 2, y + h - 3, 1, 2, C_AERO_RIM);
+
+    /* what every glass panel has: a lit line along its top edge, and a
+     * closing bead where the pane meets the body below it */
+    gfx_alpha(x + 3, y + 1, w - 6, 1, C_INK, 150);
+    gfx_alpha(x + 3, y + 2, w - 6, 1, C_INK, 62);
+    gfx_alpha(x + 1, y + th - 2, w - 2, 1, C_AERO_RIM, 96);
+    gfx_alpha(x + 1, y + th - 1, w - 2, 1, C_SHADOW, 128);
+
+    text_d(x + 14, y + (th - 8) / 2, title, C_AERO_TXT);
 
     bx = x + w - 8 - nbtn * 15;
     for (i = 0; i < nbtn; i++)
@@ -598,13 +688,26 @@ static void panel(int x, int y, int w, int h, const char *title)
     }
 }
 
+/*
+ * The about panel, and where it stands: the position the layout gave
+ * it, plus whatever a drag has added since.  The offset is a .bss
+ * variable, so it starts at zero without anything having to write to
+ * the ROM image to make that true, and the base stays a constant.
+ */
+static int about_dx, about_dy;
+
+#define AB_X        (124 + about_dx)
+#define AB_Y        (40 + about_dy)
+#define AB_W        300
+#define AB_H        100
+
 static void window_main(void)
 {
-    const int x = 124, y = 40, w = 300, h = 100;
+    const int x = AB_X, y = AB_Y, w = AB_W, h = AB_H;
 
     glass_window(x, y, w, h, 20, "NeoBench", 3);
 
-    text_d(x + 10, y + 28, "NeoBench 0.1.6", C_TEXT);
+    text_d(x + 10, y + 28, "NeoBench 0.1.7", C_TEXT);
     text_d(x + 10, y + 42, "Futuristic desktop on AGA", C_MUTE);
     text_d(x + 10, y + 56, "(c) lord_protector 2026 & MiMo", C_MUTE);
     text_d(x + 10, y + 70, "060 AGA/RTG only (A1200/T A4000/T)", C_MUTE);
@@ -623,10 +726,15 @@ static void col_r(int right, int y, const char *s)
  * from rather than a list of names).
  *
  * The geometry is #defines rather than locals because the click pass
- * below has to land on exactly the rows the draw pass put down.
+ * below has to land on exactly the rows the draw pass put down.  Where
+ * the window *stands* is the layout's position plus an offset the user
+ * can drag it to; the offset is a .bss variable and so starts at zero,
+ * which is what lets the base stay a constant in the ROM image.
  */
-#define FILES_X     376
-#define FILES_Y     176
+static int files_dx, files_dy;
+
+#define FILES_X     (376 + files_dx)
+#define FILES_Y     (176 + files_dy)
 #define FILES_W     248
 #define FILES_H     232
 #define FILES_HEAD  28         /* "Name"/"Size" header row             */
@@ -635,6 +743,63 @@ static void col_r(int right, int y, const char *s)
 #define FILES_ROWS  6          /* ".." plus five children              */
 
 static unsigned cur_dir;       /* the directory being shown; 0 = root  */
+
+/*
+ * The other two program windows, and where they stand.  Preferences is
+ * a small pane tucked beside the browser; NeoText takes the wide middle
+ * of the screen, because a document needs the width.  They overlap each
+ * other and the browser -- two windows in the space there is -- so the
+ * draw pass paints the one with the keyboard last and the click pass
+ * asks for it first, which is one z order stated twice.
+ */
+static int prefs_dx, prefs_dy;
+
+#define PR_X        (110 + prefs_dx)
+#define PR_Y        (150 + prefs_dy)
+#define PR_W        250
+#define PR_H        180
+#define PR_S0       10          /* first swatch, from the window's edge */
+#define PR_SY       42          /* and its row                           */
+#define PR_SW       40          /* a swatch is 40 wide, 44 with its gap  */
+#define PR_SH       26
+#define PR_LAY      108         /* the layer check boxes, from the edge  */
+
+static int text_dx, text_dy;
+
+#define NT_X        (60 + text_dx)
+#define NT_Y        (150 + text_dy)
+#define NT_W        470
+#define NT_H        256
+#define NT_TX       (NT_X + 8)          /* the text's left edge          */
+#define NT_TY       (NT_Y + 30)         /* the first row's top           */
+#define NT_ROWS     22                  /* rows the pane stands          */
+#define NT_COLS     55                  /* and how wide they are         */
+#define NT_SB       (NT_X + NT_W - 17)  /* the scroll column             */
+#define NT_SBH      (NT_ROWS * 9)       /* and how far it runs           */
+#define NT_SBT      12                  /* an arrow is this tall         */
+#define NT_SBY      (NT_Y + 26)         /* where the column starts       */
+#define NT_SBTR     (NT_SBH - 2 * NT_SBT)   /* the groove between them   */
+#define NT_SBMID    (NT_SBY + NT_SBT + NT_SBTR / 2)
+
+/*
+ * The two gadgets in the corner, laid out the same way as the windows:
+ * a base that is a constant in ROM and an offset that a drag owns.  The
+ * clock's base is its centre rather than its corner, because that is
+ * how a dial is drawn -- the box the drag pass asks for is the square
+ * that centre stands in, and it is put back the same way round.
+ */
+static int clock_dx, clock_dy;
+
+#define CLOCK_X     (590 + clock_dx)
+#define CLOCK_Y     (76 + clock_dy)
+#define CLOCK_R     30
+
+static int mon_dx, mon_dy;
+
+#define MON_X       (452 + mon_dx)
+#define MON_Y       (116 + mon_dy)
+#define MON_W       172
+#define MON_H       48
 
 /* ------------------------------------------------------------------ *
  * Start menu: geometry and state, shared by the draw and click passes
@@ -654,14 +819,14 @@ static unsigned cur_dir;       /* the directory being shown; 0 = root  */
  * without an initialiser because .data lands in write-only ROM.
  */
 #define MENU_X      8
-#define MENU_Y      180
+#define MENU_Y      112
 #define MENU_W      196
-#define MENU_H      306          /* MENU_Y + this stops short of the bar */
+#define MENU_H      374          /* MENU_Y + this stops short of the bar */
 #define MENU_HEAD   22           /* entries start below the title rule   */
 #define MENU_ITEMW  (MENU_W - 12)
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
 #define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
-#define MENU_PROGS  4
+#define MENU_PROGS  6
 #define MENU_ITEMS  (N_PLACES + MENU_PROGS)
 
 #define MENU_P0     (MENU_Y + MENU_HEAD + 4)             /* first place */
@@ -683,6 +848,10 @@ static int files_open;          /* the directory browser window        */
 static int clock_open;          /* the analog dial gadget              */
 static int monitor_open;        /* the two-bar system monitor          */
 static int about_open;          /* the NeoBench information panel      */
+static int prefs_open;          /* the Preferences pane                */
+static int pr_lay;              /* which of its rows the keys work on:
+                                 * 0 the five swatches, 1 grid, 2 glow  */
+static int neotext_open;        /* the text and document reader        */
 static int focus_p;             /* the program the panel shows as
                                  * active: 0 none, else its menu slot  */
 static int desk_hidden;         /* show-desktop has the windows down   */
@@ -764,9 +933,10 @@ static void band_add(int y0, int y1)
  * primitives put round it, never a row more.
  * ------------------------------------------------------------------ */
 static void band_menu(void)     { band_add(MENU_Y - 4, 500); }
-static void band_about(void)    { band_add(36, 154); }
-static void band_clock(void)    { band_add(44, 116); }
-static void band_monitor(void)  { band_add(112, 177); }
+static void band_about(void)    { band_add(AB_Y - 4, AB_Y + AB_H + 14); }
+static void band_clock(void)    { band_add(CLOCK_Y - CLOCK_R - 2,
+                                           CLOCK_Y + CLOCK_R + 10); }
+static void band_monitor(void)  { band_add(MON_Y - 4, MON_Y + MON_H + 13); }
 
 /* The browser window, and -- when its task button comes or goes with
  * it -- the slice of the bar that carries that button. */
@@ -777,18 +947,36 @@ static void band_files(int bar)
         band_add(486, 512);
 }
 
+/* The same two, for the pane and the reader.  Their bars say the same
+ * thing theirs do: a window that has just appeared has just put a
+ * button on the bar, and one that has gone has just left a gap. */
+static void band_prefs(int bar)
+{
+    band_add(PR_Y - 4, PR_Y + PR_H + 14);
+    if (bar)
+        band_add(486, 512);
+}
+
+static void band_neotext(int bar)
+{
+    band_add(NT_Y - 4, NT_Y + NT_H + 14);
+    if (bar)
+        band_add(486, 512);
+}
+
 /*
  * Every program window at once, for the one control that takes them
- * all down together: from the about panel's shadow at the top of the
- * raster to the browser's at the bottom, plus the buttons their closes
- * and opens leave behind on the bar.  The start menu is drawn over
- * that range too, and its entries carry the running dot, so it is
- * claimed as well whenever it is up.
+ * all down together, plus the buttons their closes and opens leave
+ * behind on the bar.  It is the whole raster rather than the slice the
+ * windows used to be laid out in: a window can be dragged to any row
+ * now, and a "show desktop" that left one of them standing would not
+ * be showing the desktop.  The start menu is drawn over that range
+ * too, and its entries carry the running dot, so it is claimed as well
+ * whenever it is up.
  */
 static void band_programs(void)
 {
-    band_add(36, 422);
-    band_add(486, 512);
+    band_add(0, 512);
     if (menu_open)
         band_menu();
 }
@@ -827,6 +1015,21 @@ static int on_close(int mx, int my, int wx, int wy, int ww)
 {
     return mx >= wx + ww - 23 && mx < wx + ww - 10 &&
            my >= wy + 4 && my < wy + 15;
+}
+
+/*
+ * The part of a caption a press can take hold of: the strip itself,
+ * from the window's left edge to where the three buttons begin.  A
+ * press here starts a move instead of naming anything, which is the
+ * whole difference between a window's furniture and its contents -- the
+ * buttons and the title are the frame, everything under the title is
+ * what the program put there.
+ */
+static int on_caption(int mx, int my, int wx, int wy, int ww, int nbtn)
+{
+    int bx = wx + ww - 8 - nbtn * 15;
+
+    return my >= wy && my < wy + 20 && mx >= wx && mx < bx;
 }
 
 /* Which directory an icon opens; pfs_find() cannot fail here because
@@ -1004,12 +1207,1029 @@ static int sel_clear(void)
     return 1;
 }
 
+/* ------------------------------------------------------------------ *
+ * Preferences: the backdrop, in one pane
+ * ------------------------------------------------------------------ */
+
+/*
+ * A press that lands inside a window with no gadget under it takes the
+ * keyboard to that window: the lit button on the bar follows the
+ * pointer, which is what makes the bar's claim that it shows the window
+ * you are in true rather than hopeful.  Returns 1, because the press
+ * was this window's however little of it there was to answer.
+ */
+static int focus_here(int p, int *changed)
+{
+    if (focus_p != p)
+    {
+        focus_p = p;
+        band_add(486, 512);
+        *changed = 1;
+    }
+    return 1;
+}
+
+/* ------------------------------------------------------------------ *
+ * Moving a window
+ * ------------------------------------------------------------------ */
+
+static int drag_win;            /* which window the pointer is carrying,
+                                 * 0 when nothing is held              */
+static int drag_ox, drag_oy;    /* where into it the pointer went down */
+
+/*
+ * The box as the drag pass asks for it: where the window stands and
+ * how big it was laid out.  The four program windows answer with their
+ * corner; the dial answers with the square its centre stands in, which
+ * is the one base in this file that is a centre rather than a corner
+ * and is squared up here rather than at every call.  Everything the
+ * drag does is asked in these terms, so the offset, the clamp and the
+ * two bands are one piece of code for all six.
+ */
+static void win_box(int which, int *x, int *y, int *w, int *h)
+{
+    switch (which)
+    {
+    case 1:  *x = FILES_X; *y = FILES_Y; *w = FILES_W; *h = FILES_H; break;
+    case 2:  *x = CLOCK_X - CLOCK_R; *y = CLOCK_Y - CLOCK_R;
+             *w = CLOCK_R * 2; *h = CLOCK_R * 2; break;
+    case 3:  *x = MON_X; *y = MON_Y; *w = MON_W; *h = MON_H; break;
+    case 4:  *x = AB_X; *y = AB_Y; *w = AB_W; *h = AB_H; break;
+    case 5:  *x = PR_X; *y = PR_Y; *w = PR_W; *h = PR_H; break;
+    default: *x = NT_X; *y = NT_Y; *w = NT_W; *h = NT_H; break;
+    }
+}
+
+/*
+ * Put it down somewhere new: the offset against the base that is a
+ * constant in the ROM image.  This is the only write any of the six
+ * positions is, and it lands in .bss, which is the part of the image
+ * that is RAM.
+ */
+static void win_place(int which, int x, int y)
+{
+    switch (which)
+    {
+    case 1:  files_dx = x - 376; files_dy = y - 176; break;
+    case 2:  clock_dx = (x + CLOCK_R) - 590;
+             clock_dy = (y + CLOCK_R) - 76; break;
+    case 3:  mon_dx = x - 452; mon_dy = y - 116; break;
+    case 4:  about_dx = x - 124; about_dy = y - 40; break;
+    case 5:  prefs_dx = x - 110; prefs_dy = y - 150; break;
+    default: text_dx = x - 60; text_dy = y - 150; break;
+    }
+}
+
+/* The two ranges a move claims: where it was standing, and where it is
+ * now.  A band is a run of whole rows, so the left and right edges of a
+ * window are covered by the same two claims as its top and bottom, and
+ * a window that has crossed another's rows repaints them both -- which
+ * is the point of claiming before and after rather than the difference
+ * between the two. */
+static void win_band(int which, int bar)
+{
+    switch (which)
+    {
+    case 1:  band_files(bar); break;
+    case 2:  band_clock(); break;
+    case 3:  band_monitor(); break;
+    case 4:  band_about(); break;
+    case 5:  band_prefs(bar); break;
+    default: band_neotext(bar); break;
+    }
+}
+
+/*
+ * The press that picks a window up.  It gives the window the keyboard
+ * -- the one being moved is the one being used, which is how the rest
+ * of the desktop already treats a press inside a window -- and then
+ * takes the pointer itself until the button comes back up.  It names
+ * nothing, so nothing lights: a drag is not a selection, and the
+ * second press that would run an item has to come from a press that
+ * stood still.
+ */
+static int drag_here(int which, int x, int y, int *changed)
+{
+    int wx, wy, ww, wh;
+
+    win_box(which, &wx, &wy, &ww, &wh);
+    focus_here(which, changed);
+    drag_win = which;
+    drag_ox = x - wx;
+    drag_oy = y - wy;
+    return 1;
+}
+
+/*
+ * Every field while the button is down: carry the window the press came
+ * down on and claim the rows it has left and the rows it has taken.  It
+ * answers the way a press answers -- non-zero when the answer changed
+ * what should be on screen -- so the main loop takes the same three
+ * calls behind it, and the log gets the same one line, which is how a
+ * move can be read back as the position it passed through.
+ *
+ * What is clamped is the caption rather than the window: a window may
+ * stand half off an edge, as they do on any desktop, but enough of the
+ * strip has to stay on the screen to pick it up by again.
+ */
+int nb_desktop_drag(void)
+{
+    int wx, wy, ww, wh, nx, ny;
+
+    if (drag_win == 0)
+        return 0;
+    if (!(nb_pointer_held() & NB_BTN_L))
+    {
+        drag_win = 0;               /* the button came up: it lands here  */
+        return 0;
+    }
+
+    win_box(drag_win, &wx, &wy, &ww, &wh);
+    nx = nb_pointer_x() - drag_ox;
+    ny = nb_pointer_y() - drag_oy;
+
+    if (nx < 48 - ww)
+        nx = 48 - ww;
+    if (nx > 640 - 48)
+        nx = 640 - 48;
+    if (ny < 0)
+        ny = 0;
+    if (ny > 512 - 24)
+        ny = 512 - 24;
+    if (nx == wx && ny == wy)
+        return 0;
+
+    win_band(drag_win, 0);          /* the rows it was standing in        */
+    win_place(drag_win, nx, ny);
+    win_band(drag_win, 0);          /* and the rows it now covers         */
+    return 1;
+}
+
+/* a Workbench check box: a sunken square, a tick when it is on, and the
+ * label beside it -- box and label together are one control, because
+ * that is the size the eye reads them at */
+static void prefs_box(int x, int y, int w, int h, const char *label, int on)
+{
+    gfx_fill(x, y, w, h, C_WB_GREY);
+    gfx_fill(x + 1, y + 1, w - 2, 1, C_WB_SHADE);
+    gfx_fill(x + 1, y + 1, 1, h - 2, C_WB_SHADE);
+    gfx_fill(x, y + h - 1, w, 1, C_INK);
+    gfx_fill(x + w - 1, y, 1, h, C_INK);
+    gfx_fill(x + 1, y + 1, w - 2, h - 2, C_INK);
+
+    if (on)
+    {
+        gfx_fill(x + 2, y + 5, 2, 2, C_WB_BLUE);
+        gfx_fill(x + 3, y + 7, 2, 2, C_WB_BLUE);
+        gfx_fill(x + 5, y + 4, 2, 3, C_WB_BLUE);
+        gfx_fill(x + 6, y + 3, 2, 2, C_WB_BLUE);
+    }
+
+    text_d(x + w + 6, y + (h - 8) / 2, label, C_TEXT);
+}
+
+/* a one pixel ring round whatever the keys are standing on: four fills,
+ * because there is no outline worth a routine of its own */
+static void pr_ring(int x, int y, int w, int h)
+{
+    gfx_fill(x, y, w, 1, C_WB_LINE);
+    gfx_fill(x, y + h - 1, w, 1, C_WB_LINE);
+    gfx_fill(x, y, 1, h, C_WB_LINE);
+    gfx_fill(x + w - 1, y, 1, h, C_WB_LINE);
+}
+
+/*
+ * Preferences: one pane, five swatches, two check boxes.
+ *
+ * The swatches are the same five Config/screen.cfg names and the same
+ * five the wallpaper paints; choosing one changes the backdrop at once,
+ * which is the whole reason the pane exists.  A swatch is chosen rather
+ * than opened, so it is a control and takes one press as the cross
+ * does -- and it claims the whole raster when it repaints, because what
+ * changed was the backdrop under everything else as well.
+ *
+ * The two layers below are the flags screen.cfg already carries.  A
+ * preference nobody can see is one nobody will ever find, so they stand
+ * here as much to be seen as to be changed.
+ */
+static void window_prefs(void)
+{
+    const int x = PR_X, y = PR_Y, w = PR_W, h = PR_H;
+    uint16_t top, bot;
+    int i;
+
+    glass_window(x, y, w, h, 20, "Preferences", 3);
+
+    text_d(x + 10, y + 30, "Backdrop", C_MUTE);
+
+    for (i = 0; i < NB_BD_COUNT; i++)
+    {
+        const char *nm = nb_bd_name(i);
+        int sx = x + PR_S0 + i * (PR_SW + 4);
+        int sel = (nb_prefs.backdrop == i);
+
+        nb_bd_colours(i, &top, &bot);
+        gfx_fill(sx - 2, y + PR_SY - 2, PR_SW + 4, PR_SH + 4,
+                 sel ? C_WB_BLUE : C_WB_LINE);
+        gfx_vgrad(sx, y + PR_SY, PR_SW, PR_SH, top, bot);
+        text_d(sx + (PR_SW - strw(nm)) / 2, y + PR_SY + PR_SH + 4,
+               nm, sel ? C_WB_BLUE : C_MUTE);
+    }
+
+    gfx_fill(x + 10, y + 86, w - 20, 1, C_WB_GREY);
+
+    text_d(x + 10, y + 94, "Layers", C_MUTE);
+    prefs_box(x + 10, y + PR_LAY, 11, 11, "Grid", nb_prefs.grid);
+    prefs_box(x + 90, y + PR_LAY, 11, 11, "Glow", nb_prefs.glow);
+
+    /*
+     * Where the keyboard is, drawn only while the pane has it: a ring
+     * round the row the keys work on, which is a different thing from
+     * the blue frame that says which backdrop is the one in force -- one
+     * is where you are, the other is what is on.
+     */
+    if (focus_p == 5)
+    {
+        if (pr_lay == 0)
+            pr_ring(x + 6, y + PR_SY - 4, w - 12, PR_SH + 8);
+        else
+            pr_ring(pr_lay == 1 ? x + 7 : x + 87, y + PR_LAY - 3, 56, 17);
+    }
+
+    text_d(x + 10, y + 136, "Applies at once.", C_MUTE);
+    text_d(x + 10, y + 148, "screen.cfg sets it at boot.", C_MUTE);
+}
+
+/*
+ * The pane's keys, while the pane is the program with the keyboard.
+ * Up and down move between the three rows it has -- the swatches, the
+ * grid box, the glow box -- and left and right work whichever is
+ * standing: the swatches are a control, so they paint the moment they
+ * are chosen, and the boxes are check boxes, so left puts one out and
+ * right lights it.  A pane only reachable by a pointer would be a pane
+ * half the machine cannot use, and every other control here already
+ * answers to the keys.
+ *
+ * Returns non-zero when the key did something, which is what the caller
+ * owes a repaint for.
+ */
+static int prefs_key(int c)
+{
+    if (c == NB_KEY_UP || c == NB_KEY_DOWN)
+    {
+        int row = pr_lay + ((c == NB_KEY_DOWN) ? 1 : -1);
+
+        if (row < 0)
+            row = 0;
+        if (row > 2)
+            row = 2;
+        if (row == pr_lay)
+            return 0;
+        pr_lay = row;
+        band_prefs(0);              /* the ring moved, nothing else did  */
+        return 1;
+    }
+
+    if (c != NB_KEY_LEFT && c != NB_KEY_RIGHT &&
+        c != NB_KEY_RET && c != ' ')
+        return 0;
+
+    if (pr_lay == 0)
+    {
+        int want;
+
+        if (c == NB_KEY_RET || c == ' ')
+            return 0;               /* it is already painted             */
+
+        want = nb_prefs.backdrop + ((c == NB_KEY_RIGHT) ? 1 : -1);
+        if (want < 0)
+            want = 0;
+        if (want >= NB_BD_COUNT)
+            want = NB_BD_COUNT - 1;
+        if (want == nb_prefs.backdrop)
+            return 0;
+        nb_prefs.backdrop = want;
+        band_add(0, 512);           /* the backdrop is under it all      */
+        return 1;
+    }
+    else
+    {
+        int *flag = (pr_lay == 1) ? &nb_prefs.grid : &nb_prefs.glow;
+        int want;
+
+        if (c == NB_KEY_LEFT)
+            want = 0;
+        else if (c == NB_KEY_RIGHT)
+            want = 1;
+        else
+            want = !*flag;          /* return or space: turn it over     */
+        if (*flag == want)
+            return 0;
+        *flag = want;
+        band_add(0, 512);           /* both layers are over the field    */
+        return 1;
+    }
+}
+
+/* the pane's press: its cross, one of the five, or a layer.  0 when the
+ * press was not in the pane at all, 1 when it was and is spent. */
+static int hit_prefs(int x, int y, int *changed)
+{
+    int i;
+
+    if (!prefs_open ||
+        x < PR_X || x >= PR_X + PR_W || y < PR_Y || y >= PR_Y + PR_H)
+        return 0;
+
+    if (on_close(x, y, PR_X, PR_Y, PR_W))
+    {
+        prefs_open = 0;
+        if (focus_p == 5)
+            focus_p = 0;
+        sel_clear();
+        band_prefs(1);
+        *changed = 1;
+        return 1;
+    }
+
+    if (on_caption(x, y, PR_X, PR_Y, PR_W, 3))
+        return drag_here(5, x, y, changed);
+
+    for (i = 0; i < NB_BD_COUNT; i++)
+    {
+        int sx = PR_X + PR_S0 + i * (PR_SW + 4);
+        int sy = PR_Y + PR_SY;
+
+        if (x < sx || x >= sx + PR_SW || y < sy || y >= sy + PR_SH)
+            continue;
+
+        if (nb_prefs.backdrop != i)
+        {
+            nb_prefs.backdrop = i;
+            band_add(0, 512);           /* the backdrop is under it all  */
+            *changed = 1;
+        }
+        if (focus_p != 5)
+        {
+            focus_p = 5;
+            band_add(486, 512);
+            *changed = 1;
+        }
+        return 1;
+    }
+
+    if (y >= PR_Y + PR_LAY && y < PR_Y + PR_LAY + 11)
+    {
+        int *flag = 0;
+
+        if (x >= PR_X + 10 && x < PR_X + 62)
+            flag = &nb_prefs.grid;
+        else if (x >= PR_X + 90 && x < PR_X + 142)
+            flag = &nb_prefs.glow;
+
+        if (!flag)
+            return focus_here(5, changed);
+
+        *flag = !*flag;
+        band_add(0, 512);               /* the layers are over the field */
+        focus_p = 5;
+        *changed = 1;
+        return 1;
+    }
+
+    return focus_here(5, changed);
+}
+
+/* ------------------------------------------------------------------ *
+ * NeoText: every file in the store, in one window
+ * ------------------------------------------------------------------ */
+
+#define NT_TEXT 0               /* shown as written, and typed into      */
+#define NT_PDF  1               /* a PDF's text, lifted out of its pages */
+#define NT_HEX  2               /* anything else, as the bytes it is     */
+
+static unsigned char nt_doc[24576];   /* what is shown, and typed into   */
+static unsigned char nt_scr[32768];   /* inflate room, while a PDF reads */
+static unsigned nt_len;               /* bytes in nt_doc                 */
+static unsigned nt_cur;               /* the caret: an offset in it      */
+static unsigned nt_top;               /* the first row of the view       */
+static int      nt_mode;              /* NT_TEXT, NT_PDF or NT_HEX       */
+static int      nt_have;              /* a file has been brought up      */
+static int      nt_more;              /* the file did not all fit        */
+static int      nt_dirty;             /* typed into since it was read    */
+static char     nt_name[24];          /* the file, for the title         */
+
+/*
+ * Where the next row begins, from the start of this one: a newline, a
+ * hard wrap at the pane's width, or the end.  The newline is looked for
+ * before the wrap is counted, so a line exactly as wide as the pane
+ * does not leave an empty row behind it; and no carriage return can
+ * reach here, because neotext_load drops them as it reads, which is
+ * why a file written on another machine shows the same lines here.
+ */
+static unsigned nt_next(unsigned off)
+{
+    unsigned n = 0;
+
+    while (off < nt_len)
+    {
+        unsigned char ch = nt_doc[off];
+
+        if (ch == '\n')
+            return off + 1;
+        if (n == NT_COLS)
+            return off;
+        off++;
+        n++;
+    }
+    return off;
+}
+
+/* the byte offset row r starts at: eight bytes a row in the hex view,
+ * and a walk of the rows before it anywhere else */
+static unsigned nt_rowstart(unsigned r)
+{
+    unsigned off = 0, k;
+
+    if (nt_mode == NT_HEX)
+        return r * 8;
+
+    for (k = 0; k < r; k++)
+    {
+        unsigned nx = nt_next(off);
+
+        if (nx <= off)
+            break;
+        off = nx;
+    }
+    return off;
+}
+
+/*
+ * How many rows the view has to scroll through.  The rows are the
+ * segments the row starts cut, so a newline ends a row rather than
+ * starting one: "abc" and "abc\n" are both one line, and the empty
+ * thing after the second is the same nothing that follows the first.
+ */
+static unsigned nt_rows_total(void)
+{
+    unsigned off = 0, r = 0;
+
+    if (nt_mode == NT_HEX)
+    {
+        if (nt_len == 0)
+            return 1;
+        return (nt_len + 7) / 8;
+    }
+
+    while (off < nt_len)
+    {
+        unsigned nx = nt_next(off);
+
+        r++;
+        if (nx <= off)
+            break;
+        off = nx;
+    }
+    return r ? r : 1;
+}
+
+/* the row the caret is on: the row starts it stands past, with a caret
+ * resting at the end of the file put back on the file's own last row */
+static unsigned nt_currow(void)
+{
+    unsigned off = 0, r = 0, total;
+
+    while (off < nt_cur)
+    {
+        unsigned nx = nt_next(off);
+
+        if (nx <= off || nx > nt_cur)
+            break;
+        off = nx;
+        r++;
+    }
+
+    total = nt_rows_total();
+    if (r >= total)
+        r = total - 1;
+    return r;
+}
+
+/* the row the status line reports: the caret in the mode that has one,
+ * and the top of the view in the two that do not */
+static unsigned nt_where(void)
+{
+    if (nt_mode == NT_TEXT)
+        return nt_currow();
+    return nt_top;
+}
+
+/*
+ * What row r shows, into buf: the row's own characters for a document,
+ * or eight bytes as hex for anything that is not one.  Fifty-five
+ * characters of text and forty-three of hex are the most it can be, so
+ * callers pass sixty-four.
+ */
+static unsigned nt_rowline(unsigned r, char *buf)
+{
+    static const char hx[] = "0123456789abcdef";
+    unsigned off, end, n = 0, i;
+
+    if (nt_mode == NT_HEX)
+    {
+        unsigned base = r * 8;
+
+        for (i = 0; i < 8; i++)
+            buf[n++] = hx[(base >> ((7 - i) * 4)) & 0xF];
+        buf[n++] = ' ';
+        buf[n++] = ' ';
+
+        for (i = 0; i < 8; i++)
+        {
+            if (base + i < nt_len)
+            {
+                unsigned char ch = nt_doc[base + i];
+
+                buf[n++] = hx[ch >> 4];
+                buf[n++] = hx[ch & 0xF];
+            }
+            else
+            {
+                buf[n++] = ' ';
+                buf[n++] = ' ';
+            }
+            buf[n++] = ' ';
+        }
+        buf[n++] = ' ';
+
+        for (i = 0; i < 8; i++)
+        {
+            unsigned char ch = 0;
+
+            if (base + i < nt_len)
+                ch = nt_doc[base + i];
+
+            if (base + i >= nt_len)
+                buf[n++] = ' ';
+            else if (ch >= 32 && ch < 127)
+                buf[n++] = (char)ch;
+            else
+                buf[n++] = '.';
+        }
+
+        buf[n] = '\0';
+        return n;
+    }
+
+    off = nt_rowstart(r);
+    end = nt_next(off);
+    while (off < end)
+    {
+        unsigned char ch = nt_doc[off];
+
+        if (ch == '\n')
+            break;
+        if (ch == '\t')
+            ch = ' ';                   /* one column, as it was one byte */
+        else if (ch < 32 || ch > 126)
+            ch = '.';
+        buf[n++] = (char)ch;
+        off++;
+    }
+    buf[n] = '\0';
+    return n;
+}
+
+/* keep the caret's row inside the view -- the rule that makes a long
+ * file follow the cursor instead of waiting for a scrollbar */
+static void nt_follow(void)
+{
+    unsigned row = nt_currow();
+
+    if (row < nt_top)
+        nt_top = row;
+    else if (row >= nt_top + NT_ROWS)
+        nt_top = row - NT_ROWS + 1;
+}
+
+/*
+ * Bring a file into the reader.  Three answers, and only three: text,
+ * shown as written and the only one that can be typed into; a PDF,
+ * whose text is lifted out of the page and shown the same way; and
+ * everything else, shown as the bytes it is.  The first is what the
+ * store holds most of, the second is what Docs/guide.pdf is there to be,
+ * and the third is the honest answer for the rest -- NeoBench does not
+ * pretend to know what an executable or a sound file says about itself.
+ */
+static void neotext_load(unsigned node)
+{
+    const unsigned char *src;
+    unsigned size, i, n = 0;
+    unsigned probe, good;
+    int textish;
+
+    nt_len = nt_cur = nt_top = 0;
+    nt_mode = NT_TEXT;
+    nt_have = nt_more = nt_dirty = 0;
+    nt_name[0] = '\0';
+
+    if (node >= nb_pfs_count || nb_pfs_nodes[node].dir ||
+        nb_pfs_nodes[node].size == 0)
+        return;
+
+    nt_have = 1;
+    src = nb_pfs_nodes[node].data;
+    size = nb_pfs_nodes[node].size;
+
+    for (i = 0; i + 1 < sizeof(nt_name) && nb_pfs_nodes[node].name[i]; i++)
+        nt_name[i] = nb_pfs_nodes[node].name[i];
+    nt_name[i] = '\0';
+
+    /* a PDF says so in its first five bytes, whatever it is called */
+    if (size >= 5 && src[0] == '%' && src[1] == 'P' && src[2] == 'D' &&
+        src[3] == 'F' && src[4] == '-')
+    {
+        int ntxt = nb_pdf_text(src, size, (char *)nt_doc, sizeof(nt_doc),
+                               nt_scr, sizeof(nt_scr));
+
+        if (ntxt > 0)
+        {
+            nt_len = (unsigned)ntxt;
+            nt_mode = NT_PDF;
+            return;
+        }
+        /* a document with no text in it falls through to the bytes,
+         * which is the only true thing to say about it */
+    }
+
+    /* text or bytes: the first two kilobytes decide, nine parts in ten.
+     * A file that is nearly all printable is a text file, and one that
+     * is not, is lying in wait. */
+    probe = (size < 2048) ? size : 2048;
+    good = 0;
+    for (i = 0; i < probe; i++)
+    {
+        unsigned char ch = src[i];
+
+        if (ch == '\t' || ch == '\n' || ch == '\r' ||
+            (ch >= 32 && ch < 127))
+            good++;
+    }
+    textish = (good * 10 >= probe * 9);
+
+    for (i = 0; i < size && n + 1 < sizeof(nt_doc); i++)
+    {
+        unsigned char ch = src[i];
+
+        if (textish && ch == '\r')
+            continue;                   /* a line is a line anywhere     */
+        nt_doc[n++] = ch;
+    }
+    nt_len = n;
+    nt_doc[n] = '\0';
+    nt_mode = textish ? NT_TEXT : NT_HEX;
+    nt_more = (i < size);
+    nt_follow();
+}
+
+/* one end of the scroll column: a small raised button with a triangle
+ * the right way up.  It is a control, so it takes one press. */
+static void nt_button(int x, int y, int up)
+{
+    gfx_fill(x, y, 8, NT_SBT, C_WB_GREY);
+    gfx_fill(x, y, 8, 1, C_INK);
+    gfx_fill(x, y, 1, NT_SBT, C_INK);
+    gfx_fill(x, y + NT_SBT - 1, 8, 1, C_WB_SHADE);
+    gfx_fill(x + 7, y, 1, NT_SBT, C_WB_SHADE);
+
+    if (up)
+        gfx_tri(x + 1, y + 9, x + 7, y + 9, x + 4, y + 3, C_WB_LINE);
+    else
+        gfx_tri(x + 1, y + 2, x + 7, y + 2, x + 4, y + 8, C_WB_LINE);
+}
+
+/* move the view without moving the caret: a reader scrolls by the rows
+ * it shows, and only the caret moves the view when the caret moved */
+static int neotext_scroll(int rows)
+{
+    unsigned total = nt_rows_total();
+    int top = (int)nt_top + rows;
+
+    if (top < 0)
+        top = 0;
+    if (total > (unsigned)NT_ROWS &&
+        (unsigned)top > total - (unsigned)NT_ROWS)
+        top = (int)(total - (unsigned)NT_ROWS);
+    if ((unsigned)top == nt_top)
+        return 0;
+    nt_top = (unsigned)top;
+    return 1;
+}
+
+/*
+ * NeoText: text, the text of a PDF, or the bytes of anything else, in
+ * one window that follows its caret.  The two read-only modes have no
+ * caret because there is nothing to type into them, and they say so on
+ * the status line rather than letting an edit go quietly nowhere.
+ */
+static void window_neotext(void)
+{
+    const int x = NT_X, y = NT_Y, w = NT_W, h = NT_H;
+    char title[40], line[64], left[40], right[40];
+    unsigned total, r;
+    char *d;
+
+    d = put_str(title, "NeoText");
+    if (nt_have)
+    {
+        d = put_str(d, ": ");
+        d = put_str(d, nt_name);
+    }
+    *d = '\0';
+    glass_window(x, y, w, h, 20, title, 3);
+
+    if (!nt_have)
+    {
+        text_d(x + 14, y + 34, "No file is open.", C_MUTE);
+        text_d(x + 14, y + 46, "Choose one in Files.", C_MUTE);
+        gfx_fill(x + 10, y + h - 26, w - 20, 1, C_WB_SHADE);
+        text_d(x + 10, y + h - 16, "(no file)", C_MUTE);
+        return;
+    }
+
+    /*
+     * The scroll column: a groove with an arrow at each end.  Where you
+     * are in the file is the status line's to say rather than a thumb's
+     * to show -- "row 12 of 84" is exact, and a thumb would want the
+     * ratio of two numbers that are not known until the file is opened.
+     */
+    gfx_fill(NT_SB, NT_SBY + NT_SBT, 8, NT_SBTR, C_WB_GREY);
+    gfx_fill(NT_SB, NT_SBY + NT_SBT, 8, 1, C_WB_SHADE);
+    gfx_fill(NT_SB, NT_SBY + NT_SBT, 1, NT_SBTR, C_WB_SHADE);
+    gfx_fill(NT_SB, NT_SBY + NT_SBT + NT_SBTR - 1, 8, 1, C_INK);
+    gfx_fill(NT_SB + 7, NT_SBY + NT_SBT, 1, NT_SBTR, C_INK);
+    nt_button(NT_SB, NT_SBY, 1);
+    nt_button(NT_SB, NT_SBY + NT_SBH - NT_SBT, 0);
+
+    total = nt_rows_total();
+    for (r = nt_top; r < nt_top + NT_ROWS; r++)
+    {
+        nt_rowline(r, line);
+        text_d(NT_TX, (int)(NT_TY + (r - nt_top) * 9), line, C_TEXT);
+    }
+
+    /* the caret, when there is one and the view has it */
+    if (nt_mode == NT_TEXT)
+    {
+        unsigned row = nt_currow();
+
+        if (row >= nt_top && row < nt_top + NT_ROWS)
+        {
+            int cx = NT_TX + (int)(nt_cur - nt_rowstart(row)) * 8;
+            int cy = (int)(NT_TY + (row - nt_top) * 9);
+
+            if (cx > NT_TX + NT_COLS * 8)
+                cx = NT_TX + NT_COLS * 8;
+            gfx_fill(cx, cy, 1, 9, C_WB_BLUE);
+        }
+    }
+
+    gfx_fill(x + 10, y + h - 26, w - 20, 1, C_WB_SHADE);
+
+    /* what is being shown, and what it cannot do about it */
+    d = put_str(left, nt_mode == NT_HEX ? "hex" :
+                      nt_mode == NT_PDF  ? "pdf text" : "text");
+    d = put_str(d, "  row ");
+    d = put_num(d, nt_where() + 1);
+    d = put_str(d, " of ");
+    d = put_num(d, total);
+    *d = '\0';
+    text_d(x + 10, y + h - 16, left, C_MUTE);
+
+    if (nt_dirty)
+        put_str(right, "(edited, not saved)");
+    else if (nt_more)
+        put_str(right, "(first 24 KB)");
+    else if (nt_mode == NT_TEXT)
+        put_str(right, "(store is read-only)");
+    else
+        put_str(right, "(read-only)");
+    text_right(x + w - 10, y + h - 16, right, C_MUTE);
+}
+
+/* the caret a row up or down: the column it is in, taken to the row
+ * above or below -- which a hard wrap cut as much as a newline did --
+ * and stopped at that row's end if it is the shorter one */
+static int nt_caret_v(int dir)
+{
+    unsigned row = nt_currow();
+    unsigned start = nt_rowstart(row);
+    unsigned col = nt_cur - start;
+    unsigned target, end, k = 0;
+
+    if (dir < 0)
+    {
+        if (row == 0)
+            return 0;
+        target = nt_rowstart(row - 1);
+    }
+    else
+    {
+        target = nt_next(start);
+        if (target >= nt_len || target <= start)
+            return 0;
+    }
+
+    end = nt_next(target);
+    while (k < col && target + k < end && nt_doc[target + k] != '\n')
+        k++;
+    target += k;
+
+    if (target == nt_cur)
+        return 0;
+    nt_cur = target;
+    nt_follow();
+    return 1;
+}
+
+static int nt_caret_h(int dir)
+{
+    if (dir < 0)
+    {
+        if (nt_cur == 0)
+            return 0;
+        nt_cur--;
+    }
+    else
+    {
+        if (nt_cur >= nt_len)
+            return 0;
+        nt_cur++;
+    }
+    nt_follow();
+    return 1;
+}
+
+/* put a character where the caret stands, and take one away behind it.
+ * The buffer is the file for as long as it holds it, and nt_more is
+ * what says when it stopped holding all of it. */
+static int nt_insert(int ch)
+{
+    unsigned i;
+
+    if (nt_len + 1 >= sizeof(nt_doc))
+        return 0;
+
+    for (i = nt_len; i > nt_cur; i--)
+        nt_doc[i] = nt_doc[i - 1];
+    nt_doc[nt_cur] = (unsigned char)ch;
+    nt_len++;
+    nt_cur++;
+    nt_doc[nt_len] = '\0';
+    nt_dirty = 1;
+    nt_follow();
+    return 1;
+}
+
+static int nt_back(void)
+{
+    unsigned i;
+
+    if (nt_cur == 0)
+        return 0;
+    for (i = nt_cur - 1; i + 1 < nt_len; i++)
+        nt_doc[i] = nt_doc[i + 1];
+    nt_len--;
+    nt_cur--;
+    nt_doc[nt_len] = '\0';
+    nt_dirty = 1;
+    nt_follow();
+    return 1;
+}
+
+/*
+ * The reader's keys, and it only has them while it is the program with
+ * the keyboard.  Returns non-zero when the key did something, which is
+ * what the caller owes a repaint for.
+ *
+ * The cursor keys step the caret in the mode that has one and the view
+ * in the two that do not; Tab is the page the keymap has no key for;
+ * Return starts a line; and a character puts itself where the caret
+ * stands.  Everything else is somebody else's key.
+ */
+static int neotext_key(int c)
+{
+    int ro = (nt_mode != NT_TEXT);
+
+    if (!nt_have)
+        return 0;
+
+    if (c == NB_KEY_UP || c == NB_KEY_DOWN)
+    {
+        if (ro)
+            return neotext_scroll(c == NB_KEY_UP ? -1 : 1);
+        return nt_caret_v(c == NB_KEY_UP ? -1 : 1);
+    }
+    if (c == NB_KEY_LEFT || c == NB_KEY_RIGHT)
+        return ro ? 0 : nt_caret_h(c == NB_KEY_LEFT ? -1 : 1);
+    if (c == NB_KEY_TAB)
+        return neotext_scroll(NT_ROWS);
+    if (ro)
+        return 0;
+
+    if (c == NB_KEY_RET)
+        return nt_insert('\n');
+    if (c == NB_KEY_BACK)
+        return nt_back();
+    if (c >= 32 && c < 127)
+        return nt_insert(c);
+    return 0;
+}
+
+/* the reader's press: its cross, the scroll column, the text itself.
+ * 0 when the press was not in the window, 1 when it was and is spent. */
+static int hit_neotext(int x, int y, int *changed)
+{
+    if (!neotext_open ||
+        x < NT_X || x >= NT_X + NT_W || y < NT_Y || y >= NT_Y + NT_H)
+        return 0;
+
+    if (on_close(x, y, NT_X, NT_Y, NT_W))
+    {
+        neotext_open = 0;
+        if (focus_p == 6)
+            focus_p = 0;
+        sel_clear();
+        band_neotext(1);
+        *changed = 1;
+        return 1;
+    }
+
+    if (on_caption(x, y, NT_X, NT_Y, NT_W, 3))
+        return drag_here(6, x, y, changed);
+
+    if (nt_have && x >= NT_SB && x < NT_SB + 8 &&
+        y >= NT_SBY && y < NT_SBY + NT_SBH)
+    {
+        int moved;
+
+        if (focus_p != 6)
+        {
+            focus_p = 6;
+            band_add(486, 512);
+            *changed = 1;
+        }
+        if (y < NT_SBY + NT_SBT)
+            moved = neotext_scroll(-1);
+        else if (y >= NT_SBY + NT_SBH - NT_SBT)
+            moved = neotext_scroll(1);
+        else
+            moved = neotext_scroll(y < NT_SBMID ? -NT_ROWS : NT_ROWS);
+        if (moved)
+        {
+            band_neotext(0);            /* the rows moved, nothing else  */
+            *changed = 1;
+        }
+        return 1;
+    }
+
+    /* the text: a press in it puts the caret where it landed */
+    if (nt_have && nt_mode == NT_TEXT &&
+        x >= NT_TX && x < NT_TX + NT_COLS * 8 &&
+        y >= NT_TY && y < NT_TY + NT_ROWS * 9)
+    {
+        unsigned row = nt_top + (unsigned)((y - NT_TY) / 9);
+        unsigned col = (unsigned)(x - NT_TX + 4) / 8;
+        unsigned start, end, k = 0;
+
+        if (row >= nt_rows_total())
+            row = nt_rows_total() - 1;
+        start = nt_rowstart(row);
+        end = nt_next(start);
+        while (k < col && start + k < end && nt_doc[start + k] != '\n')
+            k++;
+        nt_cur = start + k;
+        nt_follow();
+        if (focus_p != 6)
+        {
+            focus_p = 6;
+            band_add(486, 512);
+        }
+        band_neotext(0);                /* the caret stands somewhere new */
+        *changed = 1;
+        return 1;
+    }
+
+    return focus_here(6, changed);
+}
+
 /*
  * Show desktop: the narrow slab on the right-hand end of the panel.
  *
  * One press takes every program window off the wallpaper at once, the
  * next puts them back exactly where they were -- the flags are the
- * whole of what a window is, so saving four bits saves the desktop.
+ * whole of what a window is, so saving six bits saves the desktop.
  * Like the orb and the crosses it is a control rather than an item, so
  * it answers to a single press.
  */
@@ -1021,13 +2241,17 @@ static int show_desktop(void)
         clock_open   = (desk_saved & 2) != 0;
         monitor_open = (desk_saved & 4) != 0;
         about_open   = (desk_saved & 8) != 0;
+        prefs_open   = (desk_saved & 16) != 0;
+        neotext_open = (desk_saved & 32) != 0;
         desk_hidden = 0;
     }
     else
     {
         desk_saved = (files_open ? 1 : 0) | (clock_open ? 2 : 0) |
-                     (monitor_open ? 4 : 0) | (about_open ? 8 : 0);
+                     (monitor_open ? 4 : 0) | (about_open ? 8 : 0) |
+                     (prefs_open ? 16 : 0) | (neotext_open ? 32 : 0);
         files_open = clock_open = monitor_open = about_open = 0;
+        prefs_open = neotext_open = 0;
         if (focus_p)
             focus_p = 0;
         desk_hidden = 1;
@@ -1107,7 +2331,15 @@ static int activate(int cls, int idx)
             if      (p == 0) { files_open   = !files_open;  band_files(1);  on = files_open; }
             else if (p == 1) { clock_open   = !clock_open;  band_clock();   on = clock_open; }
             else if (p == 2) { monitor_open = !monitor_open; band_monitor(); on = monitor_open; }
-            else             { about_open   = !about_open;  band_about();   on = about_open; }
+            else if (p == 3) { about_open   = !about_open;  band_about();   on = about_open; }
+            else if (p == 4)
+            {
+                prefs_open = !prefs_open;
+                pr_lay = 0;         /* the keys start on the swatches    */
+                band_prefs(1);
+                on = prefs_open;
+            }
+            else             { neotext_open = !neotext_open; band_neotext(1); on = neotext_open; }
 
             if (on)
                 focus_p = p + 1;        /* the panel shows it as active   */
@@ -1115,19 +2347,134 @@ static int activate(int cls, int idx)
                 focus_p = 0;
         }
     }
-    else                                   /* a list row: step into it    */
+    else                                   /* a list row: it opens         */
     {
         unsigned t = row_target(idx);
 
         if (t != PFS_NONE && t != cur_dir)
         {
-            cur_dir = t;
-            band_files(0);
-            changed = 1;
+            if (nb_pfs_nodes[t].dir)
+            {
+                cur_dir = t;
+                band_files(0);
+                changed = 1;
+            }
+            else
+            {
+                /*
+                 * A file, not a directory: it goes to the reader, which is
+                 * what it has been waiting for.  The browser used to take
+                 * the row's node as the directory to step into whether the
+                 * node was one or not, which put the list on a file and left
+                 * it with no children to walk -- the two answers were never
+                 * meant to be the same answer.
+                 */
+                neotext_load(t);
+                neotext_open = 1;
+                focus_p = 6;
+                band_neotext(1);        /* the window, and its button     */
+                changed = 1;
+            }
         }
     }
 
     return changed;
+}
+
+/*
+ * One window's press, asked for in the order the draw pass paints them
+ * backwards: its cross first, then whatever it carries inside itself.
+ *
+ * Returns 0 when the press was not in this window at all, 1 when it was
+ * but named nothing -- it closed, scrolled, or only took the keyboard --
+ * and 2 when it named a row, in which case cls and idx are set and the
+ * double press gate decides what the naming was worth.
+ */
+static int win_press(int which, int x, int y, int *cls, int *idx,
+                     int *changed)
+{
+    int i;
+
+    switch (which)
+    {
+    case 1:                                     /* the browser            */
+        if (!files_open ||
+            x < FILES_X || x >= FILES_X + FILES_W ||
+            y < FILES_Y || y >= FILES_Y + FILES_H)
+            return 0;
+        if (on_close(x, y, FILES_X, FILES_Y, FILES_W))
+        {
+            files_open = 0;
+            if (focus_p == 1)
+                focus_p = 0;
+            sel_clear();
+            band_files(1);
+            *changed = 1;
+            return 1;
+        }
+        if (on_caption(x, y, FILES_X, FILES_Y, FILES_W, 3))
+            return drag_here(1, x, y, changed);
+        for (i = 0; i < FILES_ROWS; i++)
+        {
+            int ry = FILES_Y + FILES_ROW0 + i * FILES_ROWH;
+
+            if (y >= ry && y < ry + FILES_ROWH)
+            {
+                if (focus_p != 1)
+                {
+                    focus_p = 1;
+                    band_add(486, 512);    /* its button lights           */
+                    *changed = 1;
+                }
+                *cls = SEL_ROW;
+                *idx = i;
+                return 2;
+            }
+        }
+        return focus_here(1, changed);
+
+    case 2:                                     /* the clock                */
+    {
+        int dx = x - CLOCK_X, dy = y - CLOCK_Y;
+
+        if (!clock_open || dx * dx + dy * dy > CLOCK_R * CLOCK_R)
+            return 0;
+        /* the dial has no furniture to pick it up by: the whole face
+         * is the handle, and a press that stands still only lights it */
+        return drag_here(2, x, y, changed);
+    }
+
+    case 3:                                     /* the monitor              */
+        if (!monitor_open ||
+            x < MON_X || x >= MON_X + MON_W ||
+            y < MON_Y || y >= MON_Y + MON_H)
+            return 0;
+        return drag_here(3, x, y, changed);
+
+    case 4:                                     /* the about panel          */
+        if (!about_open ||
+            x < AB_X || x >= AB_X + AB_W || y < AB_Y || y >= AB_Y + AB_H)
+            return 0;
+        if (on_close(x, y, AB_X, AB_Y, AB_W))
+        {
+            about_open = 0;
+            if (focus_p == 4)
+                focus_p = 0;
+            sel_clear();
+            band_about();
+            *changed = 1;
+            return 1;
+        }
+        if (on_caption(x, y, AB_X, AB_Y, AB_W, 3))
+            return drag_here(4, x, y, changed);
+        return focus_here(4, changed);
+
+    case 5:                                     /* preferences              */
+        return hit_prefs(x, y, changed);
+
+    default:                                    /* NeoText                  */
+        return hit_neotext(x, y, changed);
+    }
 }
 
 /*
@@ -1226,7 +2573,7 @@ int nb_desktop_click(int x, int y, int btn)
          * the show-desktop slab on the very edge */
         if (nb_prefs.taskbar && y >= 490 && y < 512)
         {
-            for (i = 1; i <= 4; i++)
+            for (i = 1; i <= 6; i++)
             {
                 struct task_cell t;
 
@@ -1236,7 +2583,9 @@ int nb_desktop_click(int x, int y, int btn)
                 if      (i == 1) { files_open   = 0; band_files(1); }
                 else if (i == 2) { clock_open   = 0; band_clock(); }
                 else if (i == 3) { monitor_open = 0; band_monitor(); }
-                else             { about_open   = 0; band_about(); }
+                else if (i == 4) { about_open   = 0; band_about(); }
+                else if (i == 5) { prefs_open   = 0; band_prefs(1); }
+                else             { neotext_open = 0; band_neotext(1); }
                 if (focus_p == i)
                     focus_p = 0;
                 changed |= sel_clear();
@@ -1250,40 +2599,30 @@ int nb_desktop_click(int x, int y, int btn)
             }
         }
 
-        /* a close is one press, always: nobody double clicks a cross */
-        if (about_open && on_close(x, y, 124, 40, 300))
+        /*
+         * The windows, and the two gadgets standing in the corner they
+         * are painted beside: asked in the order the draw pass paints
+         * them, backwards -- the window with the keyboard first, then
+         * the gadgets, then whatever those were painted over.  Two
+         * windows can stand where another stands and a press landing on
+         * both belongs to the one on top, so this list and scene() state
+         * one z order from opposite ends of it.
+         */
         {
-            about_open = 0;
-            if (focus_p == 4)
-                focus_p = 0;
-            band_about();
-            return 1;
-        }
+            static const int seq[6] = { 3, 2, 6, 5, 1, 4 };
+            int order[6], n = 0, r = 0, k;
 
-        if (files_open && on_close(x, y, FILES_X, FILES_Y, FILES_W))
-        {
-            files_open = 0;
-            if (focus_p == 1)
-                focus_p = 0;
-            changed |= sel_clear();
-            band_files(1);
-            return 1;
-        }
+            if (focus_p >= 1 && focus_p <= 6)
+                order[n++] = focus_p;
+            for (k = 0; k < 6; k++)
+                if (seq[k] != focus_p)
+                    order[n++] = seq[k];
 
-        if (files_open &&
-            x >= FILES_X && x < FILES_X + FILES_W &&
-            y >= FILES_Y && y < FILES_Y + FILES_H)
-        {
-            for (i = 0; i < FILES_ROWS; i++)
+            for (k = 0; k < n; k++)
             {
-                int ry = FILES_Y + FILES_ROW0 + i * FILES_ROWH;
-
-                if (y >= ry && y < ry + FILES_ROWH)
-                {
-                    cls = SEL_ROW;
-                    idx = i;
+                r = win_press(order[k], x, y, &cls, &idx, &changed);
+                if (r)
                     break;
-                }
             }
         }
     }
@@ -1399,27 +2738,73 @@ int nb_desktop_key(int c)
 
     if (c == NB_KEY_ESC)
     {
-        if (!menu_open)
-            return sel_clear();     /* on the wallpaper: drop the choice */
+        if (menu_open)
+        {
+            menu_open = 0;          /* the menu first, as anywhere else   */
+            band_menu();
+            if (sel_kind == SEL_MENU)
+                sel_kind = SEL_NONE;
+            return 1;
+        }
 
-        menu_open = 0;              /* the menu first, as anywhere else   */
-        band_menu();
-        if (sel_kind == SEL_MENU)
-            sel_kind = SEL_NONE;
+        if (sel_kind != SEL_NONE)
+            return sel_clear();     /* what is lit, before what is open   */
+
+        /*
+         * Nothing is lit and no menu stands, so Escape puts down the
+         * program that has the keyboard -- the cross does exactly this
+         * for the pointer, and the keyboard should have the same answer
+         * rather than a different one for the same wish.
+         */
+        switch (focus_p)
+        {
+        case 1: files_open   = 0; band_files(1);   break;
+        case 2: clock_open   = 0; band_clock();    break;
+        case 3: monitor_open = 0; band_monitor();  break;
+        case 4: about_open   = 0; band_about();    break;
+        case 5: prefs_open   = 0; band_prefs(1);   break;
+        case 6: neotext_open = 0; band_neotext(1); break;
+        default: return 0;           /* nothing has the keyboard          */
+        }
+        focus_p = 0;
+        band_add(486, 512);          /* its button goes dark with it      */
         return 1;
     }
 
     /*
      * Return is the second press: the light already says which entry, so
      * this opens it through the very call a double press makes -- one
-     * path to an activation, and nothing to keep in step.
+     * path to an activation, and nothing to keep in step.  With nothing
+     * lit it is the reader's new line, but only when the reader is the
+     * program being typed into.
      */
     if (c == NB_KEY_RET)
     {
-        if (sel_kind == SEL_NONE)
-            return 0;               /* nothing is lit: the key is nothing */
-        return activate(sel_kind, sel_idx);
+        if (sel_kind != SEL_NONE)
+            return activate(sel_kind, sel_idx);
+        if (focus_p == 5)
+            return prefs_key(c);
+        if (focus_p == 6)
+            return neotext_key(c);
+        return 0;
     }
+
+    /*
+     * Everything else belongs to the reader while the reader has the
+     * keyboard, menu or no menu: a menu is a list, and a list has no
+     * letters in it.  Left, right, tab, backspace and the characters all
+     * go through the same call the caret does.
+     */
+    if (focus_p == 6 && c != NB_KEY_UP && c != NB_KEY_DOWN)
+        return neotext_key(c);
+
+    /*
+     * And the pane keeps the rest while it has the keyboard, for the
+     * same reason: a swatch or a check box that only a pointer can work
+     * is a preference half the machine cannot change.
+     */
+    if (focus_p == 5)
+        return prefs_key(c);
 
     if (c != NB_KEY_UP && c != NB_KEY_DOWN)
         return 0;
@@ -1430,6 +2815,16 @@ int nb_desktop_key(int c)
     {
         count = MENU_ITEMS;
         kind  = SEL_MENU;
+    }
+    else if (focus_p == 6)
+    {
+        /* the reader keeps every arrow while it has the keyboard: a key
+         * it cannot use is a key that did nothing, not one to hand to a
+         * list standing behind it */
+        if (!neotext_key(c))
+            return 0;
+        band_neotext(0);
+        return 1;
     }
     else if (files_open)
     {
@@ -1530,6 +2925,18 @@ static void gadget_monitor(int x, int y, int w, int h)
         lo = full;
 
     panel(x, y, w, h, "System");
+
+    /*
+     * Its caption in the same terms the windows wear.  The monitor is
+     * a window like any other -- it has a button on the bar, it takes
+     * the keyboard, and it can be picked up and carried now -- and a
+     * Workbench-blue title over a pane of glass two windows away would
+     * put two desktops in one corner of the screen.
+     */
+    gfx_alpha(x + 1, y + 1, w - 2, 19, C_AERO, 200);
+    gfx_alpha(x + 3, y + 1, w - 6, 1, C_INK, 150);
+    gfx_alpha(x + 1, y + 19, w - 2, 1, C_AERO_RIM, 96);
+    text_d(x + 8, y + 6, "System", C_AERO_TXT);
 
     text_d(x + 8, y + 23, "CPU", C_MUTE);
     bar(x + 46, y + 21, tw, c1);
@@ -1727,39 +3134,50 @@ static void quick_launch(void)
 }
 
 /*
- * Where program `id' (1 Files .. 4 About) has its button, or 0 when it
+ * Where program `id' (1 Files .. 6 NeoText) has its button, or 0 when it
  * is not running or the row has run out of room.  The draw pass asks
  * for each id in turn; the click pass asks for the id under the
  * pointer.  One answer, one truth about where the buttons are.
+ *
+ * The row is the width it is and the bar does not run off its own end,
+ * so the programs are given the room in the order they were started and
+ * the ones that come last go without a button while there is none left
+ * to give them -- four programs already out-run the row, and what is
+ * standing is what the click pass can reach.
  */
 static int task_slot(int id, struct task_cell *t)
 {
+    static const char *const nm[6] = {
+        "Files", "Clock", "Monitor", "About", "Preferences", "NeoText"
+    };
     int x = TASK_X0, i;
 
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < 6; i++)
     {
         struct task_cell c;
-        int w;
+        int on;
 
-        c.name = (i == 0) ? "Files" : (i == 1) ? "Clock" :
-                 (i == 2) ? "Monitor" : "About";
-        if      (i == 0) { if (!files_open)   continue; }
-        else if (i == 1) { if (!clock_open)   continue; }
-        else if (i == 2) { if (!monitor_open) continue; }
-        else             { if (!about_open)   continue; }
+        if      (i == 0) on = files_open;
+        else if (i == 1) on = clock_open;
+        else if (i == 2) on = monitor_open;
+        else if (i == 3) on = about_open;
+        else if (i == 4) on = prefs_open;
+        else             on = neotext_open;
+        if (!on)
+            continue;
 
-        w = strw(c.name) + 24;
-        if (x + w > TASK_X1)
+        c.name = nm[i];
+        c.w = strw(c.name) + 24;
+        if (x + c.w > TASK_X1)
             break;                      /* out of panel: leave it out    */
 
         c.x = x;
-        c.w = w;
         if (i + 1 == id)
         {
             *t = c;
             return 1;
         }
-        x += w + 4;
+        x += c.w + 4;
     }
     return 0;
 }
@@ -1815,7 +3233,7 @@ static void task_manager(void)
 {
     int i;
 
-    for (i = 1; i <= 4; i++)
+    for (i = 1; i <= 6; i++)
     {
         struct task_cell t;
 
@@ -2132,10 +3550,13 @@ static void start_menu(void)
     for (i = 0; i < MENU_PROGS; i++)
     {
         static const char *nm[MENU_PROGS] = { "Files", "Clock", "Monitor",
-                                              "About" };
+                                              "About", "Preferences",
+                                              "NeoText" };
         int on = (i == 0) ? files_open :
                  (i == 1) ? clock_open :
-                 (i == 2) ? monitor_open : about_open;
+                 (i == 2) ? monitor_open :
+                 (i == 3) ? about_open :
+                 (i == 4) ? prefs_open : neotext_open;
 
         menu_item(i, nm[i], on,
                   sel_kind == SEL_MENU && sel_idx == N_PLACES + i);
@@ -2153,16 +3574,16 @@ static void start_menu(void)
  */
 void nb_desktop_dump(void)
 {
-    static const char key[5] = { 'm', 'f', 'c', 'o', 'a' };
-    const int val[5] = { menu_open, files_open, clock_open, monitor_open,
-                         about_open };
+    static const char key[7] = { 'm', 'f', 'c', 'o', 'a', 'r', 'n' };
+    const int val[7] = { menu_open, files_open, clock_open, monitor_open,
+                         about_open, prefs_open, neotext_open };
     int i;
 
     amiga_serial_putc('>');
     amiga_serial_putc('u');
     amiga_serial_putc('i');
     amiga_serial_putc(' ');
-    for (i = 0; i < 5; i++) {
+    for (i = 0; i < 7; i++) {
         amiga_serial_putc(key[i]);
         amiga_serial_putc('=');
         amiga_serial_putc(val[i] ? '1' : '0');
@@ -2173,8 +3594,10 @@ void nb_desktop_dump(void)
      * a menu entry or a list row, and '-' for none.  The difference
      * between a select and an open is otherwise invisible in a log that
      * only carries the program flags, and the digit says which entry --
-     * the first five are places, the last four programs.  t= is whether
-     * the menu is the sticky one the right button opens. */
+     * the first five are places, the last six programs.  t= is whether
+     * the menu is the sticky one the right button opens, and foc= is the
+     * program holding the keyboard -- 0 when none does, which is what
+     * makes Escape a no-op rather than a surprise. */
     amiga_serial_putc('s');
     amiga_serial_putc('=');
     if (sel_kind == SEL_NONE)
@@ -2188,6 +3611,50 @@ void nb_desktop_dump(void)
     amiga_serial_putc('=');
     amiga_serial_putc(menu_sticky ? '1' : '0');
     amiga_serial_putc(' ');
+    amiga_serial_putc('f');
+    amiga_serial_putc('o');
+    amiga_serial_putc('c');
+    amiga_serial_putc('=');
+    amiga_serial_putc((char)('0' + focus_p));
+    amiga_serial_putc(' ');
+
+    /*
+     * Where the window holding the keyboard actually stands.  The
+     * pointer's position says the pointer moved; only this says what
+     * came with it, which is the whole of what can be read back from
+     * a log about a drag -- and "-" when no window has the keyboard,
+     * so that the field is always there to compare two lines by.
+     * A window's corner can be off the left edge, because a window may
+     * stand half off an edge, so the number is printed signed.
+     */
+    {
+        char buf[24], *d;
+        int wx, wy, ww, wh, n;
+
+        d = put_str(buf, "at=");
+        if (focus_p >= 1 && focus_p <= 6) {
+            win_box(focus_p, &wx, &wy, &ww, &wh);
+            n = wx;
+            if (n < 0) {
+                *d++ = '-';
+                n = -n;
+            }
+            d = put_num(d, (unsigned)n);
+            d = put_str(d, ",");
+            n = wy;
+            if (n < 0) {
+                *d++ = '-';
+                n = -n;
+            }
+            d = put_num(d, (unsigned)n);
+        } else {
+            d = put_str(d, "-");
+        }
+        *d++ = ' ';
+        *d = '\0';
+        for (d = buf; *d; d++)
+            amiga_serial_putc(*d);
+    }
 
     /* where the press landed, in screen pixels: without this a log can
      * say what was chosen but never what it was aiming at, and the
@@ -2219,15 +3686,29 @@ static void scene(void)
 {
     wallpaper();
 
-    /* programs, and only the ones the user has asked for */
-    if (about_open)
-        window_main();
-    if (files_open)
-        window_files();
-    if (clock_open)
-        gadget_clock(590, 76, 30);
-    if (monitor_open)
-        gadget_monitor(452, 116, 172, 48);
+    /*
+     * Programs, and only the ones the user has asked for.  The order
+     * here is the z order, bottom first: the windows standing over the
+     * wallpaper, then the two gadgets in the corner they are painted
+     * beside, and then -- drawn once, and at the very top -- the program
+     * that has the keyboard, so a window being used can never be half
+     * covered by one that is not.  The click pass walks this list in
+     * exact reverse, which is what makes a press that lands on two
+     * windows belong to the one the eye sees on top of them.
+     */
+    if (about_open   && focus_p != 4) window_main();
+    if (files_open   && focus_p != 1) window_files();
+    if (prefs_open   && focus_p != 5) window_prefs();
+    if (neotext_open && focus_p != 6) window_neotext();
+    if (clock_open   && focus_p != 2) gadget_clock(CLOCK_X, CLOCK_Y, CLOCK_R);
+    if (monitor_open && focus_p != 3) gadget_monitor(MON_X, MON_Y, MON_W, MON_H);
+
+    if      (focus_p == 4 && about_open)   window_main();
+    else if (focus_p == 1 && files_open)   window_files();
+    else if (focus_p == 5 && prefs_open)   window_prefs();
+    else if (focus_p == 6 && neotext_open) window_neotext();
+    else if (focus_p == 2 && clock_open)   gadget_clock(CLOCK_X, CLOCK_Y, CLOCK_R);
+    else if (focus_p == 3 && monitor_open) gadget_monitor(MON_X, MON_Y, MON_W, MON_H);
 
     if (nb_prefs.taskbar)
         taskbar();

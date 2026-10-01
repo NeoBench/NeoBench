@@ -1,6 +1,48 @@
 NeoBench changelog
 ==================
 
+0.1.7
+  Windows can be picked up and carried: press the caption, anywhere in the
+    strip that is not one of its three buttons, and the window goes where
+    the pointer goes until the button comes back up, taking the keyboard
+    with it on the way.  The clamp is on the caption rather than the
+    frame, so a window may stand half off an edge, as windows do on any
+    desktop, but enough of the strip stays on the screen to be picked up
+    by again.  All six move: the four program windows by their captions,
+    the dial and the monitor by their own bodies.
+  The windows are drawn in Aero, which is what the bar and the start menu
+    were already drawn in: a pane of glass across the caption with the
+    backdrop still reading through it, a light steel rim, a shadow thrown
+    below and to the right, and Workbench's grey body and white field
+    inside.  The monitor's caption follows the same terms, so one corner
+    of the screen does not carry two desktops at once.
+  NeoText, the reader: every file in the store opens in it.  Plain text is
+    shown as it is written, a PDF has its text lifted out of the page and
+    shown the same way, and anything else -- a program, a sound, an
+    archive -- is shown as the bytes it is, eight to a line.  Choosing a
+    file in Files runs it.
+  Reading a PDF is done here rather than borrowed: the page streams are
+    inflated by a DEFLATE decoder written for the purpose and the text
+    operators are walked, so the lines of the page come out as the lines
+    of the reader, a space kerned between two words comes back as a
+    space, and pictures and embedded fonts are skipped rather than
+    guessed at.  A document set through a font NeoBench cannot read is
+    shown as its bytes instead of as nonsense.
+  Core/Docs/guide.pdf is a real document to open, written for the
+    reader: two pages, compressed, with a cross-reference table.
+  Preferences, a pane of its own: five backdrops -- wash, paper, azure,
+    dusk and slate -- chosen with one press and painted at once, with
+    the hairline grid and the horizon glows as check boxes beside them.
+    All five are the same light field in five hues, so the mark, the
+    wordmark and the Workbench chrome over them read alike on every
+    one.  Config/screen.cfg takes "backdrop = ..." and says which the
+    machine comes up with; the pane says which this session has.
+  Escape puts down whichever program has the keyboard, the way the
+    cross does it for the pointer.
+  What the reader shows of a file it cannot write back is said on its
+    status line: a text file can be typed into, and is labelled edited
+    but not saved, because the store has no write path yet.
+
 0.1.6
   NeoBench's own directory structure, not one borrowed from anywhere:
     Apps/ for programs, Config/ for settings, Core/ for Bench, Docs and

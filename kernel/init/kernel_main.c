@@ -17,6 +17,7 @@ extern void kernel_started(const char *unit);
 extern void kernel_target(const char *target);
 extern void nb_desktop_render(void);
 extern int  nb_desktop_click(int x, int y, int btn);
+extern int  nb_desktop_drag(void);
 extern int  nb_desktop_key(int c);
 extern void nb_pointer_enable(void);
 extern void nb_pointer_after_present(void);
@@ -152,10 +153,19 @@ void kernel_main(const nb_bootinfo_t *boot)
     amiga_serial_putc('P');
 
     /*
-     * Interactive phase.  The pointer is polled every field; a press -- * left or right, 1 or 2 -- is handed to the scene, which recomposites
+     * Interactive phase.  The pointer is polled every field; a press --
+     * left or right, 1 or 2 -- is handed to the scene, which recomposites
      * only when the press actually changed something: a full present
      * costs a median cut over the whole back buffer, and even a band
      * wants its rows redrawn and repacked, so it is worth being sure.
+     *
+     * A press that stays down is a different case and is asked for
+     * separately, because it lasts longer than the field it arrived on.
+     * It picks a window up by its caption and carries it for as long as
+     * the button is held; the answer is the same one a press gives --
+     * only when the rows on screen would change -- so it takes the same
+     * three calls behind it, and a pointer that has not moved between
+     * two fields costs the two reads that took to find out.
      */
     for (;;)
     {
@@ -202,7 +212,19 @@ void kernel_main(const nb_bootinfo_t *boot)
         {
             nb_desktop_render();
             nb_pointer_after_present();
-            nb_desktop_dump();      /* which programs are on screen     */
+            nb_desktop_dump();          /* which programs are on screen */
+        }
+
+        /*
+         * And the press that was still down when this field came
+         * round: the window it came down on is carried wherever the
+         * pointer has got to, and let go when the button is.
+         */
+        if (nb_desktop_drag())
+        {
+            nb_desktop_render();
+            nb_pointer_after_present();
+            nb_desktop_dump();          /* where the window has got to  */
         }
     }
 }

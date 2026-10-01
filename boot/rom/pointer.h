@@ -43,6 +43,15 @@ int nb_pointer_frame(void);
 int nb_pointer_x(void);
 int nb_pointer_y(void);
 
+/*
+ * Which buttons are down as of the last field, as NB_BTN_L / NB_BTN_R
+ * bits.  nb_pointer_frame answers the edge -- once per press, which is
+ * what a click is -- and this answers the level, which is what a drag
+ * is: press, carry, let go.  Nothing moves a window until the button
+ * that picked it up comes back up, and that is this call's whole job.
+ */
+int nb_pointer_held(void);
+
 /* Show or hide the overlay without losing the position. */
 void nb_pointer_show(int show);
 

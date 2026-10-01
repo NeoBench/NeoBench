@@ -21,6 +21,7 @@ struct nb_prefs
     int      taskbar;
     int      bar_style;        /* BAR_AERO (the default) or BAR_CLASSIC */
     unsigned bar_glass;        /* how much of the backdrop shows, 0..100 */
+    int      backdrop;         /* NB_BD_WASH .. NB_BD_SLATE             */
     uint16_t bg_top;
     uint16_t bg_bot;
     char     font[16];        /* "Xen" (standard) or "System"         */
@@ -49,6 +50,21 @@ struct nb_prefs
 #define NB_PTR_IBEAM  2
 #define NB_PTR_DOT    3
 
+/*
+ * The five backdrops, in the order the Preferences pane lays them out.
+ * Config/screen.cfg names one with "backdrop = wash" and the pane picks
+ * one while the machine is running.  Wash is the NeoBench wash -- the
+ * gradient bg_top and bg_bot carry -- and the other four are pairs of
+ * their own; all five are light fields, because the mark, the wordmark,
+ * the glows and the chrome over them were all drawn against one.
+ */
+#define NB_BD_WASH   0
+#define NB_BD_PAPER  1
+#define NB_BD_AZURE  2
+#define NB_BD_DUSK   3
+#define NB_BD_SLATE  4
+#define NB_BD_COUNT  5
+
 /* the taskbar's own style: the Aero glass the desktop draws by
  * default, or the flat Workbench field it was drawn with before that */
 #define BAR_AERO      0
@@ -57,6 +73,16 @@ struct nb_prefs
 extern struct nb_prefs nb_prefs;
 
 void nb_prefs_load(void);
+
+/* the backdrop's name as the file and the pane spell it */
+const char *nb_bd_name(int i);
+
+/* the same name the other way round, -1 when it names no backdrop */
+int nb_bd_index(const char *v);
+
+/* the pair of gradient colours backdrop i is painted with; wash takes
+ * the ones Config/screen.cfg carries */
+void nb_bd_colours(int i, uint16_t *top, uint16_t *bot);
 
 /*
  * The parsed values as one serial line each.  Serial only: preferences
