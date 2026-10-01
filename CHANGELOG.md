@@ -9,7 +9,9 @@ Notable changes to NeoBench, newest first. British English throughout.
 - **NeoText**, the reader, opens every file in the store: plain text as
   written, a PDF with its text lifted out of the page, and anything else — an
   executable, a sound, an archive — as a hex view of the bytes it is, eight to
-  a line. A file chosen in Files runs it, and the start menu starts it too.
+  a line. A document chosen in Files opens in it, and the start menu starts a
+  program; a program entry in a drawer starts its program instead of opening
+  the reader.
 - **PDF text extraction** (`boot/rom/pdf.c`): page streams are inflated by
   `boot/rom/inflate.c`, a raw DEFLATE decoder written for the purpose — no
   zlib header, no allocation, no recursion, every bounds check made — and the
@@ -28,6 +30,18 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Preferences
 
+- **Preferences is filed in `Config/`.** `Config/Preferences` is a program
+  entry rather than a document — its first line reads `program = preferences`
+  — so Files lists it beside the four files the boot reads, wearing the rose
+  tile it has in the start menu with `run` where a document would show its
+  size, and choosing it starts the pane instead of the reader. The entry is
+  generic rather than a hard-coded name: any directory can carry one, and a
+  file that says nothing of the kind still opens in NeoText, so a typo costs
+  the shortcut and nothing else.
+- **Preferences comes off the start menu.** The menu lists the other five
+  programs and the panel ends with them; the pane is started from `Config/`
+  instead and still takes its button on the task row, and still answers to
+  Escape and to the panel's focus like every other program.
 - **A Preferences pane** carrying the backdrop: wash, paper, azure, dusk and
   slate, chosen with one press and painted at once, with the hairline grid and
   the horizon glows as check boxes beside it. `backdrop = ...` in

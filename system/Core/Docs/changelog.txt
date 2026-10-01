@@ -20,7 +20,8 @@ NeoBench changelog
     shown as it is written, a PDF has its text lifted out of the page and
     shown the same way, and anything else -- a program, a sound, an
     archive -- is shown as the bytes it is, eight to a line.  Choosing a
-    file in Files runs it.
+    document in Files opens it here; choosing a program entry starts the
+    program instead.
   Reading a PDF is done here rather than borrowed: the page streams are
     inflated by a DEFLATE decoder written for the purpose and the text
     operators are walked, so the lines of the page come out as the lines
@@ -30,6 +31,17 @@ NeoBench changelog
     shown as its bytes instead of as nonsense.
   Core/Docs/guide.pdf is a real document to open, written for the
     reader: two pages, compressed, with a cross-reference table.
+  Preferences is filed in Config/: Config/Preferences is a program entry
+    rather than a document -- its first line reads "program =
+    preferences" -- so Files lists it beside the four files the boot
+    reads, wearing the rose tile it has in the start menu with "run"
+    where a document would show its size, and choosing it starts the
+    pane instead of the reader.  Any directory can carry an entry, and a
+    file that says nothing of the kind still opens in NeoText.
+  Preferences has come off the start menu for it: the menu lists the
+    other five programs and the panel ends with them, while the pane
+    keeps its button on the task row and still answers to Escape like
+    any other program.
   Preferences, a pane of its own: five backdrops -- wash, paper, azure,
     dusk and slate -- chosen with one press and painted at once, with
     the hairline grid and the horizon glows as check boxes beside them.

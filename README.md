@@ -173,12 +173,13 @@ on any desktop, but enough of the strip stays on the screen to be picked up
 by again. All six move: the four program windows by their captions, the dial
 and the monitor by their own bodies.
 
-Six programs. Files reads the store the image was built with; Clock is an
-analogue dial; Monitor shows fast memory in use; About says what this build
-is; **Preferences** carries the backdrop and the two layers over it; and
-**NeoText** opens any file in the store — plain text as written, a PDF with
-its text lifted out of the page, anything else as a hex view of the bytes it
-is, eight to a line.
+Six programs, five of them on the start menu. Files reads the store the image
+was built with; Clock is an analogue dial; Monitor shows fast memory in use;
+About says what this build is; and **NeoText** opens any file in the store —
+plain text as written, a PDF with its text lifted out of the page, anything
+else as a hex view of the bytes it is, eight to a line. **Preferences** is the
+sixth, and it is not on the menu: it is opened from `Config/` in Files,
+beside the files it changes.
 
 PDF text is read here rather than borrowed (`boot/rom/pdf.c`): page streams
 are inflated by `boot/rom/inflate.c`, a raw DEFLATE decoder with no zlib
@@ -200,6 +201,15 @@ the five the machine comes up with, and the Preferences pane chooses one for
 the session and repaints at once. The five are five hues of one light field,
 so the mark, the wordmark, the horizon glows and the chrome over them read
 the same on every one.
+
+The pane is filed where those files are. `Config/Preferences` is a program
+entry in the store — a file whose first line reads `program = preferences` —
+so opening Files on `Config/` lists it beside `screen.cfg` and `pointer.cfg`
+with `run` where a document would show its size, wearing the same rose tile
+it wears in the start menu, and choosing it starts the pane rather than the
+reader. Any directory can carry an entry this way; a file that says nothing
+of the kind still opens in NeoText, so a typo costs the shortcut and nothing
+else.
 
 The keyboard follows the window you are in: the cursor keys walk the list
 that is standing or move the caret, Return opens what is lit or starts a new

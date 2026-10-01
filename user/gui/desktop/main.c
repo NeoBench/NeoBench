@@ -821,17 +821,29 @@ static int mon_dx, mon_dy;
 #define MENU_X      8
 #define MENU_Y      112
 #define MENU_W      196
-#define MENU_H      374          /* MENU_Y + this stops short of the bar */
+#define MENU_H      340          /* MENU_Y + this stops short of the bar */
 #define MENU_HEAD   22           /* entries start below the title rule   */
 #define MENU_ITEMW  (MENU_W - 12)
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
 #define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
-#define MENU_PROGS  6
+#define N_PROGRAMS  6            /* programs the desktop can run         */
+#define MENU_PROGS  5            /* of which the menu shows this many    */
 #define MENU_ITEMS  (N_PLACES + MENU_PROGS)
 
 #define MENU_P0     (MENU_Y + MENU_HEAD + 4)             /* first place */
 #define MENU_SEP    (MENU_P0 + N_PLACES * MENU_PH + 4)   /* section rule */
 #define MENU_G0     (MENU_SEP + 4)                       /* first program */
+
+/*
+ * Which program each row of the menu's program section starts.  The
+ * numbers are the slots the whole desktop counts in -- the panel, the
+ * task row and the keyboard's focus all go1..6 in this order -- while
+ * the menu lists five of the six: Preferences was taken off the menu
+ * and is opened from Config/ in Files instead, beside the files it
+ * changes.  It is still a program, and still takes its button on the
+ * bar when it is running.
+ */
+static const unsigned char menu_slot[MENU_PROGS] = { 0, 1, 2, 3, 5 };
 
 /* the show-desktop sliver: the last eight columns of the panel, which
  * is the width Aero gives it -- a strip you can find without looking,
@@ -1100,6 +1112,94 @@ static unsigned row_target(int i)
     return c;
 }
 
+/* one word of a file, compared without regard to case */
+static int tok_is(const unsigned char *s, const unsigned char *e,
+                  const char *w)
+{
+    while (s < e && *w)
+    {
+        unsigned char a = *s++;
+        unsigned char b = (unsigned char)*w++;
+
+        if (a >= 'A' && a <= 'Z')
+            a = (unsigned char)(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z')
+            b = (unsigned char)(b - 'A' + 'a');
+        if (a != b)
+            return 0;
+    }
+    return s == e && !*w;
+}
+
+/*
+ * Is this file a program rather than a document?
+ *
+ * The first line of a file that is neither blank nor a comment may name
+ * what the file is for -- "program = preferences" -- and a file that
+ * does name one starts that program when it is chosen in the browser
+ * instead of opening in NeoText.  That is how a drawer holds programs
+ * the way the start menu holds them: Config/ carries the Preferences
+ * entry beside the four files it reads at boot, and any other directory
+ * can carry whatever the desktop can run.
+ *
+ * A file that says nothing, or that names a program the desktop does
+ * not have, is a document and opens in the reader as it always has, so
+ * a typo costs the shortcut and nothing else.  Answers the start
+ * menu's program slot, or -1 for a document.
+ */
+static int program_slot_of(unsigned t)
+{
+    static const char *const names[N_PROGRAMS] = {
+        "files", "clock", "monitor", "about", "preferences", "neotext"
+    };
+    const unsigned char *p = nb_pfs_nodes[t].data;
+    const unsigned char *end = p + nb_pfs_nodes[t].size;
+    int ret = -1;
+
+    while (p < end)
+    {
+        const unsigned char *eol = p;
+        const unsigned char *k, *eq, *ke, *v, *ve;
+        int i;
+
+        while (eol < end && *eol != '\n')
+            eol++;
+
+        k = p;
+        while (k < eol && (*k == ' ' || *k == '\t'))
+            k++;
+        if (k >= eol || *k == '#')          /* blank or a comment line   */
+        {
+            p = (eol < end) ? eol + 1 : end;
+            continue;
+        }
+
+        /* the first line with words in it is the one that decides */
+        eq = k;
+        while (eq < eol && *eq != '=')
+            eq++;
+        if (eq > k && eq < eol)
+        {
+            ke = eq;
+            while (ke > k && (ke[-1] == ' ' || ke[-1] == '\t'))
+                ke--;
+            v = eq + 1;
+            while (v < eol && (*v == ' ' || *v == '\t'))
+                v++;
+            ve = eol;
+            while (ve > v && (ve[-1] == ' ' || ve[-1] == '\t' ||
+                              ve[-1] == '\r'))
+                ve--;
+            if (tok_is(k, ke, "program"))
+                for (i = 0; i < N_PROGRAMS; i++)
+                    if (tok_is(v, ve, names[i]))
+                        ret = i;
+        }
+        break;
+    }
+    return ret;
+}
+
 /*
  * How many rows the list is standing: row 0 is always the level above,
  * and the rest are the children as far as they run out or the window
@@ -1165,6 +1265,7 @@ static void window_files(void)
     for (i = 1; i < FILES_ROWS; i++)
     {
         const struct pfs_node *nd;
+        int prog;
 
         ry = y + FILES_ROW0 + i * FILES_ROWH;
         if (child == PFS_NONE)
@@ -1173,10 +1274,20 @@ static void window_files(void)
         nd = &nb_pfs_nodes[child];
         on = (sel_kind == SEL_ROW && sel_idx == i);
         row_light(i);
-        row_glyph(nd->dir ? 1 : 2, x + 10, ry + 1);
+        prog = nd->dir ? -1 : program_slot_of(child);
+        if (prog >= 0)
+        {
+            /* a program wears the tile its entry wears in the start
+             * menu, so the same program is the same colour in both */
+            menu_glyph(prog, x + 10, ry + 4);
+        }
+        else
+            row_glyph(nd->dir ? 1 : 2, x + 10, ry + 1);
         text_d(x + 30, ry + 3, nd->name, on ? C_INK : C_TEXT);
         if (nd->dir)
             col_r(x + w - 10, ry + 3, "<DIR>");
+        else if (prog >= 0)
+            col_r(x + w - 10, ry + 3, "run");
         else
         {
             fmt_size(buf, nd->size);
@@ -1457,7 +1568,8 @@ static void window_prefs(void)
     }
 
     text_d(x + 10, y + 136, "Applies at once.", C_MUTE);
-    text_d(x + 10, y + 148, "screen.cfg sets it at boot.", C_MUTE);
+    text_d(x + 10, y + 148, "Config/screen.cfg sets", C_MUTE);
+    text_d(x + 10, y + 160, "what the boot comes up as.", C_MUTE);
 }
 
 /*
@@ -2291,6 +2403,66 @@ static void dbl_report(unsigned dt, int dx, int dy)
  * leaves the highlight honestly dark instead of painting a scene that
  * no longer matches what is set.
  */
+/*
+ * One of the six programs, standing or put away.
+ *
+ * The start menu asks for this as a toggle -- an entry whose program is
+ * already showing puts it away, which is what the lit dot on the entry
+ * means -- while a program filed in a drawer only ever asks for it to
+ * be up: asking for Preferences twice means Preferences twice, exactly
+ * as asking for a directory twice means that directory twice.  Either
+ * way the answer goes to the panel, which shows the program that has
+ * the keyboard, and to the bar, where the buttons light and go out.
+ *
+ * Returns non-zero when the program is standing afterwards.
+ */
+static int program_slot(int p, int toggle)
+{
+    int on;
+
+    if (p < 0 || p >= N_PROGRAMS)
+        return 0;
+
+    switch (p)
+    {
+    case 0:  on = toggle ? !files_open   : 1; files_open   = on; break;
+    case 1:  on = toggle ? !clock_open   : 1; clock_open   = on; break;
+    case 2:  on = toggle ? !monitor_open : 1; monitor_open = on; break;
+    case 3:  on = toggle ? !about_open   : 1; about_open   = on; break;
+    case 4:  on = toggle ? !prefs_open   : 1;
+             if (on)
+                 pr_lay = 0;         /* the keys start on the swatches    */
+             prefs_open = on;
+             break;
+    default: on = toggle ? !neotext_open : 1; neotext_open = on; break;
+    }
+
+    switch (p)                      /* the rows it and its button cover   */
+    {
+    case 0:  band_files(1);    break;
+    case 1:  band_clock();     break;
+    case 2:  band_monitor();   break;
+    case 3:  band_about();     break;
+    case 4:  band_prefs(1);    break;
+    default: band_neotext(1);  break;
+    }
+
+    if (on)
+    {
+        if (focus_p != p + 1)
+        {
+            focus_p = p + 1;        /* the panel shows it as active       */
+            band_add(486, 512);     /* and its button lights              */
+        }
+    }
+    else if (focus_p == p + 1)
+    {
+        focus_p = 0;
+        band_add(486, 512);
+    }
+    return on;
+}
+
 static int activate(int cls, int idx)
 {
     int changed = sel_clear();
@@ -2324,28 +2496,8 @@ static int activate(int cls, int idx)
             }
         }
         else
-        {
-            int p = idx - N_PLACES;
-            int on;
-
-            if      (p == 0) { files_open   = !files_open;  band_files(1);  on = files_open; }
-            else if (p == 1) { clock_open   = !clock_open;  band_clock();   on = clock_open; }
-            else if (p == 2) { monitor_open = !monitor_open; band_monitor(); on = monitor_open; }
-            else if (p == 3) { about_open   = !about_open;  band_about();   on = about_open; }
-            else if (p == 4)
-            {
-                prefs_open = !prefs_open;
-                pr_lay = 0;         /* the keys start on the swatches    */
-                band_prefs(1);
-                on = prefs_open;
-            }
-            else             { neotext_open = !neotext_open; band_neotext(1); on = neotext_open; }
-
-            if (on)
-                focus_p = p + 1;        /* the panel shows it as active   */
-            else if (focus_p == p + 1)
-                focus_p = 0;
-        }
+            /* a menu entry toggles: the lit dot says which are up */
+            program_slot(menu_slot[idx - N_PLACES], 1);
     }
     else                                   /* a list row: it opens         */
     {
@@ -2361,19 +2513,36 @@ static int activate(int cls, int idx)
             }
             else
             {
-                /*
-                 * A file, not a directory: it goes to the reader, which is
-                 * what it has been waiting for.  The browser used to take
-                 * the row's node as the directory to step into whether the
-                 * node was one or not, which put the list on a file and left
-                 * it with no children to walk -- the two answers were never
-                 * meant to be the same answer.
-                 */
-                neotext_load(t);
-                neotext_open = 1;
-                focus_p = 6;
-                band_neotext(1);        /* the window, and its button     */
-                changed = 1;
+                int p = program_slot_of(t);     /* a program, or a file  */
+
+                if (p >= 0)
+                {
+                    /*
+                     * An entry in a drawer starts its program rather than
+                     * opening in the reader, and asks for it to be up
+                     * rather than for whatever it happens to be doing.
+                     * The row is spent either way: choosing something is
+                     * what the second press was for.
+                     */
+                    program_slot(p, 0);
+                    changed = 1;
+                }
+                else
+                {
+                    /*
+                     * A file, not a directory: it goes to the reader, which is
+                     * what it has been waiting for.  The browser used to take
+                     * the row's node as the directory to step into whether the
+                     * node was one or not, which put the list on a file and left
+                     * it with no children to walk -- the two answers were never
+                     * meant to be the same answer.
+                     */
+                    neotext_load(t);
+                    neotext_open = 1;
+                    focus_p = 6;
+                    band_neotext(1);        /* the window, and its button     */
+                    changed = 1;
+                }
             }
         }
     }
@@ -3455,7 +3624,7 @@ static void menu_place(int i, int sel)
  * blue field behind it is what says that, not a second recolouring.
  * Nothing here is drawn until the orb asks for it.
  */
-static void menu_item(int i, const char *label, int open, int sel)
+static void menu_item(int i, int slot, const char *label, int open, int sel)
 {
     const int x = MENU_X + 6;
     const int y = MENU_G0 + i * MENU_ITEMH;
@@ -3464,7 +3633,7 @@ static void menu_item(int i, const char *label, int open, int sel)
     if (sel)
         gfx_fill(x, y, MENU_ITEMW, 30, C_WB_BLUE);
 
-    menu_glyph(i, x + 8, y + 8);
+    menu_glyph(slot, x + 8, y + 8);
     text_d(x + 30, y + 11, label, sel ? C_INK : menu_ink());
 
     if (open) {
@@ -3550,15 +3719,14 @@ static void start_menu(void)
     for (i = 0; i < MENU_PROGS; i++)
     {
         static const char *nm[MENU_PROGS] = { "Files", "Clock", "Monitor",
-                                              "About", "Preferences",
-                                              "NeoText" };
-        int on = (i == 0) ? files_open :
-                 (i == 1) ? clock_open :
-                 (i == 2) ? monitor_open :
-                 (i == 3) ? about_open :
-                 (i == 4) ? prefs_open : neotext_open;
+                                              "About", "NeoText" };
+        int s = menu_slot[i];
+        int on = (s == 0) ? files_open :
+                 (s == 1) ? clock_open :
+                 (s == 2) ? monitor_open :
+                 (s == 3) ? about_open : neotext_open;
 
-        menu_item(i, nm[i], on,
+        menu_item(i, s, nm[i], on,
                   sel_kind == SEL_MENU && sel_idx == N_PLACES + i);
     }
 }

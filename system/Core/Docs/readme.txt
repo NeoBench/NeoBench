@@ -15,6 +15,10 @@ the root to see it.
 
   Apps/                  programs; today they are linked into the image
   Config/                settings, read at boot straight from the image
+    Preferences          the pane that changes the desktop now; this is
+                         a program entry rather than a document, so
+                         choosing it starts the pane instead of
+                         opening it in NeoText
     boot.cfg             how long the boot is held, and whether the
                          hardware is walked before drivers are bound
     pointer.cfg          mouse pointer: shape, scale, speed, colour
@@ -37,6 +41,13 @@ the root to see it.
 All four configuration files are read at boot, straight out of the ROM
 image.  There is no configuration step: edit the file, rebuild the
 ROM, reboot.
+
+Preferences is the fifth entry in Config/: a program filed beside the
+files it changes, so the pane that picks a backdrop for this session is
+standing next to the file that picks one for the boot.  It is a program
+entry rather than a document -- its first line reads "program =
+preferences" -- and any directory can carry one; a file that says
+nothing of the kind opens in NeoText as it always has.
 
 The boot
 --------
@@ -89,13 +100,19 @@ several choices.
 The programs
 ------------
 
+The start menu lists five of them.  The sixth, Preferences, is not on
+the menu at all: it is opened from Config/ in Files, beside the files
+it changes.
+
   Files        the directory browser, reading the store the image was
-               built with; choosing a file in it runs NeoText
+               built with; choosing a file in it opens NeoText, and
+               choosing a program entry starts that program
   Clock        an analogue dial
   Monitor      two bars: fast memory in use, and the uptime
   About        what this build is
-  Preferences  the backdrop, and the grid and the glow over it
   NeoText      the reader
+  Preferences  the backdrop, and the grid and the glow over it, from
+               Config/Preferences rather than from the menu
 
 Preferences offers five backdrops -- wash, paper, azure, dusk and
 slate -- and paints the one you choose at once; "backdrop" in
