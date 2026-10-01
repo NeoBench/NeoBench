@@ -15,7 +15,14 @@ MEMORY
      *   $060000..$100000  RGB565 back buffer for the GUI compositor
      *   $100000..$110000  runtime arena (quantiser scratch)
      *   $110000..$1E0000  BSS / heap          (this region)
+     *   $150000..$1C0000  -- carved back out of it: Paula's buffer
      *   $1E0000..$200000  stack, top at $1FFFE0
+     *
+     * The sound buffer is therefore the one thing in that range the BSS
+     * must not grow into, and the ASSERT at the foot of this file fails
+     * the link if it ever does.  It used to: NB_SND_BASE was $120000
+     * with room for 128 KiB, the desktop's BSS grew to $127334, and the
+     * startup chime wrote its samples over the tail of the desktop.
      */
     ram    (rw) : ORIGIN = 0x00110000, LENGTH = 0x000D0000
 }
@@ -68,3 +75,6 @@ SECTIONS
         *(.ARM.exidx*)
     }
 }
+
+/* The sound buffer at $150000 is not the BSS's to take. */
+ASSERT(_end <= 0x00150000, "BSS runs into the sound buffer at $150000")

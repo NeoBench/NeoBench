@@ -87,46 +87,59 @@ void nb_sound_init(void)
     REG16(INTREQ) = INTF_AUD0;
 }
 
-unsigned nb_sound_play(const void *src, unsigned bytes, unsigned vol)
+
+/*
+ * Let go of the channel: mute, drop out of DMA, drop the request.  Paula
+ * does not stop at the end of a buffer on its own -- the length counter
+ * running out asks Agnus for the address and the length again, and the
+ * buffer plays from the top for ever unless somebody disables it.  That
+ * is the whole of the play-once rule -- an enable with no matching
+ * disable is a loop -- and it is why the stop is timed against the pass
+ * rather than left to the hardware.
+ *
+ * The mute is cheap insurance: the stop lands in silence -- the chime's
+ * own leading silence, or the second and a half of pad the player
+ * decodes after its last sample -- so the value in the latch is already
+ * zero and this changes nothing a listener could hear.  It means only
+ * that the channel cannot be left putting out whatever the reload
+ * manages to fetch in the field between the pass ending and this write.
+ * The request state is read before the clear so the line says whether
+ * the hardware ever raised it.
+ *
+ * `why` is the line's own tail: " poll" when the main loop noticed,
+ * " stop" when something asked for it, and nothing when the boot waited
+ * the pass out in front of the desktop.
+ */
+static void release(const char *why)
 {
-    const unsigned char *p = (const unsigned char *)src;
-    const unsigned hdr = 16u;
-    unsigned period, dlen, rate, i;
+    unsigned req = (REG16(INTREQR) & INTF_AUD0) ? 1u : 0u;
+
+    REG16(AUD0VOL) = 0;
+    REG16(DMACON) = DMAF_AUD0;                 /* bit 15 low = off     */
+    REG16(INTREQ) = INTF_AUD0;                 /* and the request      */
+    nb_snd_state = 0;
+
+    put(">sound done fields=");
+    put_u((unsigned)(nb_fields - nb_snd_t0));
+    put(" dur=");
+    put_u((unsigned)nb_snd_dur);
+    put(" req=");
+    put_u(req);
+    put(why);
+    put("\n\r");
+}
+
+/*
+ * Everything the two callers share: take the channel back from whoever
+ * held it, load the four registers with the channel off, print the run
+ * on serial while DMA is still down -- the line costs a couple of
+ * milliseconds and those have to come off the boot rather than off the
+ * sample -- then enable and start the clock the stop is read against.
+ */
+static unsigned arm(unsigned addr, unsigned dlen, unsigned period,
+                    unsigned rate, unsigned vol)
+{
     unsigned dbg_pre;
-    uint32_t addr = NB_SND_BASE;
-
-    if (!p || bytes < hdr || bytes > NB_SND_MAX)
-        return 0;
-    if (p[0] != 'N' || p[1] != 'S' || p[2] != 'N' || p[3] != 'D')
-        return 0;
-
-    period = ((unsigned)p[4] << 8) | (unsigned)p[5];
-    dlen   = ((unsigned)p[8] << 24) | ((unsigned)p[9] << 16) |
-             ((unsigned)p[10] << 8) | (unsigned)p[11];
-    rate   = ((unsigned)p[12] << 24) | ((unsigned)p[13] << 16) |
-             ((unsigned)p[14] << 8) | (unsigned)p[15];
-
-    /* 124 is the lowest period the audio device documents; the OS would
-     * refuse anything below it, and there is no quality to gain. */
-    if (period < 124u || period > 65535u || rate == 0u)
-        return 0;
-    if (dlen < 2u || (dlen & 1u) || dlen > bytes - hdr || dlen > NB_SND_MAX - hdr)
-        return 0;
-    if (vol > 64u)
-        vol = 64u;
-
-    for (i = 0; i < dlen; i++)                    /* samples -> chip RAM */
-        *(volatile uint8_t *)(addr + i) = p[hdr + i];
-
-    /*
-     * The header is deliberately left behind.  Paula fetches from the
-     * address in AUD0LCH/LCL and plays whatever bytes it finds there,
-     * so a copy that started at p[0] would put sixteen bytes of "NSND"
-     * -- the magic, the period, the length -- into the first two
-     * milliseconds of the sound.  That is a click at the start, and
-     * because Agnus reloads the same address at the end of every pass,
-     * the same click at the end of each one after the first.
-     */
 
     /*
      * Stop the channel before touching it.  The ROM owns Paula when
@@ -147,23 +160,20 @@ unsigned nb_sound_play(const void *src, unsigned bytes, unsigned vol)
 
     REG16(AUD0VOL) = (uint16_t)vol;
     REG16(AUD0PER) = (uint16_t)period;
-    REG16(AUD0LCH) = (uint16_t)(addr >> 16);
-    REG16(AUD0LCL) = (uint16_t)(addr & 0xffffU);
+    REG16(AUD0LCH) = (uint16_t)((unsigned)addr >> 16);
+    REG16(AUD0LCL) = (uint16_t)((unsigned)addr & 0xffffU);
 
     /*
      * The length is loaded with the channel stopped -- it has to be,
      * because dropping the request out of a channel that is enabled
-     * silences that request for good, and the wait further down then
-     * runs to its bound while the sample plays and loops anyway.
-     * Whatever the load itself puts up is dropped here too, still with
-     * DMA off, and the enable is the very last thing done: from here
-     * the only event that can set AUD0 is this sample running out.
+     * silences that request for good, and the wait further on then runs
+     * to its bound while the sample plays and loops anyway.  Whatever
+     * the load itself puts up is dropped here too, still with DMA off,
+     * and the enable is the very last thing done: from here the only
+     * event that can set AUD0 is this sample running out.
      */
     REG16(AUD0LEN) = (uint16_t)(dlen >> 1);
 
-    /* Said before the channel is armed, while DMA is still off: the
-     * serial line costs a couple of milliseconds, and those have to
-     * come off the boot rather than off the sample. */
     put(">sound start period=");
     put_u(period);
     put(" rate=");
@@ -201,10 +211,95 @@ unsigned nb_sound_play(const void *src, unsigned bytes, unsigned vol)
      * because the sample is silent in front of itself for the fifteen
      * hundredths mksound.py put there.  The two extra fields cover the
      * field the counter is actually read in.
+     *
+     * The player leans on the same slack the other way: it decodes a
+     * second and a half of silence after its last sample, so a stop that
+     * comes late -- a present runs for up to three quarters of a second
+     * and the main loop does not poll through one -- lands in that pad
+     * rather than in the head of the buffer Paula has gone back to.
      */
     nb_snd_dur = (((dlen + 31u) >> 5) * period) / 2216u + 2u;
-    nb_snd_t0 = nb_fields;                     /* clock the playback     */
+    nb_snd_t0 = nb_fields;
     nb_snd_state = 1;
+    return period;
+}
+
+unsigned nb_sound_start(unsigned addr, unsigned bytes,
+                        unsigned rate, unsigned vol)
+{
+    unsigned period;
+
+    if (rate == 0u)
+        return 0;
+    if (addr < NB_SND_BASE || addr > NB_SND_BASE + NB_SND_MAX)
+        return 0;
+    if (bytes < 2u || (bytes & 1u) ||
+        bytes > NB_SND_BASE + NB_SND_MAX - addr)
+        return 0;
+
+    /* A colour clock over the rate, floored where the hardware is. */
+    period = 3546895u / rate;
+    if (period < 124u)
+        period = 124u;
+    if (period > 65535u)
+        period = 65535u;
+    if (vol > 64u)
+        vol = 64u;
+
+    return arm(addr, bytes, period, rate, vol);
+}
+
+void nb_sound_stop(void)
+{
+    if (nb_snd_state)
+        release(" stop");
+}
+
+int nb_sound_busy(void)
+{
+    return nb_snd_state != 0u;
+}
+
+unsigned nb_sound_play(const void *src, unsigned bytes, unsigned vol)
+{
+    const unsigned char *p = (const unsigned char *)src;
+    const unsigned hdr = 16u;
+    unsigned period, dlen, rate, i;
+
+    if (!p || bytes < hdr || bytes > NB_SND_MAX + hdr)
+        return 0;
+    if (p[0] != 'N' || p[1] != 'S' || p[2] != 'N' || p[3] != 'D')
+        return 0;
+
+    period = ((unsigned)p[4] << 8) | (unsigned)p[5];
+    dlen   = ((unsigned)p[8] << 24) | ((unsigned)p[9] << 16) |
+             ((unsigned)p[10] << 8) | (unsigned)p[11];
+    rate   = ((unsigned)p[12] << 24) | ((unsigned)p[13] << 16) |
+             ((unsigned)p[14] << 8) | (unsigned)p[15];
+
+    /* 124 is the lowest period the audio device documents; the OS would
+     * refuse anything below it, and there is no quality to gain. */
+    if (period < 124u || period > 65535u || rate == 0u)
+        return 0;
+    if (dlen < 2u || (dlen & 1u) || dlen > bytes - hdr || dlen > NB_SND_MAX - hdr)
+        return 0;
+    if (vol > 64u)
+        vol = 64u;
+
+    for (i = 0; i < dlen; i++)                    /* samples -> chip RAM */
+        *(volatile uint8_t *)(NB_SND_BASE + i) = p[hdr + i];
+
+    /*
+     * The header is deliberately left behind.  Paula fetches from the
+     * address in AUD0LCH/LCL and plays whatever bytes it finds there,
+     * so a copy that started at p[0] would put sixteen bytes of "NSND"
+     * -- the magic, the period, the length -- into the first two
+     * milliseconds of the sound.  That is a click at the start, and
+     * because Agnus reloads the same address at the end of every pass,
+     * the same click at the end of each one after the first.
+     */
+
+    arm((int)NB_SND_BASE, dlen, period, rate, vol);
 
     /*
      * Wait here rather than in the main loop: the desktop is drawn
@@ -214,57 +309,12 @@ unsigned nb_sound_play(const void *src, unsigned bytes, unsigned vol)
     while (nb_fields - nb_snd_t0 < nb_snd_dur)
         ;
 
-    /*
-     * One pass, then take the channel back.  Paula does not stop at the
-     * end of a buffer on its own: the length counter running out asks
-     * Agnus for the address and the length again, and the buffer plays
-     * from the top for ever unless somebody disables it.  That is the
-     * whole of the play-once rule -- an enable with no matching disable
-     * is a loop -- and it is why the stop is timed against the pass
-     * instead of left to the hardware.
-     *
-     * The mute is cheap insurance.  The stop lands in the leading
-     * silence, after the sound's own five millisecond fade, so the value
-     * in the latch is already zero and this changes nothing a listener
-     * could hear; it means only that the channel cannot be left putting
-     * out whatever the reload manages to fetch in the field between the
-     * pass ending and this write.  The request state is read before the
-     * clear so the line below says whether the hardware ever raised it.
-     */
-    {
-        unsigned req = (REG16(INTREQR) & INTF_AUD0) ? 1u : 0u;
-
-        REG16(AUD0VOL) = 0;
-        REG16(DMACON) = DMAF_AUD0;                 /* bit 15 low = off   */
-        REG16(INTREQ)  = INTF_AUD0;                /* and the request    */
-        nb_snd_state = 0;
-
-        put(">sound done fields=");
-        put_u((unsigned)(nb_fields - nb_snd_t0));
-        put(" dur=");
-        put_u((unsigned)nb_snd_dur);
-        put(" req=");
-        put_u(req);
-        put("\n\r");
-    }
-
+    release("");                  /* one pass, then take it back        */
     return rate;
 }
 
 void nb_sound_poll(void)
 {
     if (nb_snd_state == 1u && nb_fields - nb_snd_t0 >= nb_snd_dur)
-    {
-        /* Same three steps as above: Paula reloads the buffer and repeats
-         * it, so noticing the end means letting go of the channel. */
-        REG16(AUD0VOL) = 0;
-        REG16(DMACON) = DMAF_AUD0;
-        REG16(INTREQ)  = INTF_AUD0;
-        nb_snd_state = 0;
-        put(">sound done fields=");
-        put_u((unsigned)(nb_fields - nb_snd_t0));
-        put(" dur=");
-        put_u((unsigned)nb_snd_dur);
-        put(" poll\n\r");
-    }
+        release(" poll");
 }
