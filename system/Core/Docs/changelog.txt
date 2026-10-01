@@ -42,6 +42,17 @@ NeoBench changelog
     other five programs and the panel ends with them, while the pane
     keeps its button on the task row and still answers to Escape like
     any other program.
+  Tools is the drawer of filed programs, and NeoText is the first one
+    in it: Tools/NeoText is an entry that reads "program = neotext" on
+    its first line, the same way Config/Preferences reads its own, so
+    the reader can be started from a tools drawer as well as from the
+    start menu or from the document that needs it.  The drawer carries
+    tools.txt, its own note saying what is filed in it; NeoShell and
+    the calculator are the next two names for it.
+  Files shows seven rows where it showed six: the root carries six
+    drawers now -- Apps, Config, Core, Home, Temp and Tools -- so the
+    list, its object count and the window's height all grew by one
+    row.
   Preferences, a pane of its own: five backdrops -- wash, paper, azure,
     dusk and slate -- chosen with one press and painted at once, with
     the hairline grid and the horizon glows as check boxes beside them.

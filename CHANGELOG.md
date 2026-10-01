@@ -51,6 +51,19 @@ Notable changes to NeoBench, newest first. British English throughout.
   desktops, so the mark, the wordmark, the glows and the Workbench chrome over
   them read the same on every one.
 
+### Tools
+
+- **`Tools/` is a drawer of program entries, and NeoText is the first one in
+  it.** `Tools/NeoText` reads `program = neotext` on its first line, exactly
+  as `Config/Preferences` reads its own, so the reader starts from a tools
+  drawer as well as from the start menu or from the document that needs it.
+  The drawer carries `tools.txt`, its own note saying what is filed there and
+  what is coming, so a directory holding a program says so the way `Config/`
+  does. NeoShell and the calculator are the next two names for it.
+- **Files shows seven rows where it showed six.** The root carries six
+  drawers now — Apps, Config, Core, Home, Temp and Tools — so the list, its
+  object count and the window's height grew by one row.
+
 ### Desktop
 
 - **Windows can be picked up and carried.** Press the caption — anywhere in

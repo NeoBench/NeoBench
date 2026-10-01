@@ -9,11 +9,13 @@ mount AmigaDOS volumes and it does not call into AmigaDOS libraries.
 Where things live
 -----------------
 
-The store is one tree with five places at the top of it, and none of
+The store is one tree with six places at the top of it, and none of
 them is borrowed from anywhere else.  Open Files and walk down from
 the root to see it.
 
-  Apps/                  programs; today they are linked into the image
+  Apps/                  programs; the two entries so far are filed in
+                         Config/ and Tools/, and this drawer is kept
+                         for the ones that arrive as files of their own
   Config/                settings, read at boot straight from the image
     Preferences          the pane that changes the desktop now; this is
                          a program entry rather than a document, so
@@ -37,6 +39,11 @@ the root to see it.
     Pictures/            still images
     Videos/              moving pictures
   Temp/                  where downloads land; there is no RAM disk
+  Tools/                 the programs that are filed rather than
+    NeoText              started from a document: the reader, as an
+                         entry that reads "program = neotext"
+    tools.txt            what is filed in this drawer, and what is
+                         coming
 
 All four configuration files are read at boot, straight out of the ROM
 image.  There is no configuration step: edit the file, rebuild the
@@ -102,7 +109,10 @@ The programs
 
 The start menu lists five of them.  The sixth, Preferences, is not on
 the menu at all: it is opened from Config/ in Files, beside the files
-it changes.
+it changes.  The fifth, NeoText, is on the menu and is also filed in
+the tools drawer: Tools/NeoText is an entry that starts the reader
+the way Config/Preferences starts the pane, and Tools/ is where
+NeoShell and the calculator will stand when they are written.
 
   Files        the directory browser, reading the store the image was
                built with; choosing a file in it opens NeoText, and
@@ -110,7 +120,7 @@ it changes.
   Clock        an analogue dial
   Monitor      two bars: fast memory in use, and the uptime
   About        what this build is
-  NeoText      the reader
+  NeoText      the reader, from the menu or from Tools/NeoText
   Preferences  the backdrop, and the grid and the glow over it, from
                Config/Preferences rather than from the menu
 

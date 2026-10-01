@@ -1,0 +1,16 @@
+# NeoBench program entry.
+#
+# The first line of a file that is neither blank nor a comment may say
+# what the file is for.  "program = name" makes the file an entry rather
+# than a document: choosing it in Files starts that program instead of
+# opening NeoText, so a drawer can hold a program the way the start menu
+# does.  The name is one of the desktop's own -- files, clock, monitor,
+# about, preferences, neotext -- and a file that names anything else, or
+# that says nothing at all, opens in the reader as it always has.
+#
+# NeoText is filed here, in the tools directory, so the reader stands
+# with the things a reader is for: every document chosen in Files opens
+# in it already, and this entry starts it the same way, on the screen
+# it was last left on rather than on a document nobody chose.
+
+program = neotext

@@ -1,14 +1,18 @@
 NeoBench applications
-=====================
+======================
 
 Programs do not live here yet: everything the desktop can open is
 linked into the ROM image and started by the kernel, so there is
 nothing to install and nothing to launch from a path.
 
-The directory is kept so the tree has somewhere to put them when one
-arrives as a file of its own -- an archive unpacked into the store, or
-a fetch that landed in Temp/ and was moved here afterwards.  Until
-that happens it holds this note and nothing else.
+The two program entries that do exist are filed where they belong
+rather than here: Config/Preferences starts the preferences pane and
+Tools/NeoText starts the reader, each standing beside the files it
+works with.  This directory is kept for the ones that arrive as files
+of their own -- an archive unpacked into the store, or a fetch that
+landed in Temp/ and was moved here afterwards.  Until one does, it
+holds this note and nothing else.
 
-  Files, Clock, Monitor, About   built in, opened from the start bar
+  Files, Clock, Monitor, About   built in, opened from the start menu
+  NeoText, Preferences           filed in Tools/ and Config/
   the rest                       not written yet

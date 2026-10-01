@@ -736,11 +736,13 @@ static int files_dx, files_dy;
 #define FILES_X     (376 + files_dx)
 #define FILES_Y     (176 + files_dy)
 #define FILES_W     248
-#define FILES_H     232
+#define FILES_H     254
 #define FILES_HEAD  28         /* "Name"/"Size" header row             */
 #define FILES_ROW0  50         /* first list row, from the window top  */
 #define FILES_ROWH  22         /* row pitch                            */
-#define FILES_ROWS  6          /* ".." plus five children              */
+#define FILES_ROWS  7          /* ".." plus six children: the root has
+                                * Apps Config Core Home Temp Tools, and
+                                * the deepest drawer is one shorter     */
 
 static unsigned cur_dir;       /* the directory being shown; 0 = root  */
 
@@ -1300,11 +1302,11 @@ static void window_files(void)
          child = pfs_next_child(cur_dir, child))
         count++;
 
-    gfx_fill(x + 10, y + 196, w - 20, 1, C_WB_SHADE);
+    gfx_fill(x + 10, y + 218, w - 20, 1, C_WB_SHADE);
     d = put_num(buf, count);
     d = put_str(d, count == 1u ? " object" : " objects");
     *d = '\0';
-    text_d(x + 10, y + 204, buf, C_MUTE);
+    text_d(x + 10, y + 226, buf, C_MUTE);
 }
 
 /* The chosen item's light goes out, and it claims its own rows as it

@@ -211,6 +211,14 @@ reader. Any directory can carry an entry this way; a file that says nothing
 of the kind still opens in NeoText, so a typo costs the shortcut and nothing
 else.
 
+The reader has an entry of its own, in a drawer of its own. `Tools/NeoText`
+reads `program = neotext` and starts NeoText, so the toolbox is where the
+tools are filed: `Tools/` carries that entry and a note saying what is in it,
+and takes NeoShell and the calculator as they arrive. The start menu still
+lists NeoText and a document chosen in Files still opens in it — the entry is
+a third way to the same reader, not a replacement for the other two. Seven
+rows now fit in Files, because the root carries six drawers.
+
 The keyboard follows the window you are in: the cursor keys walk the list
 that is standing or move the caret, Return opens what is lit or starts a new
 line, and Escape puts down whichever program has the keyboard.
@@ -288,7 +296,7 @@ detection ladder answer with the right model.
 | `boot/rom/` | The boot ROM: reset code, chipset bring-up, font, hardware probes (`fline.S`, `probe.c`), linker script, Makefile |
 | `kernel/` | Kernel core: entry (`kernel_main.c`), boot banner and detection log (`banner.c`), text console, drivers, filesystems |
 | `user/` | Userland (coreutils and friends) |
-| `system/` | The tree packed into the ROM and browsed by the desktop: `Apps/`, `Config/`, `Core/` (Bench, Docs, Media), `Home/` (Desktop, Documents, Music, Pictures, Videos) and `Temp/` — where downloads land, because NeoBench has no RAM disk |
+| `system/` | The tree packed into the ROM and browsed by the desktop: `Apps/`, `Config/`, `Core/` (Bench, Docs, Media), `Home/` (Desktop, Documents, Music, Pictures, Videos), `Temp/` — where downloads land, because NeoBench has no RAM disk — and `Tools/`, the drawer of filed programs |
 | `docs/` | Specifications (filesystem, ABI) |
 | `tools/` | Host-side utilities (NBFS image tools, disassembler, …) |
 
