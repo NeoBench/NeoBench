@@ -2,6 +2,33 @@ NeoBench changelog
 ==================
 
 0.1.7
+  There is an install disc now, and "make iso" presses it: five megs of
+    plain ISO 9660 -- NBFS.IMG as the payload, the hunk executable, the
+    ROM and the three text files -- with NeoBench's NBISO installer
+    block in sector 0, where a boot floppy keeps its boot block.  The
+    disc does not claim to boot the machine, because a desktop Amiga
+    cannot be talked into it: Early Startup Control lists hard disk
+    partitions and floppies only, and CD boot lives behind the CDTV and
+    CD32 ROMs.  What happens instead is written in INSTALL.TXT -- the
+    ROM boots, the ATAPI driver reads sector 0, finds NBISO, mounts the
+    volume with NeoBench's own ISO 9660 reader and runs the
+    installation from what the disc carries.
+  The installation writes only a blank disk.  A first sector of all
+    zeroes is the only invitation: NBFS.IMG is streamed from disc
+    sector onto four disk sectors with the tail zero-padded, three
+    attempts to a chunk, every chunk read back and compared and then
+    read a second time and compared again.  Our boot block with a
+    readable superblock names the volume and is left alone, our boot
+    block without one reports a damaged volume and is left alone, and
+    anything else reports a refusal and is left alone.  Nothing
+    formats: only the sectors of the image are touched.  Every verdict
+    appears on the serial line as ">install state=...".
+  The ATAPI driver asks for a whole sector.  $FFFF goes into the
+    cylinder registers immediately before every PACKET -- how a host
+    requests the data in one piece -- and the command packet is sent
+    as the twelve bytes it is, so no stray word can arrive in the data
+    phase behind it.  A CD sector then arrives as one transfer rather
+    than in pieces with busy time between them.
   Windows can be picked up and carried: press the caption, anywhere in the
     strip that is not one of its three buttons, and the window goes where
     the pointer goes until the button comes back up, taking the keyboard

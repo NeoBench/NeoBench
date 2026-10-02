@@ -40,6 +40,8 @@ OBJS := \
     probe.o \
     ata.o \
     dev.o \
+    iso9660.o \
+    install.o \
     zorro.o \
     zz9000.o \
     gfx.o \

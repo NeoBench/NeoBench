@@ -154,6 +154,34 @@ list that is standing or move the caret, Return opens what is lit or
 starts a new line, and Escape puts down whichever program has the
 keyboard.
 
+Installing
+----------
+
+Two routes, and the machine can take either.
+
+The install disc is pressed by
+
+  make iso
+
+into images/NeoBench-0.1.7.iso -- the disc this file came on, if you
+are reading it from one.  It carries NBFS.IMG as its payload, the hunk
+executable and the ROM beside it, and NeoBench's NBISO block in sector
+0.  Attach it to the IDE bus beside a blank disk and boot: the ATAPI
+driver reads sector 0, finds NBISO, mounts the ISO 9660 volume with
+NeoBench's own reader and streams NBFS.IMG onto the disk.  Only a
+blank disk is ever written -- a disk that already holds NeoBench
+reports the volume by name, a damaged one reports itself damaged, and
+anything else is refused with nothing touched.  INSTALL.TXT in this
+directory is the step-by-step.  The disc does not boot the machine
+itself; a desktop Amiga boots from hard disks and floppies, so the ROM
+always starts first.
+
+The other route is the chainload, which needs no disc after the copy:
+copy NEOBENCH.EXE from the disc to the hard disk and run it from
+S:Startup-Sequence.  The genuine AmigaOS 3.2.3 ROM boots first, runs
+Startup-Sequence, and Startup-Sequence hands the machine to NeoBench.
+That is the first step of the boot described above.
+
 Building
 --------
 

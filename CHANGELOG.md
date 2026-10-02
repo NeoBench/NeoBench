@@ -4,6 +4,46 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ## 0.1.7
 
+### Installation
+
+- **An install disc, pressed by `make iso`**: `images/NeoBench-0.1.7.iso`,
+  five megs of plain ISO 9660 level 1 — `NBFS.IMG` (the system tree packed
+  as an NBFS volume by `tools/mknbfs.py`), `NEOBENCH.EXE` (the chainload
+  hunk), `NEOBENCH.ROM` and the three text files, with NeoBench's own
+  `NBISO` installer block in sector 0 where a boot floppy keeps its boot
+  block. The disc does not claim to boot a desktop Amiga, which cannot be
+  coaxed into it: Early Startup Control lists hard disk partitions and
+  floppies only, and CD boot lives behind the CDTV and CD32 ROMs. What
+  happens instead is what `INSTALL.TXT` says: the ROM boots, the ATAPI
+  driver reads sector 0, finds `NBISO`, and mounts the volume at sector 16
+  with **NeoBench's own ISO 9660 reader** (`boot/rom/iso9660.c`) — primary
+  volume descriptor, both-endian fields, L and M path tables, directory
+  records that never cross a sector boundary, written against the spec
+  rather than against a libc.
+- **The installer writes only a blank disk** (`boot/rom/install.c`). A
+  first sector of all zeroes is the only thing that invites the payload:
+  `NBFS.IMG` streamed disc sector onto four disk sectors with the tail
+  zero-padded, three attempts a chunk, each chunk read back and compared,
+  then read a second time and compared again. `NBBOOT` plus a readable
+  superblock reports the volume by name and is left alone, `NBBOOT` with
+  the superblock gone reports a damaged volume and is left alone,
+  anything else reports a refusal and is left alone — there is no format
+  path in the code at all, only the sectors of the image. Every verdict
+  lands on the serial line as `>install state=…`, with `chk= mis= misrd=
+  cdmis= cd2rd=` behind it, and the desktop log says the same thing as
+  `installer: NeoBench written to hda (4096 KB)`.
+- **The ATAPI byte transfer count, at last set** (`boot/rom/ata.c`).
+  `$FFFF` now goes into the cylinder registers immediately before
+  `PACKET`, which is how a host asks for a whole sector in one piece.
+  Left as the previous disk command found them, those registers held
+  part of a disk address, so every 2048-byte CD sector came back in
+  phases of a few bytes with a busy gap between them — the transfer,
+  reading 1024 words blind, walked through every gap, which is where the
+  corrupted install windows came from. The packet itself is sent as the
+  twelve bytes it is instead of twenty: after the twelfth the device
+  starts the transfer, and a word arriving behind it lands in the data
+  instead of in the command.
+
 ### Documents
 
 - **NeoText**, the reader, opens every file in the store: plain text as
@@ -93,6 +133,16 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Tests
 
+- `tools/tests/test_iso9660` runs the whole install disc on the host: the
+  disc itself is pressed by the same `mknbfs.py`/`mkiso.py` that press the
+  real one, and behind it two fake devices registered in the device table
+  under their real names — `atapi.device` reading the ISO image,
+  `ata.device` a RAM disk — so the reader and the installer see exactly
+  what they see on the machine. Mount, volume identity, root listing, path
+  lookup either way and file bytes across a sector boundary; install
+  refused when there is no disk, install onto a blank disk and the bytes
+  it leaves behind, the same volume recognised on the next boot, a disk
+  holding someone else's data refused, and a damaged volume declined.
 - `tools/tests/test_pdf` drives both new readers from the host: stored, fixed
   and dynamic blocks against data zlib produced, every error path, and a
   four-object PDF — a compressed page, an image that must be skipped, an

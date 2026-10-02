@@ -2,6 +2,8 @@
 #include "../../boot/rom/amiga.h"
 #include "../../boot/rom/ata.h"
 #include "../../boot/rom/dev.h"
+#include "../../boot/rom/install.h"
+#include "../../boot/rom/iso9660.h"
 #include "../../boot/rom/probe.h"
 #include "../../boot/rom/usb.h"
 #include "../../boot/rom/zz9000.h"
@@ -432,6 +434,92 @@ static void dev_selftest(void)
 }
 
 /*
+ * The install disc, and the install itself: two lines that say what the
+ * machine found on the CD and what it did about it.
+ *
+ * The disc line is asked for whenever a CD answered -- an ISO 9660
+ * volume that is not NeoBench's is reported just as plainly as one that
+ * is, because the boot log's rule is that a question gets its answer.
+ * The install line only runs on NeoBench's own disc, and every outcome
+ * it can have is written down: written now, already there, refused over
+ * someone else's data, damaged, no payload, no disk.  A run that does
+ * nothing says so instead of staying quiet, since a silent installer
+ * and a broken one look identical in a log otherwise.
+ */
+static void report_disc(void)
+{
+    const struct nb_dev *cd = nb_dev_find("atapi.device");
+    struct nb_install ins;
+    char msg[88];
+    char *p;
+    int iso;
+
+    if (!cd || !cd->units || !cd->read)
+        return;                     /* atapi.device has said why       */
+
+    iso = nb_iso_mount();
+    if (iso == NB_ISO_NONE)
+    {
+        kernel_warn("iso9660: disc carries no ISO 9660 volume");
+        return;
+    }
+
+    p = put_str(msg, "iso9660: ");
+    p = put_str(p, iso == NB_ISO_INSTALL ? "NeoBench installer disc \""
+                                         : "volume \"");
+    p = put_str(p, nb_iso_volume());
+    p = put_str(p, "\", ");
+    p = put_num(p, nb_iso_files());
+    p = put_str(p, " files");
+    *p = '\0';
+    kernel_ok(msg);
+
+    if (iso != NB_ISO_INSTALL)
+        return;
+
+    nb_install_run(&ins);
+    switch (ins.state)
+    {
+    case NB_INSTALL_NO_PAYLOAD:
+        kernel_warn("installer: disc carries no NBFS.IMG payload");
+        return;
+    case NB_INSTALL_NO_DISK:
+        kernel_warn("installer: no disk to install to");
+        return;
+    case NB_INSTALL_REFUSED:
+        kernel_warn("installer: hda is not blank; refusing to overwrite");
+        return;
+    case NB_INSTALL_DAMAGED:
+        kernel_warn("installer: hda has a damaged NeoBench volume");
+        return;
+    case NB_INSTALL_PRESENT:
+        p = put_str(msg, "installer: NeoBench already on hda (NBFS \"");
+        p = put_str(p, ins.volume);
+        p = put_str(p, "\")");
+        break;
+    case NB_INSTALL_DONE:
+        p = put_str(msg, "installer: NeoBench written to hda (");
+        p = put_num(p, ins.sectors >> 1);   /* 512-byte sectors -> KB */
+        p = put_str(p, " KB)");
+        break;
+    default:
+        p = put_str(msg, "installer: stream stopped (");
+        p = put_str(p, ins.op ? ins.op : "?");
+        p = put_str(p, ", lba ");
+        p = put_num(p, ins.lba);
+        p = put_str(p, ") after ");
+        p = put_num(p, ins.sectors);
+        p = put_str(p, " sectors");
+        break;
+    }
+    *p = '\0';
+    if (ins.state == NB_INSTALL_DONE)
+        kernel_ok(msg);
+    else
+        kernel_warn(msg);
+}
+
+/*
  * Serial only, and before anything has been judged: what each unit left
  * on the task file when it was selected.  The boot log has one line per
  * device and no room for the unit that answered but would not identify,
@@ -791,6 +879,7 @@ void kernel_drivers(void)
 
     nb_dev_dump();
     dev_selftest();
+    report_disc();
 
     /*
      * Input says where it is listening.  Unlike the lines below this one

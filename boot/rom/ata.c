@@ -18,6 +18,7 @@
  * milliseconds -- and only when something really is sitting on the bus.
  */
 #include <stdint.h>
+#include "amiga.h"
 #include "ata.h"
 
 /*
@@ -57,6 +58,7 @@
 
 #define SECTOR_BYTES   512u          /* a disk sector                      */
 #define ATAPI_BYTES   2048u          /* a CD-ROM sector                    */
+#define ATAPI_CDB       12u           /* the command packet, whole          */
 
 /*
  * A bus with nobody on it floats, so the status register reads back as a
@@ -77,8 +79,8 @@
  * IDENTIFY itself answers in well under a millisecond.
  */
 #define POLL_PRESENT  40000U         /* nobody answered the selection      */
-#define POLL_BSY     200000U         /* device selected, settling          */
-#define POLL_DRQ     400000U         /* IDENTIFY result coming             */
+#define POLL_BSY     2000000U        /* device selected, settling          */
+#define POLL_DRQ     4000000U        /* IDENTIFY result coming             */
 
 static int floating(uint8_t st)
 {
@@ -98,6 +100,10 @@ static int floating(uint8_t st)
  * and "read $00" stay distinguishable.
  */
 static uint8_t last_status;
+
+/* Serial helpers, defined below where the refusal line is built. */
+static void s_put(const char *s);
+static void s_x2(uint8_t v);
 
 /*
  * Select a unit and wait for it to become addressable.  Returns 0 when no
@@ -193,6 +199,38 @@ static int wait_idle(void)
             return (st & ST_ERR) ? 0 : 1;
     }
     return 0;
+}
+
+/*
+ * Recover a drive that is still busy long after its data has all been
+ * moved: the failure the installer actually meets, and the one where
+ * doing nothing means the whole bus is dead from here on.
+ *
+ * The only command ATA allows into a busy drive is the one the drive
+ * answers without needing to be selected first -- EXECUTE DEVICE
+ * DIAGNOSTIC, which a wedged unit takes as an instruction to sort
+ * itself out.  If it works, the next retry finds a drive that can be
+ * selected again; if it does not, the ">ata rec" line says so and the
+ * refusal stands.  Returns the status the drive showed afterwards.
+ */
+static void recover_busy(void)
+{
+    unsigned i;
+    uint8_t st = BUS_FLOAT1;
+
+    *(volatile uint8_t *)ATA_STAT = 0x90;        /* EXECUTE DIAGNOSTIC */
+
+    for (i = 0; i < POLL_BSY; i++)
+    {
+        st = *(volatile uint8_t *)ATA_STAT;
+        last_status = st;
+        if (!floating(st) && (st & ST_BSY) == 0)
+            break;
+    }
+    s_put(">ata rec st=$");
+    s_x2(st);
+    amiga_serial_putc('\r');
+    amiga_serial_putc('\n');
 }
 
 /*
@@ -479,6 +517,63 @@ int nb_ata_identify(unsigned unit, struct nb_ata_id *id)
  * command all answer 0, and none of them waits forever.
  */
 
+/*
+ * The one line this driver writes for itself: a refused transfer, with
+ * the phase that refused it and the status byte the drive was holding.
+ * Everything else the log says about ata.device comes from someone
+ * asking; this one exists because "the transfer stopped" with no phase
+ * and no status leaves the reader to guess between a drive that said
+ * no (ERR set), a drive that went quiet (poll bound reached) and a bus
+ * that floated ($FF) -- three different faults with one symptom, and
+ * the installer's "op=hd" only says which end of the cable it was.
+ */
+static void s_put(const char *s)
+{
+    while (*s)
+        amiga_serial_putc(*s++);
+}
+
+static void s_u(unsigned v)
+{
+    char b[11];
+    int i = 11;
+
+    b[--i] = '\0';
+    do
+    {
+        b[--i] = (char)('0' + v % 10u);
+        v /= 10u;
+    } while (v);
+    s_put(&b[i]);
+}
+
+static void s_x2(uint8_t v)
+{
+    static const char hex[] = "0123456789abcdef";
+    char b[3];
+
+    b[0] = hex[(v >> 4) & 0xf];
+    b[1] = hex[v & 0xf];
+    b[2] = '\0';
+    s_put(b);
+}
+
+static int rw_refused(const char *phase, uint32_t lba, unsigned s,
+                      int writing)
+{
+    s_put(">ata err phase=");
+    s_put(phase);
+    s_put(" st=$");
+    s_x2(last_status);
+    s_put(writing ? " w=1 lba=" : " w=0 lba=");
+    s_u((unsigned)lba);
+    s_put(" s=");
+    s_u(s);
+    amiga_serial_putc('\r');
+    amiga_serial_putc('\n');
+    return 0;
+}
+
 static int rw_sectors(unsigned unit, uint32_t lba, unsigned count,
                       void *buf, int writing)
 {
@@ -492,7 +587,12 @@ static int rw_sectors(unsigned unit, uint32_t lba, unsigned count,
         return 0;                       /* LBA28 only; never wrap an address */
 
     if (!select_unit(unit))
-        return 0;
+    {
+        int r = rw_refused("sel", lba, 0, writing);
+
+        recover_busy();             /* the refusal line comes first   */
+        return r;
+    }
 
     *(volatile uint8_t *)ATA_FEAT  = 0;
     *(volatile uint8_t *)ATA_SECC  = (uint8_t)count;
@@ -512,11 +612,18 @@ static int rw_sectors(unsigned unit, uint32_t lba, unsigned count,
     for (s = 0; s < count; s++)
     {
         if (!wait_drq())
-            return 0;
+            return rw_refused("drq", lba, s, writing);
         xfer_sector(p, writing);
         p += SECTOR_BYTES;
     }
-    return wait_idle();
+    if (!wait_idle())
+    {
+        int r = rw_refused("idle", lba, s, writing);
+
+        recover_busy();
+        return r;
+    }
+    return 1;
 }
 
 int nb_ata_read(unsigned unit, uint32_t lba, void *dst, unsigned count)
@@ -530,15 +637,40 @@ int nb_ata_write(unsigned unit, uint32_t lba, const void *src, unsigned count)
 }
 
 /*
+ * A packet command that refused, named the same way as the disk's:
+ * the line first (so the status shown is the one that failed), then
+ * whatever EXECUTE DEVICE DIAGNOSTIC can do about it.  The CD takes
+ * the same BSY wedge as the disk does -- the bus is shared and the
+ * same emulation drives both -- and without this the installer's
+ * retry would find nothing selectable where it had left it.
+ */
+static int atapi_refused(const char *phase, uint32_t lba, unsigned s)
+{
+    int r = rw_refused(phase, lba, s, 0);
+
+    recover_busy();
+    return r;
+}
+
+/*
  * READ(10) through the ATAPI packet interface.
  *
  * Two phases make this different from a disk: the command is handed over
- * as a 20 byte packet through the same data register, and the answer
- * arrives in whole CD sectors of 2048 bytes.  The packet is padded with
- * zeros past the ten bytes READ(10) uses -- a device that counts only
- * the bytes its own command size asks for stops the transfer at the end
- * of them, and one that counts the full packet gets a packet that is
- * defined right through.
+ * as a twelve byte packet through the same data register, and the answer
+ * arrives in whole CD sectors of 2048 bytes.
+ *
+ * The byte transfer count registers (cylinder low/high) are what make
+ * the answer whole.  They are written with $FFFF before PACKET, and the
+ * device is free to read them at that moment to decide how the data
+ * comes back: left over from a disk command they hold part of an
+ * address -- a few hundred -- and the sector then arrives in pieces of
+ * that many bytes, each piece separated by busy, which a transfer reading
+ * ahead blind walks straight into.  $FFFF asks for the sector in one
+ * piece, which is what every ATAPI driver asks for.
+ *
+ * The packet is sent as the twelve bytes it is.  Once the device has
+ * counted its own command size it starts the transfer, and a word written
+ * after that point lands in the data instead of the command.
  *
  * The transfer is read in sector-sized blocks, each one preceded by a
  * wait for DRQ: a device that answers a multi-sector read in one block
@@ -557,7 +689,7 @@ static int atapi_read_sectors(unsigned unit, uint32_t lba, unsigned count,
     if (!buf || count == 0 || count > 0xffffu)
         return 0;
     if (!select_unit(unit))
-        return 0;
+        return atapi_refused("asel", lba, 0);
 
     for (i = 0; i < sizeof cdb; i++)
         cdb[i] = 0;
@@ -569,18 +701,26 @@ static int atapi_read_sectors(unsigned unit, uint32_t lba, unsigned count,
     cdb[7] = (uint8_t)(count >> 8);
     cdb[8] = (uint8_t)count;
 
+    /*
+     * Byte transfer count: $FFFF asks for each sector whole.  Written
+     * here, immediately before PACKET, because the device reads the
+     * registers at the command itself -- a disk command's address left
+     * in them would ask for the answer in that many byte pieces.
+     */
+    *(volatile uint8_t *)ATA_CYLL = 0xff;
+    *(volatile uint8_t *)ATA_CYLH = 0xff;
     *(volatile uint8_t *)ATA_FEAT = 0;
     *(volatile uint8_t *)ATA_STAT = CMD_PACKET;
 
     if (!wait_drq())
-        return 0;
-    for (i = 0; i < sizeof cdb; i += 2)
+        return atapi_refused("apkt", lba, 0);
+    for (i = 0; i < ATAPI_CDB; i += 2)
         *data = (uint16_t)(((unsigned)cdb[i] << 8) | cdb[i + 1]);
 
     for (s = 0; s < count; s++)
     {
         if (!wait_drq())
-            return 0;
+            return atapi_refused("asec", lba, s);
         for (i = 0; i < ATAPI_BYTES; i += 2)
         {
             uint16_t w = *data;
@@ -590,7 +730,9 @@ static int atapi_read_sectors(unsigned unit, uint32_t lba, unsigned count,
         }
         p += ATAPI_BYTES;
     }
-    return wait_idle();
+    if (!wait_idle())
+        return atapi_refused("aidle", lba, count);
+    return 1;
 }
 
 int nb_atapi_read(unsigned unit, uint32_t lba, void *dst, unsigned count)

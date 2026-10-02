@@ -1,0 +1,7 @@
+NeoBench installer disc.
+
+Sector 0 of this disc carries the NeoBench installer boot block
+(NBISO), and NBFS.IMG in this directory is a whole NBFS volume built
+from the system tree.  On boot the ROM mounts this volume with its own
+ISO 9660 reader and, if the machine's first disk is blank, streams the
+image onto it.

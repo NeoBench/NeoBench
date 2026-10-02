@@ -1,0 +1,87 @@
+Installing NeoBench from the install disc
+-----------------------------------------
+
+The disc this file came on is NeoBench's installer disc.  Sector 0
+carries NeoBench's installer boot block (the signature "NBISO"), the
+ISO 9660 volume sits at sector 16 as it does on any other disc, and
+NBFS.IMG in the root is a whole NBFS volume holding the system tree.
+
+Read that "bootable" carefully.  A desktop Amiga's Kickstart boots
+from floppies and hard disks only -- the Early Startup Control lists
+exactly those two -- and booting a CD exists on the Amiga only behind
+the CDTV and CD32 ROMs.  So the disc does not boot the machine: the
+ROM does.  On boot NeoBench's ATAPI driver reads sector 0, sees the
+NBISO signature, mounts the volume with NeoBench's own ISO 9660
+reader, and runs the installation from what the volume carries.  The
+boot medium and the install medium are then what they should be: the
+ROM starts the system, the disc supplies the payload.
+
+What the install does
+---------------------
+
+One file is written: NBFS.IMG, streamed from the disc to the first
+disk, sector by sector, until an NBFS volume is on the platter -- the
+same tree the ROM carries in its own store, with room beside it for
+the files that arrive later.
+
+The rule for writing it is deliberately blunt, because nobody is at
+the keyboard to be asked:
+
+  - the disk is blank (its first sector is all zeroes): the image is
+    written to it;
+  - the disk already starts with NeoBench's boot block and a readable
+    superblock: nothing happens, the log reports the volume by name;
+  - the disk starts with our boot block but the superblock is gone:
+    nothing happens, the log reports a damaged volume;
+  - anything else: nothing happens, the log reports that the disk is
+    not blank and was refused.
+
+A disk that belongs to somebody else is never overwritten, and there
+is no code path that formats anything: only the sectors of the image
+itself are touched.
+
+Installing, step by step
+------------------------
+
+In FS-UAE (the same shape works for any emulator that carries an IDE
+bus and a CD):
+
+  kickstart_file = .../boot/rom/neobench.rom   <- or your own ROM
+  hard_drive_0 = /path/to/blank.hdf
+  hard_drive_0_controller = ide0
+  cdrom_drive_0 = /path/to/NeoBench-0.1.7.iso
+  cdrom_drive_0_controller = ide0
+
+Boot.  The log answers for everything it did:
+
+  [  OK  ] block read: atapi.device sector 16 (2048 bytes)
+  [  OK  ] iso9660: NeoBench installer disc "NEOBENCH", 6 files
+  [  OK  ] installer: NeoBench written to hda (4096 KB)
+
+and the serial channel carries the same story as machine-readable
+lines, ">iso state=2 ..." and ">install state=done secs=8192".  The
+next boot with the disc still in the drive reports the volume it
+finds rather than writing again:
+
+  [  OK  ] installer: NeoBench already on hda (NBFS "NeoBench")
+
+What is on the disc
+-------------------
+
+  INSTALL.TXT     this file
+  README.TXT      what NeoBench is and where things live
+  CHANGES.TXT     what changed, release by release
+  NBFS.IMG        the payload: an NBFS volume of the system tree
+  NEOBENCH.EXE    the NeoBench kernel as a hunk executable, for
+                  loading from AmigaOS rather than from the ROM
+  NEOBENCH.ROM    the ROM image itself, for emulators
+
+Installing from AmigaOS instead
+-------------------------------
+
+The disc also works the old way, for the machine whose AmigaOS stays
+in front: copy NEOBENCH.EXE to the hard disk and chain it from
+S:Startup-Sequence.  The genuine AmigaOS 3.2.3 ROM boots first, runs
+Startup-Sequence, and Startup-Sequence hands over to NeoBench.  That
+is the chainload path described in README.TXT; it needs no disc after
+the copy is made.

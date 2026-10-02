@@ -3,6 +3,7 @@
 images/*.nbfs
 images/*.img
 images/*.iso
+images/iso-root/
 
 # Compiler-generated header dependency files
 *.d

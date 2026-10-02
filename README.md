@@ -72,10 +72,12 @@ own: a device is in the table because the hardware it names answered, and it
 says plainly what it can do.
 
 ```
->dev n=3
+>dev n=5
 >dev ata.device u=1 b=0 s=512 io=read,write
 >dev atapi.device u=1 b=1 s=2048 io=read
 >dev sound.device u=1 b=0 s=0 io=none
+>dev input.device u=1 b=0 s=0 io=none
+>dev serial.device u=1 b=0 s=0 io=none
 [  OK  ] ata.device: Gayle IDE controller (PIO mode 0)
 [  OK  ]   hda: UAE-IDE New Disk.hdf, 1024 MB
 [  OK  ] atapi.device: AU-ETAPA I
@@ -97,11 +99,17 @@ is decoded in the byte order word 0 pins down (`$0040` disk, `$848A` card,
 `$80C0`-style packet) rather than by asking which reading of the model name
 looks like text, which cannot settle it: exchanging the bytes inside a field
 leaves its count of letters exactly where it was, so both readings score the
-same. A CD is taken at its word in the cylinder registers (`$14/$EB`) and read
-with ATAPI READ(10) in 2048-byte blocks; `sdcard.device` is the same bus one
-unit along; `sound.device` is Paula; `zz9000.device` binds only to a card that
-was actually found. A driver with no sector path reports `io=none` rather than
-passing itself off as a disk.
+same. A CD is taken at its word in the cylinder registers (`$14/$EB`), read
+with ATAPI READ(10) in 2048-byte blocks, and asked for in one piece: `$FFFF`
+is written back to those registers before every PACKET, because left with a
+disk command's address in them the device answers a sector in byte-sized
+phases that a transfer reading ahead blind walks into. `sdcard.device` is
+the same bus one unit along; `sound.device` is Paula; `input.device` is the
+keyboard on CIA-A with the port on Paula and `serial.device` Paula's serial
+line — no card to find, so both are bound from the moment the machine came
+up; `zz9000.device` binds only to a card that was actually found. A driver
+with no sector path reports `io=none` rather than passing itself off as a
+disk.
 
 Every path is bounded — a missing, slow or wedged unit answers "no" under a
 poll bound and the boot carries on. The one thing never done at boot is a
@@ -236,6 +244,61 @@ Requires an m68k cross GCC (`m68k-linux-gnu-gcc` / `ld` / `objcopy`, or the
 bebbo toolchain on `PATH`). Output: `boot/rom/neobench.rom`, a 512 KB image
 vectors at 0, runnable as a Kickstart ROM replacement in an emulator.
 
+To press the install disc:
+
+```sh
+make iso
+```
+
+Output: `images/NeoBench-0.1.7.iso` — the ROM rebuilt and its chainload
+hunk linked after it, `system/` packed into `NBFS.IMG` by
+`tools/mknbfs.py` (checked by `tools/nbfs/info/nbfs-info`), and the six
+staged files pressed into a plain ISO 9660 level 1 volume by
+`tools/mkiso.py`. Nothing but the cross GCC and `python3` is needed on the
+host; like everything under `images/`, the disc itself is not tracked.
+
+## The install disc
+
+The disc is NeoBench's installer, and it is honest about what it is. In
+sector 0, where a boot floppy keeps its boot block, sits NeoBench's own
+`NBISO` installer block (signature, version, volume name); the ISO 9660
+volume sits at sector 16 as it does on any other disc.
+
+**It does not boot the machine, and does not claim to.** A desktop Amiga's
+Early Startup Control lists hard disk partitions and floppies only — booting
+from CD exists on the Amiga behind the CDTV and CD32 ROMs, which is not
+where this runs. What happens instead: the ROM boots as it always does, the
+ATAPI driver reads sector 0, finds `NBISO`, mounts the volume with
+**NeoBench's own ISO 9660 reader** (`boot/rom/iso9660.c` — both-endian
+fields honoured, L and M path tables, directory records walked without a
+byte of libc) and runs the installer (`boot/rom/install.c`) from what the
+disc carries. The boot medium and the install medium stay what they should
+be: the ROM starts the system, the disc supplies the payload.
+
+The installer's rule is blunt, because nobody is at the keyboard to be
+asked. It reads the first sector of the first disk and:
+
+| First disk sector | Verdict | Serial line |
+| --- | --- | --- |
+| all zeroes | stream `NBFS.IMG` onto it | `>install state=done secs=8192` |
+| `NBBOOT` and a readable NBFS superblock | already installed, left alone | `>install state=present` |
+| `NBBOOT`, superblock gone | damaged, left alone | `>install state=damaged` |
+| anything else | somebody else's disk, left alone | `>install state=refused` |
+
+There is no format path at all: only the sectors of the image are written.
+Each chunk of the stream gets three attempts, is read back and compared, and
+is then read a second time and compared again — `chk= mis= misrd= cdmis=
+cd2rd=` close the final serial line, all zeros on a good run. The desktop
+log carries the same story in English:
+
+```text
+[  OK  ] iso9660: NeoBench installer disc "NEOBENCH", 6 files
+[  OK  ] installer: NeoBench written to hda (4096 KB)
+```
+
+`INSTALL.TXT` on the disc (`system/Core/Docs/install.txt`) says all of this
+to the person installing, step by step.
+
 ## Testing with FS-UAE
 
 Point a config at the built ROM:
@@ -286,6 +349,20 @@ drive then arrives as the second unit on the channel the disk is on, which is
 where Gayle can reach it — and `[  OK  ] block read: atapi.device sector 16`
 is the ISO 9660 volume descriptor coming off it.
 
+One trap, if the disk pointed at has already been installed: a hardfile
+whose first sector is neither blank nor an Amiga `RDSK` gets a *synthetic*
+RDB pasted over it — FS-UAE answers reads under 256 KB from the fabrication
+and shifts the rest of the file down, so a disk starting `NBBOOT` reads back
+as `RDSK` and the installer refuses the very volume it wrote itself. Pin the
+drive as an RDB device and the fabrication is never made:
+
+```ini
+hard_drive_0_type = rdb
+```
+
+A blank disk skips the trap either way, which is why the first install needs
+nothing special.
+
 Swap `cpu =` between `68020`, `68030`, `68040` and `68060` to watch the CPU
 detection ladder answer with the right model.
 
@@ -319,6 +396,13 @@ detection ladder answer with the right model.
       hardware answered, each saying what it can do (`io=read,write`,
       `io=read`, `io=none`), with a boot self-test that reads sector 0 of
       the disk and the volume header of a CD
+- [x] Install disc: `make iso` presses `images/NeoBench-0.1.7.iso`, an
+      ISO 9660 level 1 volume carrying `NBFS.IMG` as the payload with
+      NeoBench's `NBISO` installer block in sector 0 — mounted off the
+      ATAPI bus by NeoBench's own reader (the disc does not claim to
+      boot a desktop Amiga, which cannot boot one) and streamed to a
+      blank disk only, with installed, damaged and foreign disks left
+      exactly as they are
 - [ ] Input handling and window management on top of the static scene
 
 ## Licence
