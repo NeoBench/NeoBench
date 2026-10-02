@@ -6,7 +6,7 @@
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra -std=c99
 
-TESTS := test_zorro test_hid test_pdf test_iso9660
+TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi
 
 # The install disc the last test reads is built by the tools that build
 # the real one: mknbfs.py packs fixtures/nbfs-tree into a volume, that
@@ -55,6 +55,16 @@ test_iso9660: test_iso9660.c ../../boot/rom/iso9660.c \
               ../../boot/rom/dev.h ../../boot/rom/amiga.h $(FIXTURE)
 	$(CC) $(CFLAGS) -o $@ test_iso9660.c ../../boot/rom/iso9660.c \
 	    ../../boot/rom/install.c ../../boot/rom/dev.c
+
+# The NCR53C710 driver: the chip is only in one motherboard, so the
+# register decode, the SCRIPTS encodings and the command descriptor
+# layout are held against the values the emulator's lsi53c710 decodes
+# them with rather than against a bus.  The driver is included rather
+# than linked because everything worth checking in it is static (test
+# file header has the picture).
+test_scsi: test_scsi.c ../../boot/rom/scsi.c ../../boot/rom/scsi.h \
+           ../../boot/rom/amiga.h
+	$(CC) $(CFLAGS) -o $@ test_scsi.c
 
 run: $(TESTS) $(FIXTURE)
 	@for t in $(TESTS); do ./$$t || exit 1; done

@@ -131,8 +131,68 @@ Notable changes to NeoBench, newest first. British English throughout.
   used is painted last and asked first, so a window that covers another never
   passes a press down to the one it covers.
 
+### Boot
+
+- **The chainload returns instead of crashing.** `SYS:NeoBench` was ending as
+  `Software Failure … Program failed (error #80000000)`, four defects deep.
+  Two were on the serial line: the transmitter-ready test polled `$DFF038`,
+  which is `strequ` and write-only, so it read a register that never changed
+  and the whole boot message collapsed to a single byte; and the byte itself
+  went out under `move.b`, which a 68040 or 68060 turns into a word store of
+  the value shifted left eight, putting `$00` on the wire and nothing else.
+  Both are fixed in `boot/rom/chain.S` and `boot/block/bootblock.S` —
+  `$DFF018`, and `andi.w #$00ff` followed by a word store, which is the form
+  `boot.S` and `amiga.c` were already using.
+- **Entering in user mode is no longer a privilege violation.** `move.w %sr`
+  is privileged from the 68010 up, and AmigaDOS starts a program with the
+  supervisor bit clear, so it faulted on vector 8 before the first message
+  could be printed. The arrival mode is now established without touching SR:
+  vector 32 is swapped for a handler, `trap #0` is taken, and the handler
+  compares the user stack pointer against the stack pointer saved before the
+  trap — the same value means user mode. No exception frame is read, so `rte`
+  returns whatever format the CPU built.
+- **`RunCommand` is handed a return code it can read.** `d0` was left holding
+  whatever the last routine put there, and `RunCommand` passes that on as the
+  program's exit status; it is now `moveq #0, %d0` before the `rts`. With all
+  four fixed the serial line reads `*` and one message, `NB-CHAIN: after
+  neobench` follows it, and `LoadWB LEGACY` brings Workbench up.
+
+### Devices
+
+- **`scsi.device`: the NCR53C710 on the A4000T** (`boot/rom/scsi.c`). One AGA
+  machine carries a SCSI host with no expansion at all, so the driver looks
+  for the chip and not for the machine: CTEST1 has to answer `$F0` first, then
+  a scratch register has to round trip `$5A`/`$A5`, and only after both is the
+  chip initialised. The window is decoded the way the board wires it rather
+  than the way the CPU reads it — register R sits at `$DD0040 + (R xor 3)`,
+  mirrored at `$DD0080`, so CTEST1 lands on `$DD0056` and everything below
+  `$DD0040` is left for Gayle. Both reads are harmless on an A1200, whose
+  Gayle answers `$00` outside the IDE registers and ignores writes there, so
+  the bus is found empty the same way as anything else: by its silence,
+  reported as `[ WARN ] scsi.device: no NCR53C710 host in the Gayle window`.
+- **Every command is a SCRIPTS program in `.bss`.** The chip fetches its
+  instructions by address while this ROM is not writable, so a program is
+  built per command: select with ATN, identify, the command, the data phase
+  that command names, status, message in, and the transfer control
+  `$98080000` that stops the chip and raises the interrupt. INQUIRY and READ
+  CAPACITY run during the probe, which is where
+  `[  OK  ] scsi.device: UAE     install.hdf, 64 MB (target 0)` comes from,
+  and sector traffic then goes through the same program with the data phase
+  aimed at the caller's buffer. A refusal names the phase it stopped in, the
+  status byte, DSTAT, SSTAT0/2 and the address of the instruction that was
+  running — enough to place a fault without a logic analyser.
+
 ### Tests
 
+- `tools/tests/test_scsi` holds the parts of `boot/rom/scsi.c` that are
+  arithmetic against the values the emulator decodes them with: the register
+  decode and its `$DD0056` anchor, the SCRIPTS encodings for a block move, a
+  select and the terminator, the phase numbers, and the READ(10)/WRITE(10)
+  descriptor layout. It caught the encoding lying while it was being written —
+  ATN was baked into the base word of `SCN_SELECT`, leaving the argument free
+  to make no difference at all — and it exists mainly because a length written
+  one byte too far is a legal command asking for nothing, which completes
+  without moving any data, so nothing downstream ever notices it was wrong.
 - `tools/tests/test_iso9660` runs the whole install disc on the host: the
   disc itself is pressed by the same `mknbfs.py`/`mkiso.py` that press the
   real one, and behind it two fake devices registered in the device table

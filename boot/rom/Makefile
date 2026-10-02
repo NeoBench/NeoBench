@@ -39,6 +39,7 @@ OBJS := \
     vbl.o \
     probe.o \
     ata.o \
+    scsi.o \
     dev.o \
     iso9660.o \
     install.o \

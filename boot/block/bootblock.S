@@ -30,7 +30,7 @@
     .global _start
 
     .equ    SERDAT,   0x00dff030
-    .equ    SERDATR,  0x00dff038
+    .equ    SERDATR,  0x00dff018
     .equ    SERPER,   0x00dff032
     .equ    STATMSK,  0x3000      /* TBE|TSRE, NDK hardware/custom.i     */
 
@@ -134,7 +134,9 @@ puts:
 /* putc: byte in d2.  Paced by polling SERDATR -- the emulator holds a
    byte queued until the shift register drains, and any write inside that
    window overwrites it, so unpaced output loses most of its bytes.  The
-   wait is bounded so a transmitter that is not there cannot hang boot. */
+   wait is bounded so a transmitter that is not there cannot hang boot.
+   The store is a word: a byte write to an even custom register lands on
+   D15-D8 and leaves the transmitted low byte at zero. */
 putc:
     move.l  #0x00080000, %d4
 1:  move.w  SERDATR, %d3
@@ -143,7 +145,8 @@ putc:
     beq.s   2f
     subq.l  #1, %d4
     bne.s   1b
-2:  move.b  %d2, SERDAT
+2:  andi.w  #0x00ff, %d2
+    move.w  %d2, SERDAT
     rts
 
 /* phex8 / phex4: value in d0 as eight / four hex digits.  Leaves d5 alone

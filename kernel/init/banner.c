@@ -5,6 +5,7 @@
 #include "../../boot/rom/install.h"
 #include "../../boot/rom/iso9660.h"
 #include "../../boot/rom/probe.h"
+#include "../../boot/rom/scsi.h"
 #include "../../boot/rom/usb.h"
 #include "../../boot/rom/zz9000.h"
 
@@ -366,6 +367,18 @@ static void serial_line(const char *s)
     amiga_serial_putc('\n');
 }
 
+/*
+ * Which controller a failed read should be blamed on.  The format of
+ * the line does not change with it -- only whose status register the
+ * hex in it comes from, since a SCSI target and an IDE disk keep their
+ * failures in two different places and one of them would be a lie
+ * about the other.
+ */
+static unsigned dev_status(const struct nb_dev *d)
+{
+    return d->read == nb_scsi_read ? nb_scsi_status() : nb_ata_status();
+}
+
 static void report_read(const struct nb_dev *d, unsigned lba, uint8_t *buf)
 {
     static const char hex[] = "0123456789abcdef";
@@ -393,7 +406,7 @@ static void report_read(const struct nb_dev *d, unsigned lba, uint8_t *buf)
         }
     }
     else
-        p = put_hex(p, nb_ata_status(), 2);
+        p = put_hex(p, dev_status(d), 2);
     *p = '\0';
     serial_line(line);
 
@@ -412,7 +425,7 @@ static void report_read(const struct nb_dev *d, unsigned lba, uint8_t *buf)
     else
     {
         p = put_str(p, " would not read (status $");
-        p = put_hex(p, nb_ata_status(), 2);
+        p = put_hex(p, dev_status(d), 2);
         p = put_str(p, ")");
         *p = '\0';
         kernel_warn(line);
@@ -431,6 +444,10 @@ static void dev_selftest(void)
     d = nb_dev_find("atapi.device");
     if (d && d->units && d->read && d->secsize <= sizeof buf)
         report_read(d, 16, buf);           /* 16: the CD's volume header   */
+
+    d = nb_dev_find("scsi.device");
+    if (d && d->units && d->read && d->secsize <= sizeof buf)
+        report_read(d, 0, buf);            /* sector 0: where a disk boots */
 }
 
 /*
@@ -558,8 +575,11 @@ void kernel_drivers(void)
     unsigned bound = 0;
     unsigned pbound = 0;
     unsigned i;
+    const struct nb_scsi_info *scsi;
     char msg[80];
     char *d;
+
+    scsi = nb_scsi_probe();
 
     nb_ata_identify(0, &dev[0]);
     nb_ata_identify(1, &dev[1]);
@@ -672,6 +692,57 @@ void kernel_drivers(void)
     }
     else
         kernel_warn("sdcard.device: no removable card in the IDE socket");
+
+    /*
+     * ---- scsi: the one host an AGA machine may carry natively -------
+     *
+     * The A4000T motherboard carries an NCR53C710 and nothing else in
+     * the family does, so this line is about the chip rather than about
+     * the machine: three answers, all of them the driver's own
+     * observation.  Targets that ran a command to completion get the
+     * model and the size of the first one.  The chip with nothing on it
+     * is a third thing, not a second case of the first, because it says
+     * the adapter is there and the bus is what is empty.  No chip at all
+     * is what an A1200 answers, and it answers it without a line being
+     * written for it by name.
+     */
+    if (scsi->units)
+    {
+        d = put_str(msg, "scsi.device: ");
+        if (scsi->model[0])
+        {
+            d = put_str(d, scsi->model);
+            if (scsi->mb)
+            {
+                d = put_str(d, ", ");
+                d = put_num(d, scsi->mb);
+                d = put_str(d, " MB");
+            }
+        }
+        else if (scsi->mb)
+        {
+            d = put_num(d, scsi->mb);
+            d = put_str(d, " MB disk");
+        }
+        else
+            d = put_str(d, "SCSI disk");
+        d = put_str(d, " (target ");
+        d = put_num(d, scsi->base);
+        d = put_str(d, ")");
+        *d = '\0';
+        kernel_ok(msg);
+        bound++;
+    }
+    else if (scsi->found)
+    {
+        d = put_str(msg, "scsi.device: NCR53C710 in the Gayle window at $DD00");
+        d = put_hex(d, scsi->win, 2);
+        d = put_str(d, ", no target answered");
+        *d = '\0';
+        kernel_warn(msg);
+    }
+    else
+        kernel_warn("scsi.device: no NCR53C710 host in the Gayle window");
 
     /*
      * ---- zz9000: MNT Research's Zorro card and its AX module --------
@@ -810,6 +881,25 @@ void kernel_drivers(void)
             d.write = nb_ata_write;
             nb_dev_add(&d);
         }
+        if (scsi->units)
+        {
+            /*
+             * The host is one adapter and the targets are its units, so
+             * the entry starts the numbering at the first target that
+             * answered and counts the run of them.  Unit 0 is therefore
+             * whichever disk came first, not whichever happened to be
+             * wired to target 0 -- a bus that answers on 1 alone is one
+             * disk, and calling it unit 1 would be a gap with no disk
+             * behind it.
+             */
+            d.name = "scsi.device";
+            d.units = scsi->units;
+            d.base = scsi->base;
+            d.secsize = 512;
+            d.read = nb_scsi_read;
+            d.write = nb_scsi_write;
+            nb_dev_add(&d);
+        }
 
         /*
          * Paula is on every machine this boots on, so its driver is
@@ -891,7 +981,6 @@ void kernel_drivers(void)
     kernel_ok("input.device: Amiga keyboard on CIA-A, port on Paula");
 
     /* ---- buses this machine cannot carry --------------------------- */
-    kernel_warn("scsi.device: no SCSI host adapter on AGA");
     d = put_str(msg, "usb.device: ");
     d = put_str(d, nb_usb_probe());
     *d = '\0';

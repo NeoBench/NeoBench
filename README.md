@@ -111,6 +111,32 @@ up; `zz9000.device` binds only to a card that was actually found. A driver
 with no sector path reports `io=none` rather than passing itself off as a
 disk.
 
+One bus carries a host with no expansion card behind it: the A4000T
+motherboard puts an NCR53C710 in the Gayle window, so `scsi.device` looks for
+the chip rather than for the machine. CTEST1 has to answer `$F0` first and a
+scratch register has to round trip `$5A`/`$A5`, both before a single byte is
+written, and the register numbers are the board's rather than the CPU's —
+register R decodes at `$DD0040 + (R xor 3)`, mirrored at `$DD0080`, which is
+why CTEST1 reads at `$DD0056` and why nothing below `$DD0040` is ever touched.
+Past identification every command is a SCRIPTS program in `.bss`: the chip
+fetches its instructions by address and this ROM is not writable, so select
+with ATN, identify, the command, the data phase that command names, status,
+message in and the transfer control `$98080000` are built per command and
+handed over. The same disk sitting on that bus, on an A4000T:
+
+```
+>dev n=4
+>dev scsi.device u=1 b=0 s=512 io=read,write
+[  OK  ] scsi.device: UAE     install.hdf, 64 MB (target 0)
+[  OK  ] block read: scsi.device sector 0 (512 bytes)
+[  OK  ] 1 of 5 storage drivers bound
+```
+
+An A1200 has no such chip, and Gayle answers `$00` outside the IDE registers
+and ignores the writes there, so both reads come back as nothing at all:
+`[ WARN ] scsi.device: no NCR53C710 host in the Gayle window`, and the boot
+carries on.
+
 Every path is bounded — a missing, slow or wedged unit answers "no" under a
 poll bound and the boot carries on. The one thing never done at boot is a
 write: with the byte order wrong there, sector 0 of the boot disk would be
@@ -363,6 +389,22 @@ hard_drive_0_type = rdb
 A blank disk skips the trap either way, which is why the first install needs
 nothing special.
 
+The motherboard's SCSI bus takes the same kind of disk on a different
+controller, and only an A4000T has one. FS-UAE has no `amiga_model = A4000T`
+— the board is selected by its chipset compatibility instead:
+
+```ini
+uae_chipset_compatible = A4000T
+hard_drive_0 = /path/to/install.hdf
+hard_drive_0_type = rdb
+hard_drive_0_controller = scsi0_a4000t
+```
+
+`scsi0_a4000t` names the channel and the target is its index, so unit 0 on
+that controller is target 0, which is where `scsi.device` looks for it. The
+`rdb` type is needed for the same reason as above, and the disk has to be a
+file: the host takes a CD, a tape or a hard file, never a directory.
+
 Swap `cpu =` between `68020`, `68030`, `68040` and `68060` to watch the CPU
 detection ladder answer with the right model.
 
@@ -392,10 +434,10 @@ detection ladder answer with the right model.
       sizes -- and the programs, opaque Workbench
       windows, and dial and monitor gadgets
 - [x] NeoBench's own `.device` drivers — `ata.device`, `atapi.device`,
-      `sdcard.device`, `sound.device`, `zz9000.device` — bound because the
-      hardware answered, each saying what it can do (`io=read,write`,
-      `io=read`, `io=none`), with a boot self-test that reads sector 0 of
-      the disk and the volume header of a CD
+      `sdcard.device`, `scsi.device`, `sound.device`, `zz9000.device` —
+      bound because the hardware answered, each saying what it can do
+      (`io=read,write`, `io=read`, `io=none`), with a boot self-test that
+      reads sector 0 of the disk and the volume header of a CD
 - [x] Install disc: `make iso` presses `images/NeoBench-0.1.7.iso`, an
       ISO 9660 level 1 volume carrying `NBFS.IMG` as the payload with
       NeoBench's `NBISO` installer block in sector 0 — mounted off the
