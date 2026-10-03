@@ -94,6 +94,18 @@ desktop used to carry down its left edge -- Home, Core, Bench, Docs
 and Media -- are entries at the top of the start menu the orb opens,
 and the programs are entries under a rule beneath them.
 
+The menu stands in the bar it is opened from: its foot is the bar's
+top edge, so it rises out of the furniture the orb sits in instead of
+floating over the middle of the screen, and it throws no shadow down
+there -- nothing comes between the two.  Its own name is set down a
+band at its left edge, turned a quarter so it reads down the strip
+with a divider between the band and the entries; the chosen row is
+the flat Workbench blue under the classic field "bar" asks for in
+screen.cfg, and under the default glass it lights the way every other
+surface here lights.  Both sections list in alphabetical order --
+Bench to Media above the rule, About then Preferences below it --
+because a menu is a list the eye runs down looking for one name.
+
 The icons themselves are drawn the way MUI drew its own: a rounded
 tile whose body ramps from a saturated tint to a deep one, a white rim
 round it, an arc of light along the top of it, and the mark cut out of
@@ -112,12 +124,13 @@ several choices.
 The programs
 ------------
 
-The start menu lists two of them: Files, which leads the drawers
-above the rule, and About, the only row under it.  The other four are
-filed where they belong instead -- Clock, Monitor and NeoText in
-Tools/, Preferences in Config/ beside the files it changes -- so each
-is started from the drawer it stands in.  Tools/ is where NeoShell
-and the calculator will stand when they are written.
+The start menu names three of them: Files, which is one of the
+drawers above the rule, and About and Preferences, the two rows under
+it.  The other three are filed where they belong instead -- Clock,
+Monitor and NeoText in Tools/, and Preferences also in Config/ beside
+the files it changes -- so each is started from the drawer it stands
+in.  Tools/ is where NeoShell and the calculator will stand when they
+are written.
 
   Files        the directory browser, reading the store the image was
                built with; choosing a file in it opens NeoText, and

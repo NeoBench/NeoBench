@@ -92,8 +92,7 @@ NeoBench changelog
     Docs carries.  Being a place rather than a program it opens rather
     than toggles, and the cross is what puts it away.  The clock, the
     monitor and the reader are started from Tools/ rather than from
-    the menu, which keeps About alone under the rule and is a third
-    shorter for it; Apps/ and Tools/ both say where the three went.
+    the menu; Apps/ and Tools/ both say where the three went.
   Preferences, a pane of its own: five backdrops -- wash, paper, azure,
     dusk and slate -- chosen with one press and painted at once, with
     the hairline grid and the horizon glows as check boxes beside them.
@@ -117,6 +116,26 @@ NeoBench changelog
     moved: capitals still sit in rows 0 to 6, the x-height in 2 to 6 and
     the descenders in 7 and 8, so the type sits where it did, only drawn
     as Xen really is.
+  The start menu sets its name down its left edge.  The caption comes off
+    the rule at the head of the pane and turns a quarter, standing in a
+    band down the left of it with a divider beside the band, so it reads
+    down the strip instead of across the top and the rows take the width
+    the header used to hold.  Under Aero the band is a step of the pane's
+    own light, and the chosen row stops being a flat block of Workbench
+    blue: it lights like every other glass surface here, a teal rim round
+    a field running from its lit end at the top to its dark end at the
+    foot.  The flat terms are untouched -- "bar = classic" still gives the
+    grey panel, the blue row and the hard edge.
+  The menu is set in alphabetical order, and stands in the bar.  Both
+    sections sort: the drawers run Bench, Core, Docs, Files, Home and
+    Media, and the rows under the rule run About and then Preferences,
+    which comes back to the menu as its second program and still stands
+    in Config/ beside the files it reads.  A menu is a list the eye runs
+    down looking for one name, and no entry is worth keeping at the head
+    of it against that.  The foot of the panel is the bar's top edge now,
+    so it rises out of the furniture the orb sits in instead of floating
+    over the middle of the screen, and it throws no shadow down there --
+    nothing comes between the two.
 
 0.1.6
   NeoBench's own directory structure, not one borrowed from anywhere:

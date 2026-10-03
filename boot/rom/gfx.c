@@ -718,6 +718,40 @@ void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale)
     }
 }
 
+/*
+ * The face turned a quarter turn clockwise, for the caption down the
+ * start menu's left band.  Each glyph lands with its own left edge at
+ * the top of the column it goes in and its top edge on the right, which
+ * is the turn that leaves a string reading downwards and its baseline
+ * running along the left of it -- the way vertical type on a panel's
+ * edge is set.  The advance stays eight, only along y now, so a caller
+ * can centre a caption with strw() and be handed the height it asked
+ * for.  One call is one line: vertical type has no newline to answer.
+ */
+void gfx_text_v(int x, int y, const char *s, uint16_t c)
+{
+    int cy = y;
+
+    for (; *s; s++) {
+        unsigned char ch = (unsigned char)*s;
+        int row, col, rows;
+        const unsigned char *bits;
+
+        if (ch == '\n')
+            continue;
+        bits = glyph_rows(ch, &rows);
+        for (row = 0; row < rows; row++) {
+            unsigned char b = bits[row];
+            if (!b)
+                continue;
+            for (col = 0; col < 8; col++)
+                if (b & (0x80u >> col))
+                    gfx_pixel(x + (rows - 1 - row), cy + col, c);
+        }
+        cy += 8;
+    }
+}
+
 /* ------------------------------------------------------------------ *
  * Present: median cut -> palette -> planar pack
  * ------------------------------------------------------------------ */

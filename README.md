@@ -198,6 +198,15 @@ rebuilt from the flags and only the rows a change touched are presented, so
 two windows standing over each other cost nothing; a window's body is opaque,
 and only its caption is glass.
 
+The start menu is cut from the same terms and stands in the bar it is opened
+from: its foot is the bar's top edge, so it rises out of the furniture the orb
+sits in rather than floating over the middle of the screen, and it throws no
+shadow down there — nothing comes between the two. Its own name is set down a
+band at the left edge rather than across a rule at the head, turned a quarter
+so it reads down the strip with a divider beside it, and the chosen row lights
+as the glass lights everything else in Aero. With `bar = classic` the same
+menu is the flat Workbench field it was: grey panel, blue row, hard edge.
+
 Every window can be picked up and carried: press the caption — anywhere in
 the strip that is not one of its three buttons — and it goes where the
 pointer goes until the button comes back up, taking the keyboard with it on
@@ -207,13 +216,17 @@ on any desktop, but enough of the strip stays on the screen to be picked up
 by again. All six move: the four program windows by their captions, the dial
 and the monitor by their own bodies.
 
-Six programs, and the start menu lists one of them. Files leads the drawers
-at the top of the menu — it is the drawer every other one is looked for in,
-so it opens the browser on the root of the store rather than sitting in the
-program list below the rule — and **About**, which says what this build is,
-is the only row under it. The other four are filed where they belong rather
-than listed: Clock, Monitor and **NeoText** in `Tools/`, and **Preferences**
-in `Config/` beside the files it changes. Clock is an analogue dial; Monitor
+Six programs, and the start menu names three of them: Files, which is a drawer
+above the rule, and **About** and **Preferences**, the two rows below it. Both
+sections are set in alphabetical order, because a menu is a list the eye runs
+down looking for one name — the drawers run Bench, Core, Docs, Files, Home,
+Media, and the rows under the rule run **About**, which says what this build
+is, then **Preferences**, which changes how the desktop sits. Files opens the
+browser on the root of the store rather than sitting below the rule, because
+it is the drawer every other one is looked for in. The other three are filed
+where they belong rather than listed: Clock, Monitor and **NeoText** in
+`Tools/`, and **Preferences** also stands in `Config/` beside the files it
+changes. Clock is an analogue dial; Monitor
 shows fast memory in use; and NeoText opens any file in the store — plain
 text as written, a PDF with its text lifted out of the page, anything else
 as a hex view of the bytes it is, eight to a line.

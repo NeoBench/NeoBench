@@ -95,6 +95,17 @@
 #define C_AERO_ACT NB_RGB(11, 25, 17)   /* the task button that is up  */
 #define C_AERO_TXT NB_RGB(23, 49, 27)   /* type set on the glass       */
 
+/*
+ * The row the next press takes, lit the way Aero lights everything: a
+ * rim of the same teal a shade up, and a field that runs from its lit
+ * end at the top to its dark end at the foot.  Workbench has no truck
+ * with any of that and reverses the row in its blue instead -- see
+ * menu_hl() -- so these three are only ever read behind aero_on().
+ */
+#define C_AERO_SEL   NB_RGB(4, 24, 24)   /* the chosen row, dark end     */
+#define C_AERO_SEL_H NB_RGB(9, 38, 30)   /* ... and its lit end          */
+#define C_AERO_SEL_R NB_RGB(14, 46, 30)  /* the rim around it            */
+
 /* The older wash, still behind the grid and glow preferences. */
 #define C_GLOW_A  NB_RGB(19, 53, 25)     /* mint horizon glow           */
 #define C_GLOW_B  NB_RGB(20, 53, 28)     /* sky glow                    */
@@ -480,12 +491,13 @@ static void row_glyph(int kind, int x, int y)
  * tree -- and a place that is renamed is one string here and in
  * system/, never a hard-coded walk.
  *
- * Files leads them.  It is the drawer all the others are looked for in,
- * so it belongs with them rather than in the program list below the
- * rule, and an empty path is the one place none of the rest named: the
- * root of the store, which is where the browser starts.  Being a place
- * rather than a program it opens instead of toggling, and the cross is
- * what puts it away.
+ * They are set in the order they sort in, Bench first and Media last:
+ * the menu is a list the eye runs down looking for one name, and no
+ * entry is worth keeping at the head of it against that.  Files sits
+ * among them rather than below the rule because an empty path is the
+ * one place none of the rest named -- the root of the store, which is
+ * where the browser starts -- and being a place rather than a program
+ * it opens instead of toggling, with the cross what puts it away.
  */
 #define N_PLACES 6
 
@@ -493,24 +505,25 @@ static const struct {
     const char *name;       /* what the entry says                     */
     const char *dir;        /* store directory it opens, "" = root     */
 } places[N_PLACES] = {
-    { "Files", ""           },        /* Files  */
-    { "Home",  "Home"        },        /* Home   */
-    { "Core",  "Core"        },        /* Core   */
     { "Bench", "Core/Bench"  },        /* Bench  */
+    { "Core",  "Core"        },        /* Core   */
     { "Docs",  "Core/Docs"   },        /* Docs   */
+    { "Files", ""            },        /* Files  */
+    { "Home",  "Home"        },        /* Home   */
     { "Media", "Core/Media"  },        /* Media  */
 };
 
-/* the plate and mark of a place, at whatever size the caller asks for */
+/* the plate and mark of a place, at whatever size the caller asks for --
+ * one case per row of the table above, in that row's order */
 static void place_icon(int i, int x, int y)
 {
     switch (i)
     {
-    case 0:  icon_files(x, y);  break;
-    case 1:  icon_home(x, y);   break;
-    case 2:  icon_screen(x, y); break;
-    case 3:  icon_bench(x, y);  break;
-    case 4:  icon_docs(x, y);   break;
+    case 0:  icon_bench(x, y);  break;
+    case 1:  icon_screen(x, y); break;
+    case 2:  icon_docs(x, y);   break;
+    case 3:  icon_files(x, y);  break;
+    case 4:  icon_home(x, y);   break;
     default: icon_media(x, y);  break;
     }
 }
@@ -699,7 +712,8 @@ static void glass_window(int x, int y, int w, int h, int th,
     gfx_fill(x + w - 5, y + th + 4, 1, h - th - 8, C_WB_GREY);
 }
 
-/* a plain panel, for the gadgets and for the start menu */
+/* a plain panel, for the gadgets and for the start menu, which sets its
+ * own name down the band at its left and so passes no title here */
 static void panel(int x, int y, int w, int h, const char *title)
 {
     wb_frame(x, y, w, h);
@@ -829,8 +843,11 @@ static int mon_dx, mon_dy;
  * Start menu: geometry and state, shared by the draw and click passes
  * ------------------------------------------------------------------ *
  *
- * The panel stands directly above the orb that opens it and stops
- * clear of the bar at y=490.  It carries two sections: the places,
+ * The panel stands in the bar that opens it: its foot is the bar's own
+ * top edge at y=490, so it rises out of the furniture the orb sits in
+ * rather than floating over the middle of the screen, and it throws no
+ * shadow down there -- nothing comes between the two.  It carries two
+ * sections: the places,
  * which are the directory entries the desktop used to show as a column
  * of icons down its left edge and which take a full 24 pixel plate
  * each, and the programs, which are gadgets with a running dot on
@@ -843,15 +860,18 @@ static int mon_dx, mon_dy;
  * without an initialiser because .data lands in write-only ROM.
  */
 #define MENU_X      8
-#define MENU_Y      112
 #define MENU_W      196
-#define MENU_H      238          /* MENU_Y + this stops short of the bar */
-#define MENU_HEAD   22           /* entries start below the title rule   */
-#define MENU_ITEMW  (MENU_W - 12)
+#define MENU_H      258          /* the foot lands on the bar's top edge */
+#define MENU_Y      (490 - MENU_H)   /* it stands in the bar at y=490    */
+#define MENU_HEAD   8            /* entries start below the lip          */
+#define MENU_STRIP  16           /* the band the caption is set down     */
+#define MENU_SX     (MENU_X + 6) /* the band's own left edge             */
+#define MENU_CX     (MENU_SX + MENU_STRIP)    /* entries start here      */
+#define MENU_ITEMW  (MENU_W - 12 - MENU_STRIP)
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
 #define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
 #define N_PROGRAMS  6            /* programs the desktop can run         */
-#define MENU_PROGS  1            /* of which the menu shows this many    */
+#define MENU_PROGS  2            /* of which the menu shows this many    */
 #define MENU_ITEMS  (N_PLACES + MENU_PROGS)
 
 #define MENU_P0     (MENU_Y + MENU_HEAD + 4)             /* first place */
@@ -862,16 +882,19 @@ static int mon_dx, mon_dy;
  * Which program each row of the menu's program section starts.  The
  * numbers are the slots the whole desktop counts in -- the panel, the
  * task row and the keyboard's focus all go 1..6 in this order -- while
- * the menu lists one of the six.  Files leads the drawers above the
- * rule rather than sitting in this list, and Preferences, Clock,
- * Monitor and NeoText are filed in the store instead: the pane in
- * Config/ beside the files it reads, the other three in Tools/
- * beside the note that says what the drawer holds.  About keeps its
- * row, as the one program the menu carries for its own sake rather
- * than for the files around it.  All six are still programs, and all
- * six still take their buttons on the bar when they are running.
+ * the menu lists two of the six, in the order their names sort in,
+ * About before Preferences, as the drawers above the rule sort among
+ * themselves.  Files leads those drawers rather than sitting in this
+ * list, and Clock, Monitor and NeoText are filed in the store instead,
+ * the three of them in Tools/ beside the note that says what the
+ * drawer holds.  About and Preferences are what the menu keeps -- the
+ * two programs that are about the machine rather than the files around
+ * it -- and each still stands in the store as well, About in Core/Docs
+ * and Preferences in Config/ beside the files it reads.  All six are
+ * still programs, and all six still take their buttons on the bar when
+ * they are running.
  */
-static const unsigned char menu_slot[MENU_PROGS] = { 3 };
+static const unsigned char menu_slot[MENU_PROGS] = { 3, 4 };
 
 /* the show-desktop sliver: the last eight columns of the panel, which
  * is the width Aero gives it -- a strip you can find without looking,
@@ -2730,7 +2753,7 @@ int nb_desktop_click(int x, int y, int btn)
     {
         for (i = 0; i < MENU_ITEMS; i++)
         {
-            int ix = MENU_X + 6;
+            int ix = MENU_CX;
             int iy, ih;
 
             if (i < N_PLACES)
@@ -2880,7 +2903,7 @@ static void sel_mark(void)
             iy = MENU_G0 + (sel_idx - N_PLACES) * MENU_ITEMH;
             ih = MENU_ITEMH;        /* the row's own pitch, as band_select */
         }
-        sel_x = MENU_X + 6 + MENU_ITEMW / 2;
+        sel_x = MENU_CX + MENU_ITEMW / 2;
         sel_y = iy + ih / 2;
     }
     else if (sel_kind == SEL_ROW)
@@ -3618,22 +3641,42 @@ static uint16_t menu_ink(void)
 }
 
 /*
+ * The field under the entry the next press takes.  Workbench reverses
+ * the row -- flat blue with white type on it -- because that is what a
+ * list view does and what every other chosen thing on that desktop is.
+ * Aero lights a pane of glass instead: a rim of the same teal a shade
+ * up, and a field running from its lit end at the top to its dark end
+ * at the foot, which is how the rest of the glass on this desktop is
+ * cut.  The type on it is white either way.
+ */
+static void menu_hl(int x, int y, int w, int h)
+{
+    if (aero_on()) {
+        gfx_alpha_r(x, y, w, h, 5, C_AERO_SEL_R, 190);
+        gfx_vgrad_r(x + 1, y + 1, w - 2, h - 2, 4, C_AERO_SEL_H,
+                    C_AERO_SEL);
+    } else {
+        gfx_fill(x, y, w, h, C_WB_BLUE);
+    }
+}
+
+/*
  * One place: the 24 pixel plate the desktop used to give it as an icon
  * down its left edge, with the name beside it instead of under it --
- * there is no wallpaper to set type on here -- and the Workbench blue
- * across the whole width of the row when it is the entry the next press
- * takes.  The plate is the icon it always was, so the places read
- * as the same marks they were on the desktop; Files, which never had
- * an icon down that edge because it is the thing that opened them,
- * gets the drawer front the rest of them are filed in.
+ * there is no wallpaper to set type on here -- and the field of the row
+ * when it is the entry the next press takes.  The plate is the icon it
+ * always was, so the places read as the same marks they were on the
+ * desktop; Files, which never had an icon down that edge because it is
+ * the thing that opened them, gets the drawer front the rest of them
+ * are filed in.
  */
 static void menu_place(int i, int sel)
 {
-    const int x = MENU_X + 6;
+    const int x = MENU_CX;
     const int y = MENU_P0 + i * MENU_PH;
 
     if (sel)
-        gfx_fill(x, y, MENU_ITEMW, MENU_PH, C_WB_BLUE);
+        menu_hl(x, y, MENU_ITEMW, MENU_PH);
 
     place_icon(i, x + 3, y + 1);
     text_d(x + 34, y + 9, places[i].name, sel ? C_INK : menu_ink());
@@ -3656,12 +3699,12 @@ static void menu_place(int i, int sel)
  */
 static void menu_item(int i, int slot, const char *label, int open, int sel)
 {
-    const int x = MENU_X + 6;
+    const int x = MENU_CX;
     const int y = MENU_G0 + i * MENU_ITEMH;
     uint16_t ring = aero_on() ? C_AERO_RIM : C_WB_LINE;
 
     if (sel)
-        gfx_fill(x, y, MENU_ITEMW, 30, C_WB_BLUE);
+        menu_hl(x, y, MENU_ITEMW, 30);
 
     menu_glyph(slot, x + 8, y + 8);
     text_d(x + 30, y + 11, label, sel ? C_INK : menu_ink());
@@ -3687,10 +3730,36 @@ static void menu_body(void)
     gfx_alpha_r(x, y, w, h, 5, C_AERO_RIM, 210);            /* the rim  */
     gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 4, C_AERO, 246);
     gfx_alpha(x + 3, y + 3, w - 6, 1, C_INK, 70);           /* top light */
+    gfx_alpha(x + 3, y + 4, w - 6, 1, C_INK, 44);
+    gfx_alpha(x + 3, y + 8, w - 6, 1, C_INK, 22);
     gfx_alpha(x + 3, y + 3, 1, h - 6, C_INK, 46);
+}
 
-    text_d(x + 8, y + 6, "NeoBench", C_AERO_TXT);
-    gfx_fill(x + 2, y + 20, w - 4, 1, C_AERO_RIM);
+/*
+ * The band down the left of the pane, and what is set in it: the name,
+ * turned a quarter so it reads down the strip rather than across the
+ * top it used to have, with the divider between the band and the
+ * entries drawn as the rim Aero edges everything with and as the hard
+ * Workbench line it is in the other mode.  The band itself is a step of
+ * the pane's own light in Aero; in Workbench's terms the panel it sits
+ * in is already its grey, so the divider and the type are all it needs.
+ *
+ * The name is centred on the pane with strw(), which counts characters
+ * and multiplies by eight -- and eight is what the turned face advances
+ * by along y, so the height asked for is the height that comes back.
+ */
+static void menu_edge(void)
+{
+    const int s = MENU_SX;
+    const char *cap = "NeoBench";
+
+    if (aero_on())
+        gfx_alpha(s, MENU_Y + 1, MENU_STRIP, MENU_H - 2, C_AERO_HI, 190);
+
+    gfx_fill(s + MENU_STRIP - 1, MENU_Y + 3, 1, MENU_H - 6,
+             aero_on() ? C_AERO_RIM : C_WB_LINE);
+
+    gfx_text_v(s + 3, MENU_Y + (MENU_H - strw(cap)) / 2, cap, menu_ink());
 }
 
 /*
@@ -3705,31 +3774,49 @@ static void menu_shade(void)
 {
     int x, y;
 
+    /*
+     * The panel's foot is the bar's top edge, so the drop is cut off
+     * there rather than thrown down onto the bar: the menu and the bar
+     * it stands in are read as one piece of furniture, with the light
+     * coming from the top left as it does everywhere else.
+     */
     if (aero_on())
     {
-        gfx_alpha_r(MENU_X + 3, MENU_Y + 3, MENU_W, MENU_H, 5,
+        gfx_alpha_r(MENU_X + 3, MENU_Y + 3, MENU_W, MENU_H - 3, 5,
                     C_SHADOW, 110);
         return;
     }
 
-    for (y = MENU_Y + 2; y < MENU_Y + MENU_H + 3; y++)
+    for (y = MENU_Y + 2; y < MENU_Y + MENU_H; y++)
         for (x = MENU_X + MENU_W; x < MENU_X + MENU_W + 3; x++)
-            if ((x + y) & 1)
-                gfx_pixel(x, y, C_WB_SHADE);
-
-    for (y = MENU_Y + MENU_H; y < MENU_Y + MENU_H + 3; y++)
-        for (x = MENU_X + 2; x < MENU_X + MENU_W + 3; x++)
             if ((x + y) & 1)
                 gfx_pixel(x, y, C_WB_SHADE);
 }
 
 /*
- * The whole menu: its pane, the places first, one rule, the programs.
- * The rule is the only thing that says where one section ends and the
- * other begins -- there are no headings, because a heading over five
- * entries the desktop used to carry as icons says only that they are
- * icons that moved.
+ * The whole menu: its pane with the name down the band at its left, the
+ * places first, one rule, the programs.  The rule is the only thing
+ * that says where one section ends and the other begins -- there are no
+ * headings, because a heading over five entries the desktop used to
+ * carry as icons says only that they are icons that moved.
  */
+/*
+ * Whether a program in the menu's section is running, by the slot it
+ * takes on the bar: the running dot the row shows beside its name.
+ */
+static int program_running(int slot)
+{
+    switch (slot)
+    {
+    case 0:  return files_open;
+    case 1:  return clock_open;
+    case 2:  return monitor_open;
+    case 3:  return about_open;
+    case 4:  return prefs_open;
+    default: return neotext_open;
+    }
+}
+
 static void start_menu(void)
 {
     int i;
@@ -3738,20 +3825,21 @@ static void start_menu(void)
     if (aero_on())
         menu_body();
     else
-        panel(MENU_X, MENU_Y, MENU_W, MENU_H, "NeoBench");
+        panel(MENU_X, MENU_Y, MENU_W, MENU_H, 0);
+    menu_edge();
 
     for (i = 0; i < N_PLACES; i++)
         menu_place(i, sel_kind == SEL_MENU && sel_idx == i);
 
-    gfx_fill(MENU_X + 6, MENU_SEP, MENU_ITEMW, 1,
+    gfx_fill(MENU_CX, MENU_SEP, MENU_ITEMW, 1,
              aero_on() ? C_AERO_RIM : C_WB_LINE);
 
     for (i = 0; i < MENU_PROGS; i++)
     {
-        static const char *nm[MENU_PROGS] = { "About" };
+        static const char *nm[MENU_PROGS] = { "About", "Preferences" };
         int s = menu_slot[i];
 
-        menu_item(i, s, nm[i], about_open,
+        menu_item(i, s, nm[i], program_running(s),
                   sel_kind == SEL_MENU && sel_idx == N_PLACES + i);
     }
 }
@@ -3907,7 +3995,7 @@ static void scene(void)
         taskbar();
 
     if (menu_open)
-        start_menu();               /* over the bar's edge, never on it */
+        start_menu();               /* flush with the bar, never on it  */
 }
 
 /*

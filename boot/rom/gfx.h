@@ -67,6 +67,12 @@ void gfx_text(int x, int y, const char *s, uint16_t c);
  * advance is 8 * scale.  Used for the scaled-up NEOBENCH wordmark. */
 void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale);
 
+/* The same face turned a quarter turn clockwise, for type standing in a
+ * vertical strip: the string reads down the strip, so the advance is
+ * eight along y and the glyph's own rows run across x.  One call is one
+ * line -- vertical type has no newline. */
+void gfx_text_v(int x, int y, const char *s, uint16_t c);
+
 /*
  * Restrict drawing *and* packing to a band of rows -- y0 inclusive, y1
  * exclusive -- so a repaint of one window does not pay for the whole

@@ -140,9 +140,27 @@ Notable changes to NeoBench, newest first. British English throughout.
   `Tools/`, beside NeoText and the note that says what the drawer holds, and
   About becomes one in `Core/Docs/`, beside the documentation it summarises.
   Clock, Monitor and NeoText then come off the menu altogether: a program
-  filed in a drawer is started from the drawer, so the rule now has About
-  alone under it, the panel is a third shorter for it, and `Apps/` and
-  `Tools/` both say where the three went.
+  filed in a drawer is started from the drawer, and `Apps/` and `Tools/`
+  both say where the three went.
+- **The start menu sets its name down its left edge.** The caption comes off
+  the rule at the head of the pane and turns a quarter, standing in a band
+  down the left of it with a divider beside the band, so it reads down the
+  strip instead of across the top and the rows take the width the header used
+  to hold. Under Aero the band is a step of the pane's own light, and the
+  chosen row stops being a flat block of Workbench blue: it lights like every
+  other glass surface here, a teal rim round a field running from its lit end
+  at the top to its dark end at the foot. The flat terms are untouched —
+  `bar = classic` still gives the grey panel, the blue row and the hard edge.
+- **The menu is set in alphabetical order, and stands in the bar.** Both
+  sections sort: the drawers run Bench, Core, Docs, Files, Home, Media, and
+  the rows under the rule run **About** then **Preferences** — which comes
+  back to the menu as its second program and still stands in `Config/`
+  beside the files it reads. A menu is a list the eye runs down looking for
+  one name, and no entry is worth keeping at the head of it against that.
+  The panel's foot is the bar's top edge now, so it rises out of the
+  furniture the orb sits in rather than floating over the middle of the
+  screen, and it throws no shadow down there — nothing comes between the
+  two.
 
 ### Fonts
 
