@@ -106,6 +106,17 @@ NeoBench changelog
   What the reader shows of a file it cannot write back is said on its
     status line: a text file can be typed into, and is labelled edited
     but not saved, because the store has no write path yet.
+  Xen is cut from the Amiga font of that name now rather than drawn by
+    hand.  The Amiga disk font under boot/rom/fonts is a hunk file: one
+    code hunk carrying a glyph strip, every character of the face laid
+    side by side with one bit to the byte, and a table after it giving
+    each character's position and advance.  The generator walks both
+    and re-cuts the face into NeoBench's own grid -- nine rows, eight
+    pixels of advance, each glyph centred in its cell so column 7 stays
+    clear and no two characters can touch.  Nothing the layout leans on
+    moved: capitals still sit in rows 0 to 6, the x-height in 2 to 6 and
+    the descenders in 7 and 8, so the type sits where it did, only drawn
+    as Xen really is.
 
 0.1.6
   NeoBench's own directory structure, not one borrowed from anywhere:

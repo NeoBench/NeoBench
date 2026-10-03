@@ -144,6 +144,21 @@ Notable changes to NeoBench, newest first. British English throughout.
   alone under it, the panel is a third shorter for it, and `Apps/` and
   `Tools/` both say where the three went.
 
+### Fonts
+
+- **Xen is cut from the Amiga font of that name** rather than drawn by hand.
+  The face NeoBench sets type in everywhere now comes out of `fonts/xen9`
+  under `boot/rom/`, read by `build_font_amiga.py`: an Amiga disk font is a
+  hunk file, one `HUNK_CODE` carrying a glyph strip — every character of the
+  face laid side by side, one bit to the byte — and a table after it giving
+  each character's position and advance. The script walks both and re-cuts
+  the face into NeoBench's own grid: nine rows, eight pixels of advance,
+  which is the bargain `strw()` and `gfx_text()` already strike, each glyph
+  centred in its cell so column 7 stays clear and no two characters can
+  touch. Nothing the layout leans on moved — capitals still sit in rows 0
+  to 6, the x-height in 2 to 6 and the descenders in 7 and 8 — so the type
+  on the chrome is where it was, only drawn as Xen actually is.
+
 ### Boot
 
 - **The chainload returns instead of crashing.** `SYS:NeoBench` was ending as
