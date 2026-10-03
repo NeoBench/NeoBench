@@ -7,12 +7,16 @@ MEMORY
     /*
      * Nominal link address for the chainloaded image.
      *
-     * Nothing has to actually exist here.  LoadSeg() copies the hunk
-     * wherever AllocMem() put it and adds (load - link) to every absolute
-     * reference, so this address only has to leave room for the delta to
-     * run in either direction without any reference underflowing past
-     * zero.  All Amiga RAM -- chip and fast -- sits below $01000000, so
-     * linking above it keeps every fixup positive.
+     * Nothing has to actually exist here.  The hunk format carries no link
+     * address: LoadSeg() copies the hunk wherever AllocMem() put it and
+     * adds that address to every word HUNK_RELOC32 names, so what has to
+     * sit in the image is each reference's offset from here, which
+     * elf2hunk.py writes, not the link address the ELF holds.  The base
+     * therefore cancels out of every fixup and could be anything; it is
+     * $01000000 for what that keeps clear rather than for what it
+     * provides -- every address the Amiga hardware or its memory answers
+     * to lives below it, so no absolute in the image resembles one of
+     * them by accident.
      */
     ram (rwx) : ORIGIN = 0x01000000, LENGTH = 0x00400000
 }
@@ -46,7 +50,7 @@ SECTIONS
     /*
      * The exception vector table.  Under a reset boot it is copied to
      * address 0 straight out of ROM; here it travels inside the hunk and
-     * chain_entry writes it over AmigaOS's table once it owns the CPU.
+     * the takeover writes it over AmigaOS's table once it owns the CPU.
      * It belongs inside the image (rather than in .bss) because it holds
      * absolute pointers that need the same relocation delta as the code
      * they point at.

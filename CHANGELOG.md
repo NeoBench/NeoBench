@@ -202,6 +202,43 @@ Notable changes to NeoBench, newest first. British English throughout.
   program's exit status; it is now `moveq #0, %d0` before the `rts`. With all
   four fixed the serial line reads `*` and one message, `NB-CHAIN: after
   neobench` follows it, and `LoadWB LEGACY` brings Workbench up.
+- **The chainload takes the machine over.** `chain_entry` in
+  `boot/rom/chain.S` reported where the hunk had landed and returned to
+  AmigaOS, which is all the diagnostic it had been built as. It now finishes
+  the job: the arrival mode and the load address go out as `NBCHAIN mode=U
+  (user mode) at=4005B170`, `chain_safe` decides whether the image may stay
+  where the loader put it — one megabyte end to end, ending before the two
+  longs the probe claims at the top of every megabyte, and clear of the chip
+  ranges the frame buffer, the sound buffer and the stack own — and a
+  refusal still goes back with `NBCHAIN image in the way, returning to
+  AmigaOS` and a prompt. Supervisor mode is reached without a privileged
+  instruction: a `trap #0` to a handler that never returns when AmigaDOS
+  started the program in user mode, and a call when it did not. What takes
+  over masks everything, puts the cache control register on the wire, drops
+  the boot overlay, copies the vector table out of the hunk to address 0,
+  takes the reset stack at `$001FFFE0`, zeroes `.bss` and enters `rom_main`
+  exactly as a reset boot does — so the genuine ROM boots first and NeoBench
+  still ends up owning the chipset, the vectors and the display.
+- **The chainload hunk carried link-time addresses, and LoadSeg turned them
+  into the wrong ones.** A `HUNK_RELOC32` word is loaded with the address
+  the hunk landed at added to it, so what the image has to hold is each
+  reference's offset from the link base: `tools/elf2hunk.py` subtracts that
+  base before emitting now, and `ram.ld` says so. Nothing had noticed
+  because the chain entry was PC-relative throughout and returned before
+  calling any C code — from `rom_main` on, every global, string and vector
+  landed `$01000000` too high.
+- **The copper is stopped at last** (`boot/rom/amiga.c`). `DMAF_COPPER` was
+  written as `$0002`, which is `AUD1EN`, so COPEN was never cleared at all:
+  harmless on a reset boot, where nothing has enabled it, but under a
+  chainload AmigaOS's copper list was still in control and reloaded AmigaOS's
+  bitplane pointers every frame, immediately after the vertical blank had put
+  NeoBench's own in. The desktop rendered, `>present` and the pointer both
+  reported it, and the screen stayed on Workbench. The NDK's
+  `hardware/dmabits.i` says `$0080`, and the code says that too.
+- What the OS leaves behind in the cache control register is reported rather
+  than changed: `NBCHAIN cacr=00000000` on the wire, which is the answer
+  that says no flush is owed. The chainload path was exercised against
+  AmigaOS 3.2.0, the only ROM available here; the documents describe 3.2.3.
 
 ### Devices
 

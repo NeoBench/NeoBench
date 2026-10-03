@@ -2,6 +2,42 @@ NeoBench changelog
 ==================
 
 0.1.7
+  The chainload takes the machine over now instead of handing it back.
+    chain_entry reports the arrival mode and the address the loader put
+    the hunk at, chain_safe decides whether the image may stay there --
+    one megabyte end to end, ending before the two longs the probe
+    claims at the top of every megabyte, and clear of the chip ranges
+    the frame buffer, the sound buffer and the stack own -- and a
+    refusal still returns to AmigaOS with a message.  Supervisor mode
+    is reached without a privileged instruction: trap #0 to a handler
+    that never returns when AmigaDOS started the program in user mode,
+    and a call when it did not.  What takes over masks everything, puts
+    the cache control register on the wire, drops the boot overlay,
+    copies the vector table out of the hunk to address 0, takes the
+    reset stack at $001FFFE0, zeroes .bss and enters rom_main exactly
+    as a reset boot does, so the genuine ROM boots first and NeoBench
+    still ends up owning the chipset, the vectors and the display.
+  The hunk held link-time addresses and LoadSeg turned them into the
+    wrong ones.  A HUNK_RELOC32 word has the address the hunk landed at
+    added to it, so what the image has to hold is each reference's
+    offset from the link base; elf2hunk.py subtracts that base now, and
+    ram.ld says so.  Nothing had noticed because the chain entry was
+    PC-relative throughout and returned before calling any C code --
+    from rom_main on, every global, string and vector landed $01000000
+    too high.
+  The copper is stopped at last.  DMAF_COPPER was written as $0002,
+    which is AUD1EN, so COPEN was never cleared at all: harmless on a
+    reset boot, where nothing has enabled it, but under a chainload
+    AmigaOS's copper list was still in control and reloaded AmigaOS's
+    bitplane pointers every frame, immediately after the vertical blank
+    had put NeoBench's own in -- the desktop rendered, ">present" and
+    the pointer both reported it, and the screen stayed on Workbench.
+    The NDK's hardware/dmabits.i says $0080, and the code says that too.
+  What the OS leaves behind in the cache control register is reported
+    rather than changed: NBCHAIN cacr=00000000 on the wire, which is
+    the answer that says no flush is owed.  The chainload path was
+    exercised against AmigaOS 3.2.0, the only ROM available here; the
+    documents describe 3.2.3.
   There is an install disc now, and "make iso" presses it: five megs of
     plain ISO 9660 -- NBFS.IMG as the payload, the hunk executable, the
     ROM and the three text files -- with NeoBench's NBISO installer

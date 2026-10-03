@@ -1,5 +1,17 @@
 /* NeoBench boot ROM header + entry point (m68k, kickstart-style layout). */
     .section .bootvec, "ax"
+
+    /*
+     * The table's own address, needed by the chainload, which copies it to
+     * address 0 out of the hunk instead of out of a ROM at $F80000 -- that
+     * address holds the Kickstart which is still in the socket, and reading
+     * the table from there would install AmigaOS's vectors over AmigaOS's
+     * vectors.  Reset boots do not use the symbol: the CPU fetches the SSP
+     * and PC from the start of the image itself, straight through the boot
+     * overlay, before any code has run to name them.
+     */
+    .global bootvec_base
+bootvec_base:
     .long 0x001FFFE0        /*  0: initial SSP: top of 2 MB chip ram */
     .long 0x00FC0000        /*  1: initial PC:  code area base in this ROM */
 

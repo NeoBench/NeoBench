@@ -137,6 +137,19 @@ def build(elf):
             relocs.append(pos)
 
     relocs.sort()
+
+    # The hunk format carries no link address: a hunk is loaded wherever
+    # AllocMem() had room, and LoadSeg adds that address to every word
+    # HUNK_RELOC32 names.  What the image has to hold at those words is
+    # therefore an offset from the link base, not the link address the ELF
+    # holds -- adding the load address on top of a nominal address lands
+    # every reference link_base too high, which is invisible until real
+    # code is reached and then wrong by exactly that much.  Resolving it
+    # here is what lets the image be linked anywhere at all.
+    for pos in relocs:
+        value = struct.unpack_from(">I", image, pos)[0]
+        struct.pack_into(">I", image, pos, (value - link_base) & 0xFFFFFFFF)
+
     return bytes(image), relocs, link_base
 
 

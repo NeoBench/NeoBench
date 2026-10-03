@@ -58,7 +58,7 @@
 #define DMAF_SETCLR  0x8000U
 #define DMAF_RASTER  0x0100U            /* bitplane DMA            */
 #define DMAF_MASTER  0x0200U            /* master DMA enable       */
-#define DMAF_COPPER  0x0002U            /* copper DMA              */
+#define DMAF_COPPER  0x0080U            /* copper DMA              */
 
 /* INTENA/INTREQ write bits, NDK hardware/intbits.i.  Bit 15 is the same
  * set/clear selector DMAF_SETCLR uses: high sets the bits named in the
