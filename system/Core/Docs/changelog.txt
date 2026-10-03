@@ -84,6 +84,16 @@ NeoBench changelog
     drawers now -- Apps, Config, Core, Home, Temp and Tools -- so the
     list, its object count and the window's height all grew by one
     row.
+  The start menu leads with the drawers, and the rest of the programs
+    are filed where they belong.  Files moves up out of the program
+    list and becomes the first drawer, opening the browser on the root
+    of the store -- the one place none of the other five named -- and
+    wearing a two-drawer cabinet mark of its own instead of the folder
+    Docs carries.  Being a place rather than a program it opens rather
+    than toggles, and the cross is what puts it away.  The clock, the
+    monitor and the reader are started from Tools/ rather than from
+    the menu, which keeps About alone under the rule and is a third
+    shorter for it; Apps/ and Tools/ both say where the three went.
   Preferences, a pane of its own: five backdrops -- wash, paper, azure,
     dusk and slate -- chosen with one press and painted at once, with
     the hairline grid and the horizon glows as check boxes beside them.
@@ -134,12 +144,6 @@ NeoBench changelog
     so the desktop itself is the backdrop and nothing else.  Everything
     in the menu is reached the same way it was from an icon: one press
     names it, the second opens it.
-  Files leads those places now rather than sitting under the rule with
-    the programs.  It is the drawer all the others are looked for in,
-    so it opens the browser on the root of the store -- the one place
-    none of the other five named -- and wears a two-drawer cabinet
-    mark of its own instead of the folder Docs carries.  Being a place
-    it opens rather than toggles, and the cross is what puts it away.
   Start bar halved to 22 pixels, icon tiles halved to 24 pixels, and
     the palette limited to 64 colours cut from the finished frame.
   A new icon set, in MUI's manner rather than the modern plate and

@@ -10,9 +10,9 @@
 #
 # The clock is filed in the tools drawer because that is where the
 # programs that read the machine are kept: the dial is a tool, and a
-# drawer should be able to start it the way the start menu does.  It is
-# still on the start menu as well -- this is a second way to the same
-# dial rather than the only one, which is how NeoText has always been
-# filed here beside the documents it reads.
+# drawer should be able to start it the way the start menu starts what
+# it lists.  The menu no longer lists it -- the rule carries About
+# alone now -- so this drawer is the way to the dial rather than a
+# second way to it.
 
 program = clock

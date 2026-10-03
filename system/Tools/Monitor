@@ -6,7 +6,7 @@
 # is, the other says what the machine is doing with it.  A toolbox that
 # held one and not the other would be a toolbox with a gap in it.
 #
-# It stays on the start menu too, so it is two presses from the bar at
-# worst and one from a drawer that has been opened anyway.
+# It is started from here rather than from the start menu, so it is
+# one press from a drawer that has been opened anyway.
 
 program = monitor

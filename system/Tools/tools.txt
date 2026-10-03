@@ -11,9 +11,9 @@ something rather than being read.
                text lifted out of the page, and a hex view of
                anything else, eight bytes to the line.
 
-All three are also on the start menu, and a document chosen in Files
-opens in NeoText whatever you do, so an entry here is one more way to
-the same program rather than the only one.
+None of the three is on the start menu, so this drawer is how they are
+started; a document chosen in Files still opens in NeoText whatever
+you do.
 
 Tools grows as the programs that belong in a toolbox are written:
 NeoShell and the calculator are the next two on the list.

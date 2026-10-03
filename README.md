@@ -207,15 +207,16 @@ on any desktop, but enough of the strip stays on the screen to be picked up
 by again. All six move: the four program windows by their captions, the dial
 and the monitor by their own bodies.
 
-Six programs, and the start menu lists four of them. Files leads the drawers
+Six programs, and the start menu lists one of them. Files leads the drawers
 at the top of the menu — it is the drawer every other one is looked for in,
 so it opens the browser on the root of the store rather than sitting in the
-program list below the rule; Clock is an analogue dial; Monitor shows fast
-memory in use; About says what this build is; and **NeoText** opens any file
-in the store — plain text as written, a PDF with its text lifted out of the
-page, anything else as a hex view of the bytes it is, eight to a line.
-**Preferences** is the sixth, and it is not on the menu: it is opened from
-`Config/` in Files, beside the files it changes.
+program list below the rule — and **About**, which says what this build is,
+is the only row under it. The other four are filed where they belong rather
+than listed: Clock, Monitor and **NeoText** in `Tools/`, and **Preferences**
+in `Config/` beside the files it changes. Clock is an analogue dial; Monitor
+shows fast memory in use; and NeoText opens any file in the store — plain
+text as written, a PDF with its text lifted out of the page, anything else
+as a hex view of the bytes it is, eight to a line.
 
 PDF text is read here rather than borrowed (`boot/rom/pdf.c`): page streams
 are inflated by `boot/rom/inflate.c`, a raw DEFLATE decoder with no zlib
@@ -247,17 +248,17 @@ reader. Any directory can carry an entry this way; a file that says nothing
 of the kind still opens in NeoText, so a typo costs the shortcut and nothing
 else.
 
-The tools drawer has entries of its own now, not just NeoText's.
-`Tools/Clock` and `Tools/Monitor` read `program = clock` and
-`program = monitor`, and `Core/Docs/About` reads `program = about`, so the
-clock, the monitor and the
-about panel stand beside the files they belong with — the toolbox for the two
-that read the machine, the documentation for the panel that says what this
-is. All three stay on the start menu as well: an entry is a second way to a
-program, never a replacement for the first. `Tools/` carries a note saying
-what is in it, and takes NeoShell and the calculator as they arrive. A
-document chosen in Files still opens in NeoText whatever else is filed here.
-Seven rows fit in Files, because the root carries six drawers.
+The tools drawer holds the clock, the monitor and the reader: `Tools/Clock`
+and `Tools/Monitor` read `program = clock` and `program = monitor`, and
+`Core/Docs/About` reads `program = about`, so all three stand beside the
+files they belong with — the toolbox for the two that read the machine, the
+documentation for the panel that says what this is. Clock, Monitor and
+NeoText are not on the start menu, so the drawer is how they are started;
+About keeps its row there as the one program the list still carries. `Tools/`
+carries a note saying what is in it, and takes NeoShell and the calculator as
+they arrive. A document chosen in Files still opens in NeoText whatever else
+is filed here. Seven rows fit in Files, because the root carries six
+drawers.
 
 The keyboard follows the window you are in: the cursor keys walk the list
 that is standing or move the caret, Return opens what is lit or starts a new

@@ -13,7 +13,7 @@ for the ones that arrive as files of their own -- an archive unpacked
 into the store, or a fetch that landed in Temp/ and was moved here
 afterwards.  Until one does, it holds this note and nothing else.
 
-  Clock, Monitor, NeoText    filed in Tools/, also on the start menu
+  Clock, Monitor, NeoText    filed in Tools/, opened from there
   About                      filed in Core/Docs, also on the start menu
   Preferences                filed in Config, taken off the menu
   Files                      the drawer that leads the start menu

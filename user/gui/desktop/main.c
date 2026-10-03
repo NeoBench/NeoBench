@@ -845,13 +845,13 @@ static int mon_dx, mon_dy;
 #define MENU_X      8
 #define MENU_Y      112
 #define MENU_W      196
-#define MENU_H      340          /* MENU_Y + this stops short of the bar */
+#define MENU_H      238          /* MENU_Y + this stops short of the bar */
 #define MENU_HEAD   22           /* entries start below the title rule   */
 #define MENU_ITEMW  (MENU_W - 12)
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
 #define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
 #define N_PROGRAMS  6            /* programs the desktop can run         */
-#define MENU_PROGS  4            /* of which the menu shows this many    */
+#define MENU_PROGS  1            /* of which the menu shows this many    */
 #define MENU_ITEMS  (N_PLACES + MENU_PROGS)
 
 #define MENU_P0     (MENU_Y + MENU_HEAD + 4)             /* first place */
@@ -861,14 +861,17 @@ static int mon_dx, mon_dy;
 /*
  * Which program each row of the menu's program section starts.  The
  * numbers are the slots the whole desktop counts in -- the panel, the
- * task row and the keyboard's focus all go1..6 in this order -- while
- * the menu lists four of the six: Files leads the drawers above the
- * rule now rather than sitting in this list, and Preferences was taken
- * off the menu and is opened from Config/ in Files instead, beside the
- * files it changes.  Both are still programs, and both still take their
- * buttons on the bar when they are running.
+ * task row and the keyboard's focus all go 1..6 in this order -- while
+ * the menu lists one of the six.  Files leads the drawers above the
+ * rule rather than sitting in this list, and Preferences, Clock,
+ * Monitor and NeoText are filed in the store instead: the pane in
+ * Config/ beside the files it reads, the other three in Tools/
+ * beside the note that says what the drawer holds.  About keeps its
+ * row, as the one program the menu carries for its own sake rather
+ * than for the files around it.  All six are still programs, and all
+ * six still take their buttons on the bar when they are running.
  */
-static const unsigned char menu_slot[MENU_PROGS] = { 1, 2, 3, 5 };
+static const unsigned char menu_slot[MENU_PROGS] = { 3 };
 
 /* the show-desktop sliver: the last eight columns of the panel, which
  * is the width Aero gives it -- a strip you can find without looking,
@@ -3745,14 +3748,10 @@ static void start_menu(void)
 
     for (i = 0; i < MENU_PROGS; i++)
     {
-        static const char *nm[MENU_PROGS] = { "Clock", "Monitor",
-                                              "About", "NeoText" };
+        static const char *nm[MENU_PROGS] = { "About" };
         int s = menu_slot[i];
-        int on = (s == 1) ? clock_open :
-                 (s == 2) ? monitor_open :
-                 (s == 3) ? about_open : neotext_open;
 
-        menu_item(i, s, nm[i], on,
+        menu_item(i, s, nm[i], about_open,
                   sel_kind == SEL_MENU && sel_idx == N_PLACES + i);
     }
 }
@@ -3788,7 +3787,7 @@ void nb_desktop_dump(void)
      * a menu entry or a list row, and '-' for none.  The difference
      * between a select and an open is otherwise invisible in a log that
      * only carries the program flags, and the digit says which entry --
-     * the first six are places, the last four programs.  t= is whether
+     * the first six are places, the last one a program.  t= is whether
      * the menu is the sticky one the right button opens, and foc= is the
      * program holding the keyboard -- 0 when none does, which is what
      * makes Escape a no-op rather than a surprise. */

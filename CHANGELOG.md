@@ -136,11 +136,13 @@ Notable changes to NeoBench, newest first. British English throughout.
   of the other five named — wearing a two-drawer cabinet mark of its own
   rather than the folder Docs carries. Being a place rather than a program it
   opens instead of toggling, and the cross is what puts it away; its button
-  on the task row is the same as it was. Clock, Monitor and About become
-  program entries in `Tools/` and `Core/Docs/`, beside the files they go
-  with, which is how NeoText has always been filed. All three stay on the
-  menu: an entry in a drawer is a second way to a program, never a
-  replacement for the first, and `Apps/` and `Tools/` both say so now.
+  on the task row is the same as it was. Clock and Monitor become entries in
+  `Tools/`, beside NeoText and the note that says what the drawer holds, and
+  About becomes one in `Core/Docs/`, beside the documentation it summarises.
+  Clock, Monitor and NeoText then come off the menu altogether: a program
+  filed in a drawer is started from the drawer, so the rule now has About
+  alone under it, the panel is a third shorter for it, and `Apps/` and
+  `Tools/` both say where the three went.
 
 ### Boot
 

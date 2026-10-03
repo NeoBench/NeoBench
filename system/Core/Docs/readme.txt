@@ -13,7 +13,7 @@ The store is one tree with six places at the top of it, and none of
 them is borrowed from anywhere else.  Open Files and walk down from
 the root to see it.
 
-  Apps/                  programs; the two entries so far are filed in
+  Apps/                  programs; the entries so far are filed in
                          Config/ and Tools/, and this drawer is kept
                          for the ones that arrive as files of their own
   Config/                settings, read at boot straight from the image
@@ -40,8 +40,13 @@ the root to see it.
     Videos/              moving pictures
   Temp/                  where downloads land; there is no RAM disk
   Tools/                 the programs that are filed rather than
-    NeoText              started from a document: the reader, as an
-                         entry that reads "program = neotext"
+                         started from a document
+    Clock                the dial: the time, and the machine's own
+                         idea of it
+    Monitor              the two-bar system monitor: what the machine
+                         is doing with itself while you watch it
+    NeoText              the reader, as an entry that reads
+                         "program = neotext"
     tools.txt            what is filed in this drawer, and what is
                          coming
 
@@ -107,22 +112,23 @@ several choices.
 The programs
 ------------
 
-The start menu lists five of them.  The sixth, Preferences, is not on
-the menu at all: it is opened from Config/ in Files, beside the files
-it changes.  The fifth, NeoText, is on the menu and is also filed in
-the tools drawer: Tools/NeoText is an entry that starts the reader
-the way Config/Preferences starts the pane, and Tools/ is where
-NeoShell and the calculator will stand when they are written.
+The start menu lists two of them: Files, which leads the drawers
+above the rule, and About, the only row under it.  The other four are
+filed where they belong instead -- Clock, Monitor and NeoText in
+Tools/, Preferences in Config/ beside the files it changes -- so each
+is started from the drawer it stands in.  Tools/ is where NeoShell
+and the calculator will stand when they are written.
 
   Files        the directory browser, reading the store the image was
                built with; choosing a file in it opens NeoText, and
                choosing a program entry starts that program
-  Clock        an analogue dial
-  Monitor      two bars: fast memory in use, and the uptime
+  Clock        an analogue dial, from Tools/Clock
+  Monitor      two bars: fast memory in use, and the uptime, from
+               Tools/Monitor
   About        what this build is
-  NeoText      the reader, from the menu or from Tools/NeoText
+  NeoText      the reader, from Tools/NeoText
   Preferences  the backdrop, and the grid and the glow over it, from
-               Config/Preferences rather than from the menu
+               Config/Preferences
 
 Preferences offers five backdrops -- wash, paper, azure, dusk and
 slate -- and paints the one you choose at once; "backdrop" in
