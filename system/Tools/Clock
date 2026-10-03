@@ -1,0 +1,18 @@
+# NeoBench program entry.
+#
+# The first line of a file that is neither blank nor a comment may say
+# what the file is for.  "program = name" makes the file an entry rather
+# than a document: choosing it in Files starts that program instead of
+# opening it, so a drawer can hold a program the way the start menu
+# does.  The name is one of the desktop's own -- files, clock, monitor,
+# about, preferences, neotext -- and a file that names anything else, or
+# that says nothing at all, opens in the reader as it always has.
+#
+# The clock is filed in the tools drawer because that is where the
+# programs that read the machine are kept: the dial is a tool, and a
+# drawer should be able to start it the way the start menu does.  It is
+# still on the start menu as well -- this is a second way to the same
+# dial rather than the only one, which is how NeoText has always been
+# filed here beside the documents it reads.
+
+program = clock

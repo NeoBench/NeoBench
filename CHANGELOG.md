@@ -130,6 +130,17 @@ Notable changes to NeoBench, newest first. British English throughout.
 - The draw and click passes order the windows by the keyboard: the one being
   used is painted last and asked first, so a window that covers another never
   passes a press down to the one it covers.
+- **The start menu leads with the drawers, and the programs are filed where
+  they belong.** Files moves up out of the program list and becomes the first
+  drawer, opening the browser on the root of the store — the one place none
+  of the other five named — wearing a two-drawer cabinet mark of its own
+  rather than the folder Docs carries. Being a place rather than a program it
+  opens instead of toggling, and the cross is what puts it away; its button
+  on the task row is the same as it was. Clock, Monitor and About become
+  program entries in `Tools/` and `Core/Docs/`, beside the files they go
+  with, which is how NeoText has always been filed. All three stay on the
+  menu: an entry in a drawer is a second way to a program, never a
+  replacement for the first, and `Apps/` and `Tools/` both say so now.
 
 ### Boot
 

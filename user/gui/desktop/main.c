@@ -26,10 +26,11 @@
  *              edge
  *
  * That is the whole scene the boot leaves on screen: backdrop and bar.
- * Nothing on the wallpaper at all -- the five places the desktop used
- * to show as a column of icons down its left edge are entries in the
- * start menu the orb opens, and so are the directory browser, the
- * clock, the monitor, the about panel, Preferences and NeoText.  Each
+ * Nothing on the wallpaper at all -- the places the desktop used to
+ * show as a column of icons down its left edge are entries in the
+ * start menu the orb opens, Files leads them, and so are the directory
+ * browser, the clock, the monitor, the about panel, Preferences and
+ * NeoText.  Each
  * program is a flag set by that menu and tested in the draw pass below,
  * so what is on screen is exactly what the user asked for.
  * Config/screen.cfg carries "bar = aero | classic" (the flat Workbench
@@ -367,6 +368,18 @@ static void icon_media(int x, int y)
     gfx_tri(x + 10, y + 10, x + 10, y + 18, x + 18, y + 14, MUI_CUT);
 }
 
+/* Files: the cabinet itself -- two drawer fronts, each with its handle
+   cut light across it, so the drawer that holds all the others reads as
+   the drawer rather than as another folder beside them */
+static void icon_files(int x, int y)
+{
+    mui_plate(x, y, 24, 6, MUI_BLU_T, MUI_BLU_B);
+    gfx_fill_r(x + 4, y + 7, 16, 8, 2, C_INK);
+    gfx_fill(x + 9, y + 10, 6, 2, MUI_CUT);
+    gfx_fill(x + 4, y + 17, 16, 4, C_INK);
+    gfx_fill(x + 9, y + 18, 6, 2, MUI_CUT);
+}
+
 /*
  * The program glyphs of the start menu -- the same tile at 14 pixels
  * with a mark that fits the eight rows the hairline leaves clear.
@@ -466,13 +479,21 @@ static void row_glyph(int kind, int x, int y)
  * directory two levels down without the desktop having to know the
  * tree -- and a place that is renamed is one string here and in
  * system/, never a hard-coded walk.
+ *
+ * Files leads them.  It is the drawer all the others are looked for in,
+ * so it belongs with them rather than in the program list below the
+ * rule, and an empty path is the one place none of the rest named: the
+ * root of the store, which is where the browser starts.  Being a place
+ * rather than a program it opens instead of toggling, and the cross is
+ * what puts it away.
  */
-#define N_PLACES 5
+#define N_PLACES 6
 
 static const struct {
     const char *name;       /* what the entry says                     */
     const char *dir;        /* store directory it opens, "" = root     */
 } places[N_PLACES] = {
+    { "Files", ""           },        /* Files  */
     { "Home",  "Home"        },        /* Home   */
     { "Core",  "Core"        },        /* Core   */
     { "Bench", "Core/Bench"  },        /* Bench  */
@@ -485,10 +506,11 @@ static void place_icon(int i, int x, int y)
 {
     switch (i)
     {
-    case 0:  icon_home(x, y);   break;
-    case 1:  icon_screen(x, y); break;
-    case 2:  icon_bench(x, y);  break;
-    case 3:  icon_docs(x, y);   break;
+    case 0:  icon_files(x, y);  break;
+    case 1:  icon_home(x, y);   break;
+    case 2:  icon_screen(x, y); break;
+    case 3:  icon_bench(x, y);  break;
+    case 4:  icon_docs(x, y);   break;
     default: icon_media(x, y);  break;
     }
 }
@@ -829,7 +851,7 @@ static int mon_dx, mon_dy;
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
 #define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
 #define N_PROGRAMS  6            /* programs the desktop can run         */
-#define MENU_PROGS  5            /* of which the menu shows this many    */
+#define MENU_PROGS  4            /* of which the menu shows this many    */
 #define MENU_ITEMS  (N_PLACES + MENU_PROGS)
 
 #define MENU_P0     (MENU_Y + MENU_HEAD + 4)             /* first place */
@@ -840,12 +862,13 @@ static int mon_dx, mon_dy;
  * Which program each row of the menu's program section starts.  The
  * numbers are the slots the whole desktop counts in -- the panel, the
  * task row and the keyboard's focus all go1..6 in this order -- while
- * the menu lists five of the six: Preferences was taken off the menu
- * and is opened from Config/ in Files instead, beside the files it
- * changes.  It is still a program, and still takes its button on the
- * bar when it is running.
+ * the menu lists four of the six: Files leads the drawers above the
+ * rule now rather than sitting in this list, and Preferences was taken
+ * off the menu and is opened from Config/ in Files instead, beside the
+ * files it changes.  Both are still programs, and both still take their
+ * buttons on the bar when they are running.
  */
-static const unsigned char menu_slot[MENU_PROGS] = { 0, 1, 2, 3, 5 };
+static const unsigned char menu_slot[MENU_PROGS] = { 1, 2, 3, 5 };
 
 /* the show-desktop sliver: the last eight columns of the panel, which
  * is the width Aero gives it -- a strip you can find without looking,
@@ -3596,8 +3619,10 @@ static uint16_t menu_ink(void)
  * down its left edge, with the name beside it instead of under it --
  * there is no wallpaper to set type on here -- and the Workbench blue
  * across the whole width of the row when it is the entry the next press
- * takes.  The plate is the icon it always was, so the five places read
- * as the same five marks they were on the desktop.
+ * takes.  The plate is the icon it always was, so the places read
+ * as the same marks they were on the desktop; Files, which never had
+ * an icon down that edge because it is the thing that opened them,
+ * gets the drawer front the rest of them are filed in.
  */
 static void menu_place(int i, int sel)
 {
@@ -3720,11 +3745,10 @@ static void start_menu(void)
 
     for (i = 0; i < MENU_PROGS; i++)
     {
-        static const char *nm[MENU_PROGS] = { "Files", "Clock", "Monitor",
+        static const char *nm[MENU_PROGS] = { "Clock", "Monitor",
                                               "About", "NeoText" };
         int s = menu_slot[i];
-        int on = (s == 0) ? files_open :
-                 (s == 1) ? clock_open :
+        int on = (s == 1) ? clock_open :
                  (s == 2) ? monitor_open :
                  (s == 3) ? about_open : neotext_open;
 
@@ -3764,7 +3788,7 @@ void nb_desktop_dump(void)
      * a menu entry or a list row, and '-' for none.  The difference
      * between a select and an open is otherwise invisible in a log that
      * only carries the program flags, and the digit says which entry --
-     * the first five are places, the last six programs.  t= is whether
+     * the first six are places, the last four programs.  t= is whether
      * the menu is the sticky one the right button opens, and foc= is the
      * program holding the keyboard -- 0 when none does, which is what
      * makes Escape a no-op rather than a surprise. */

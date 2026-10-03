@@ -1,0 +1,14 @@
+# NeoBench program entry -- see Tools/Clock for what the "program ="
+# line does and Tools/NeoText for where the convention started.
+#
+# About belongs with the documentation rather than with the tools: it
+# says what this is and what version it is, which is the first thing
+# anyone reading Core/Docs wants to be told, and the drawer is where
+# they are standing when they want it.  Filed here it opens beside the
+# guide and the readme, which is where the answer to "what is this?"
+# ought to live.
+#
+# It is still on the start menu as well -- this is one more way to it,
+# not the only one.
+
+program = about

@@ -4,13 +4,16 @@ NeoBench tools
 The tools drawer holds the program entries: files that start
 something rather than being read.
 
+  Clock        the dial.  The time, and the machine's own idea of it.
+  Monitor      the two-bar system monitor: what the machine is doing
+               with itself while you watch it.
   NeoText      the reader.  Plain text as written, a PDF with its
                text lifted out of the page, and a hex view of
                anything else, eight bytes to the line.
 
-NeoText is also on the start menu, and a document chosen in Files
-opens in it whatever you do, so the entry here is one more way to
-the same reader rather than the only one.
+All three are also on the start menu, and a document chosen in Files
+opens in NeoText whatever you do, so an entry here is one more way to
+the same program rather than the only one.
 
 Tools grows as the programs that belong in a toolbox are written:
 NeoShell and the calculator are the next two on the list.

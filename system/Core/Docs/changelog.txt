@@ -73,9 +73,13 @@ NeoBench changelog
     in it: Tools/NeoText is an entry that reads "program = neotext" on
     its first line, the same way Config/Preferences reads its own, so
     the reader can be started from a tools drawer as well as from the
-    start menu or from the document that needs it.  The drawer carries
-    tools.txt, its own note saying what is filed in it; NeoShell and
-    the calculator are the next two names for it.
+    start menu or from the document that needs it.  The clock and the
+    monitor are filed beside it the same way -- they read the machine
+    rather than a document, which is what a toolbox is for -- and
+    About is in Core/Docs, where the documentation it summarises
+    lives.  The drawer carries tools.txt, its own note saying what is
+    filed in it; NeoShell and the calculator are the next two names
+    for it.
   Files shows seven rows where it showed six: the root carries six
     drawers now -- Apps, Config, Core, Home, Temp and Tools -- so the
     list, its object count and the window's height all grew by one
@@ -130,6 +134,12 @@ NeoBench changelog
     so the desktop itself is the backdrop and nothing else.  Everything
     in the menu is reached the same way it was from an icon: one press
     names it, the second opens it.
+  Files leads those places now rather than sitting under the rule with
+    the programs.  It is the drawer all the others are looked for in,
+    so it opens the browser on the root of the store -- the one place
+    none of the other five named -- and wears a two-drawer cabinet
+    mark of its own instead of the folder Docs carries.  Being a place
+    it opens rather than toggles, and the cross is what puts it away.
   Start bar halved to 22 pixels, icon tiles halved to 24 pixels, and
     the palette limited to 64 colours cut from the finished frame.
   A new icon set, in MUI's manner rather than the modern plate and

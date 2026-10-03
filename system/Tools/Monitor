@@ -1,0 +1,12 @@
+# NeoBench program entry -- see Tools/Clock for what the "program ="
+# line does and Tools/NeoText for where the convention started.
+#
+# The system monitor goes in the tools drawer beside the clock, because
+# it is the other half of reading the machine: one says what the time
+# is, the other says what the machine is doing with it.  A toolbox that
+# held one and not the other would be a toolbox with a gap in it.
+#
+# It stays on the start menu too, so it is two presses from the bar at
+# worst and one from a drawer that has been opened anyway.
+
+program = monitor
