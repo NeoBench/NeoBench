@@ -2,6 +2,28 @@ NeoBench changelog
 ==================
 
 0.1.7
+  The BFG9060 says what it is (probe.c).  The A3000/A4000 CPU-slot
+    accelerator is not on the Zorro bus, so no scan of $E80000 or
+    $FF000000 can ever mention it: the entry that names it is added to
+    expansion.library by a resident in the card's own flash, which is
+    software NeoBench does not run.  What the card does leave is the
+    word its own bootrom goes looking for -- $BF690600 with the
+    firmware version in the low nibble, at $FF040000, sixty-four longs
+    deep -- and that is what the probe reads now: the Zorro III
+    configuration space, whose rule is that it is read and never
+    written, and only on a bus that carries all 32 bits, because on a
+    24-bit machine the address truncates to $040000 and the scan would
+    read chip RAM and call it a signature.  A machine without the card
+    prints nothing: an A1200 cannot have one, and a signature that does
+    not answer says nothing about which machine this is, so a colour
+    for its absence would be a rumour.  The miss goes on the serial
+    line as bfg=none beside the rest of the probe's internals, and a
+    card that answers puts "BFG9060 detected (firmware n)" in the log.
+    tools/tests/test_bfg.c holds the decoder against the word itself,
+    since neither the emulator nor the build machine has the card to
+    ask: open bus either way round, the memory probe's two patterns,
+    its megabyte marker, the signature shifted and one bit set wrong
+    all answer nothing.
   The same Xen, a size bigger.  font = in Config/screen.cfg takes a
     third choice, Xen11: the standard face cut at eleven rows from the
     Amiga font of that name, same one pixel strokes and the same eight

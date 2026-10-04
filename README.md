@@ -57,6 +57,20 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
     images, together with an emulated Zorro III card decode. Whether a real
     ZZ9000 is still on the bus after a genuine AmigaOS 3.2.3 boot has **not**
     been established.
+  - *BFG9060* — the A3000/A4000 CPU-slot accelerator cannot be found in the
+    autoconfig space at all: the entry that names it is added to
+    expansion.library by a resident in the card's own flash, which is
+    software NeoBench does not run. What the card does leave is the word its
+    own bootrom goes looking for — `$BF690600` with the firmware version in
+    the low nibble, at `$FF040000` — read as sixty-four longs of the Zorro
+    III configuration space, and only on a bus that carries all 32 bits
+    (elsewhere that address is a truncation of `$040000`, which is chip RAM).
+    The screen line `BFG9060 detected (firmware n)` prints only when the
+    signature answers, because a machine without one has nothing to report;
+    the miss is recorded on the serial line as `bfg=none` beside the rest of
+    the probe's internals. Deciding what the word means is
+    `tools/tests/test_bfg.c`, since neither the emulator nor the build
+    machine has the card to ask.
   - All instruction traps are caught by a temporary exception shim (vectors 4,
     11 and 61) that rewrites the saved PC to a recovery label — a negative
     result is a caught trap, never a fault-stub halt.

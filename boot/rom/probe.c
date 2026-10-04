@@ -302,3 +302,79 @@ int nb_probe_rtg(void)
     fb[1] = save1;
     return ok;
 }
+
+/*
+ * The BFG9060: Heinrichs' accelerator for the A3000 and A4000 CPU slot,
+ * with 128 MB of DMA fast RAM that the memory walk above has already
+ * counted like any other megabyte that answers.
+ *
+ * The card cannot be found the way a Zorro card is found.  It sits in
+ * the CPU slot rather than on the Zorro bus, and the entry that names
+ * it is added to expansion.library by a resident module in the card's
+ * own flash -- software NeoBench does not run, so nothing at $E80000 or
+ * $FF000000 will ever mention it.  What the card does leave is the one
+ * word its own bootrom goes looking for: $BF690600 with the firmware
+ * version in the low nibble, at $FF040000, scanned sixty-four longs
+ * deep (Bootrom/bootrom.s, FW_MAGIC_ID and FW_BASE_ADDR, in the
+ * BFG9060 project).  The address and the word are the card's own, so
+ * this is the card saying what it is rather than a table of what
+ * machines are believed to hold.
+ *
+ * The read is of the Zorro III configuration space -- the top 16 MB,
+ * whose rule is that it is read and never written -- and only when the
+ * bus carries all 32 bits, for the same reason the Zorro III window is
+ * read only the same way: on a 24-bit machine $FF040000 truncates to
+ * $040000, and the scan would read chip RAM and call it a signature.
+ * A card that is not there leaves the bus floating, and sixty-four
+ * longs of floating bus are no different from the megabytes the memory
+ * walk has already written into with nothing behind them.
+ */
+#define NB_BFG9060_BASE     0xff040000UL
+#define NB_BFG9060_MAGIC    0xbf690600UL    /* low nibble: the version */
+#define NB_BFG9060_SCAN     64u             /* longs the bootrom scans */
+
+/*
+ * One long from that address: the firmware version it carries, 0..15,
+ * or -1 when it is not the signature.
+ *
+ * The version is the whole low nibble and the signature is every bit
+ * above it, so the mask is of the word rather than of the comparison:
+ * $BF690600 through $BF69060F are the card, and $BF690610, $0BF69060
+ * (the same signature already shifted, which is the other constant the
+ * bootrom holds) and $00000000 (the bus answering with nothing) are
+ * not.  Anything here is a word, never a count, so there is no divide
+ * and nothing to fold.
+ */
+static int bfg9060_fw(uint32_t word)
+{
+    if ((word & 0xfffffff0UL) != NB_BFG9060_MAGIC)
+        return -1;
+    return (int)(word & 0x0fUL);
+}
+
+/*
+ * Is this the BFG9060, and what firmware does it report?  -1 when the
+ * signature is not there, which is every machine without the card and
+ * no machine with it.
+ *
+ * The bus answer comes from nb_probe_bus(), so the memory map is walked
+ * before this reads anything, and walked only once: called where the
+ * boot log has already asked for the fast RAM figure, it costs the 256
+ * bytes of configuration space above.
+ */
+int nb_bfg9060(void)
+{
+    unsigned i;
+
+    if (!nb_probe_bus())
+        return -1;
+
+    for (i = 0; i < NB_BFG9060_SCAN; i++)
+    {
+        int fw = bfg9060_fw(peek(NB_BFG9060_BASE + (uint32_t)i * 4));
+
+        if (fw >= 0)
+            return fw;
+    }
+    return -1;
+}

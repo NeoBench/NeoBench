@@ -6,7 +6,7 @@
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra -std=c99
 
-TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi
+TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi test_bfg
 
 # The install disc the last test reads is built by the tools that build
 # the real one: mknbfs.py packs fixtures/nbfs-tree into a volume, that
@@ -65,6 +65,19 @@ test_iso9660: test_iso9660.c ../../boot/rom/iso9660.c \
 test_scsi: test_scsi.c ../../boot/rom/scsi.c ../../boot/rom/scsi.h \
            ../../boot/rom/amiga.h
 	$(CC) $(CFLAGS) -o $@ test_scsi.c
+
+# The BFG9060 signature decoder: the card is in the CPU slot of an
+# A3000 or an A4000, so neither the emulator nor the build machine has
+# one and the word it leaves is all there is to hold against the code.
+# probe.c is included rather than linked because everything worth
+# checking in it is static (test file header has the picture).  The
+# warning suppression is for probe.c casting 32-bit machine addresses
+# to pointers, which is exactly right on the m68k and exactly what a
+# 64-bit host should complain about; the read those casts belong to is
+# never reached here.
+test_bfg: test_bfg.c ../../boot/rom/probe.c ../../boot/rom/probe.h \
+          ../../boot/rom/amiga.h
+	$(CC) $(CFLAGS) -Wno-int-to-pointer-cast -o $@ test_bfg.c
 
 run: $(TESTS) $(FIXTURE)
 	@for t in $(TESTS); do ./$$t || exit 1; done

@@ -239,6 +239,7 @@ void kernel_detect(void)
     char *d;
     unsigned fast;
     int cpu = nb_probe_cpu();
+    int bfg;
 
     if (cpu == 60)
     {
@@ -277,6 +278,7 @@ void kernel_detect(void)
      * machine can take the rest of the boot, exactly as for the CPU.
      */
     fast = nb_probe_fast_mb();
+    bfg = nb_bfg9060();
     /*
      * Probe internals are deliberately not part of the boot log: they go
      * to the serial port only, where they are diagnostic rather than
@@ -295,6 +297,11 @@ void kernel_detect(void)
         d = put_num(d, nb_probe_dbg_top);
         d = put_str(d, " bus=");
         d = put_num(d, nb_probe_dbg_bus);
+        d = put_str(d, " bfg=");
+        if (bfg >= 0)
+            d = put_num(d, (unsigned)bfg);
+        else
+            d = put_str(d, "none");
         *d = '\0';
 
         amiga_serial_putc('>');
@@ -316,6 +323,23 @@ void kernel_detect(void)
         kernel_warn(msg);
     else
         kernel_ok(msg);
+
+    /*
+     * The BFG9060, asked for the only way it can be found (probe.c), and
+     * quiet when it is not: an A1200 cannot have one, and a signature
+     * that does not answer does not say this machine could have.  The
+     * miss is in the serial line above, where the rest of what the
+     * probe saw goes -- a colour on the screen for the absence of a
+     * card this machine has no slot for would be a rumour.
+     */
+    if (bfg >= 0)
+    {
+        d = put_str(msg, "BFG9060 detected (firmware ");
+        d = put_num(d, (unsigned)bfg);
+        d = put_str(d, ")");
+        *d = '\0';
+        kernel_ok(msg);
+    }
 
     kernel_ok("UART detected (9600 baud)");
 }

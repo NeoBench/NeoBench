@@ -42,4 +42,18 @@ unsigned nb_probe_ram(uint32_t addr);
 /* 1 when the address bus carries all 32 bits, 0 on a 24-bit machine. */
 unsigned nb_probe_bus(void);
 
+/*
+ * The BFG9060 accelerator, and the firmware version it reports: 0..15,
+ * or -1 when no signature answers at the address the card's own
+ * bootrom scans ($FF040000, and only on a bus wide enough to reach it
+ * rather than a truncation of it).
+ *
+ * -1 covers more than absence: a flash whose modules have been switched
+ * off answers nothing either, and so does a machine the card cannot be
+ * fitted to.  That is why the boot log prints the found case and keeps
+ * quiet about the rest -- the miss is carried on the serial line, where
+ * the probe's other internals go.
+ */
+int nb_bfg9060(void);
+
 #endif /* NB_PROBE_H */
