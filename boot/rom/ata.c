@@ -72,6 +72,7 @@
  * command that follows times out under its bound either way.
  */
 #define BUS_FLOAT1  0xff
+#define BUS_FLOAT2  0x7f
 
 /*
  * Poll bounds, in bus reads.  Gayle is PIO mode 0 and its reads are slow, so
@@ -82,9 +83,25 @@
 #define POLL_BSY     2000000U        /* device selected, settling          */
 #define POLL_DRQ     4000000U        /* IDENTIFY result coming             */
 
+/*
+ * What a bus nobody is driving reads as, as opposed to what a device that
+ * is there and not ready reads as.  The two answers are two ways of saying
+ * the same nothing: $FF is every line pulled up, $7F is every line but
+ * BSY -- and $7F is the one that matters, because with BSY clear, DRDY set
+ * and DRQ set it is exactly the state wait_drq() is waiting for, so a
+ * driver that only knows $FF will find data ready on a channel with no
+ * device on it and spend 256 words of a transfer that will never come.
+ * A real device cannot produce either value: bits 1 and 2 of the status
+ * have been reserved since ATA-1 and $7F needs them both, and $FF needs
+ * BSY and DRQ at once.
+ *
+ * $00 is deliberately not here.  It is a device's own answer -- nothing
+ * ready, nothing claimed -- and the probe's job is to keep "never read"
+ * apart from "read $00" rather than to fold one into the other.
+ */
 static int floating(uint8_t st)
 {
-    return st == BUS_FLOAT1;
+    return st == BUS_FLOAT1 || st == BUS_FLOAT2;
 }
 
 /*
@@ -404,7 +421,15 @@ static int identify_impl(unsigned unit, struct nb_ata_id *id)
     id->atapi = 0;
     id->mb = 0;
     id->ident = 0xffff;
-    id->sig = 0;
+    /*
+     * The signature is seeded with the same $FFFF, and for the same
+     * reason ident is: a unit nobody answers selection for returns
+     * before the cylinder registers are read at all now, and $FFFF is
+     * what an unanswered bus reads in them, so the boot log's line says
+     * the same thing whichever of the two paths produced it -- that
+     * there is nothing on the bus.
+     */
+    id->sig = 0xffff;
     id->model[0] = '\0';
 
     if (!select_unit(unit))
@@ -616,6 +641,18 @@ static int rw_sectors(unsigned unit, uint32_t lba, unsigned count,
         xfer_sector(p, writing);
         p += SECTOR_BYTES;
     }
+    /*
+     * The loop above stops only once every sector has gone over, so a
+     * device still reading busy here has not lost the data: it has lost
+     * the end of its own command.  Nothing is left to send, which is
+     * what separates this from a device that is merely slow, and
+     * waiting longer will not send a completion nobody sent.  So the
+     * line is written with the status that failed, the unit is given
+     * what unsticks it, and the caller gets a refusal against a bus
+     * that can be selected again -- which is what install.c's three
+     * attempts to a chunk are for, and what the read-back after every
+     * chunk is there to judge.
+     */
     if (!wait_idle())
     {
         int r = rw_refused("idle", lba, s, writing);

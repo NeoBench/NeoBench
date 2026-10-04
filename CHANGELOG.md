@@ -256,6 +256,20 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Devices
 
+- **An empty IDE bus stops reading as a ready one** (`boot/rom/ata.c`).
+  `floating()` knew `$FF` and nothing else, but a channel with nobody on the
+  other end reads `$7F` — every line but BSY — which carries DRQ set in it,
+  so `wait_drq()` reported data ready where no device was standing and the
+  IDENTIFY spent 256 word reads on a transfer that was never going to come.
+  Twice a boot, once a unit, and the emulator logged one line for every read:
+  491 of `IDE1 DATA but no data left!?` in a run. `$7F` cannot be a device's
+  own status, since bits 1 and 2 of the status have been reserved since
+  ATA-1 and it needs them both, so it is floating now — and the signature is
+  seeded with the `$FFFF` an unanswered bus reads, because a unit nobody
+  answers selection for no longer reaches the cylinder registers at all.
+  The boot log's `>ide u=0 st=$7f sig=$ffff id=$ffff` is unchanged for it,
+  and the refusal it reports is the same refusal; only the 512 reads that
+  proved nothing are gone.
 - **`scsi.device`: the NCR53C710 on the A4000T** (`boot/rom/scsi.c`). One AGA
   machine carries a SCSI host with no expansion at all, so the driver looks
   for the chip and not for the machine: CTEST1 has to answer `$F0` first, then

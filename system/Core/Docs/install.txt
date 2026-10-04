@@ -65,6 +65,21 @@ finds rather than writing again:
 
   [  OK  ] installer: NeoBench already on hda (NBFS "NeoBench")
 
+One line in that story is worth knowing, because it reads like a
+failed write and the run finishes anyway:
+
+  >ata err phase=idle st=$d0 w=1 lba=1308 s=4
+  >ata rec st=$50
+
+Every sector of that write had already gone over: what never arrived
+was the device's own end-of-command.  The unit is handed EXECUTE
+DEVICE DIAGNOSTIC -- the one command a busy drive answers -- and the
+installer takes the chunk again, every chunk being allowed three
+attempts.  Nothing in ">install state=done" is taken on trust either:
+each chunk is compared three ways, the disc read a second time
+against the first reading, and the disk's copy against both, which is
+what "chk=2048 mis=0 misrd=0 cdmis=0 cd2rd=0" counts.
+
 What is on the disc
 -------------------
 

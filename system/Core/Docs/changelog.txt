@@ -2,6 +2,20 @@ NeoBench changelog
 ==================
 
 0.1.7
+  An empty IDE bus stops reading as a ready one.  floating() recognised
+    $FF and nothing else, but a channel with nobody on the other end
+    reads $7F -- every line but BSY, which carries DRQ set in it -- so
+    wait_drq() reported data ready where no device was standing and the
+    IDENTIFY spent 256 word reads on a transfer that was never going to
+    come.  Twice a boot, once a unit, and the emulator logged a line for
+    every read: 491 of "IDE1 DATA but no data left!?" in a run.  $7F
+    cannot be a device's own status, since bits 1 and 2 of the status
+    have been reserved since ATA-1 and it needs them both, so it is
+    floating now, and the signature is seeded with the $FFFF an
+    unanswered bus reads -- a unit nobody answers selection for no
+    longer reaches the cylinder registers.  The boot log's
+    >ide u=0 st=$7f sig=$ffff id=$ffff is unchanged for it; only the
+    512 reads that proved nothing are gone.
   Tab walks the keyboard round the windows now, and Ctrl with a cursor
     key carries one.  Tab gives the keyboard to the next program that is
     running, in the order the task row numbers them and wrapping at the
