@@ -252,6 +252,14 @@ the session and repaints at once. The five are five hues of one light field,
 so the mark, the wordmark, the horizon glows and the chrome over them read
 the same on every one.
 
+`font = Xen|Xen11|System` in the same file sets the face — Xen at nine rows,
+Xen11 the same face cut at eleven for a desk that wants its type a size
+bigger, System the eight pixel console face kept for comparison. It is the
+one face every window, menu, icon label and page of the reader sets its type
+in, and it is file-only like most of that file: the face answers its own
+height and the line it stands to the next, so nothing has to be measured
+twice for it.
+
 The pane is filed where those files are. `Config/Preferences` is a program
 entry in the store — a file whose first line reads `program = preferences` —
 so opening Files on `Config/` lists it beside `screen.cfg` and `pointer.cfg`

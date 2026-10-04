@@ -14,6 +14,7 @@
 #include "amiga.h"
 #include "font8x8.h"
 #include "fontxen9.h"
+#include "fontxen11.h"
 
 #define GW  640
 #define GH  512
@@ -626,13 +627,21 @@ void gfx_blur(int x, int y, int w, int h)
  * The face in use.  Xen is NB_FONT_XEN, zero, and .bss starts zeroed,
  * so the boot console is already setting type in Xen before Config/ has
  * been read; a file can then move the selection to the console face or
- * back again.  No initialiser here: .data is write-only ROM.
+ * to the eleven row Xen, and back again.  A face the caller does not
+ * name is the standard one, which leaves the boot console setting type
+ * in Xen however it is called.  No initialiser here: .data is
+ * write-only ROM.
  */
 static int cur_font;
 
 void gfx_font(int face)
 {
-    cur_font = (face == NB_FONT_SYS) ? NB_FONT_SYS : NB_FONT_XEN;
+    if (face == NB_FONT_SYS)
+        cur_font = NB_FONT_SYS;
+    else if (face == NB_FONT_XEN11)
+        cur_font = NB_FONT_XEN11;
+    else
+        cur_font = NB_FONT_XEN;
 }
 
 int gfx_font_id(void)
@@ -640,24 +649,59 @@ int gfx_font_id(void)
     return cur_font;
 }
 
+/* How many rows of the face a glyph is drawn in: eight for the console
+ * face, and nine or eleven for the Xen cut at that size.  The other
+ * measurement is how far one line stands from the next, which is not
+ * always this many rows -- see gfx_font_pitch(). */
 int gfx_font_h(void)
 {
-    return (cur_font == NB_FONT_SYS) ? 8 : NB_XEN_H;
+    if (cur_font == NB_FONT_SYS)
+        return 8;
+    return (cur_font == NB_FONT_XEN11) ? NB_XEN11_H : NB_XEN9_H;
 }
 
-/* The nine (or eight) row bitmap of one character, with anything
- * outside the face's range falling back to the hollow block. */
+/*
+ * How far one line of type stands from the next: the question a caller
+ * with more than one line asks, and a different one from the row count
+ * above.  The console face is eight rows but has always stepped nine,
+ * and nine is what every row of desktop layout already assumes, so a
+ * face never steps less than that; a face taller than nine steps its
+ * own height, or the eleven row Xen would come back through the line
+ * it had just set.  Asking here rather than counting nine is what keeps
+ * the two agreeing when font= in Config/screen.cfg changes the face.
+ */
+int gfx_font_pitch(void)
+{
+    int h = gfx_font_h();
+
+    return (h > 9) ? h : 9;
+}
+
+/* The rows of one character in the face in use, with anything outside
+ * the Xen range falling back to the hollow block. */
 static const unsigned char *glyph_rows(unsigned char ch, int *rows)
 {
+    const unsigned char *glyph;
+
     if (cur_font == NB_FONT_SYS)
     {
         *rows = 8;
         return font8x8[ch];
     }
-    *rows = NB_XEN_H;
     if (ch < NB_XEN_FIRST || ch > NB_XEN_LAST)
         ch = (unsigned char)(NB_XEN_FIRST + NB_XEN_BOX);
-    return fontxen9[ch - NB_XEN_FIRST];
+    ch -= NB_XEN_FIRST;
+    if (cur_font == NB_FONT_XEN11)
+    {
+        *rows = NB_XEN11_H;
+        glyph = fontxen11[ch];
+    }
+    else
+    {
+        *rows = NB_XEN9_H;
+        glyph = fontxen9[ch];
+    }
+    return glyph;
 }
 
 void gfx_text(int x, int y, const char *s, uint16_t c)
@@ -671,7 +715,7 @@ void gfx_text(int x, int y, const char *s, uint16_t c)
 
         if (ch == '\n') {
             cx = x;
-            y += 9;
+            y += gfx_font_pitch();
             continue;
         }
         bits = glyph_rows(ch, &rows);
@@ -701,7 +745,7 @@ void gfx_text_s(int x, int y, const char *s, uint16_t c, int scale)
 
         if (ch == '\n') {
             cx = x;
-            y += 9 * scale;
+            y += gfx_font_pitch() * scale;
             continue;
         }
         bits = glyph_rows(ch, &rows);

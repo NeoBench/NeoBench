@@ -443,11 +443,18 @@ void nb_prefs_load(void)
      * The face is selected here rather than in the desktop, so the boot
      * console, the panel and every program window are all setting type
      * in one face from the first frame after the files are read.
+     * "xen11" asks for the same face cut at eleven rows; anything else
+     * that is not the console face is the standard Xen, which is what
+     * the boot console was already setting.
      */
-    gfx_font(name_is(nb_prefs.font, "system") ||
-             name_is(nb_prefs.font, "8x8")    ||
-             name_is(nb_prefs.font, "console")
-             ? NB_FONT_SYS : NB_FONT_XEN);
+    if (name_is(nb_prefs.font, "system") ||
+        name_is(nb_prefs.font, "8x8")    ||
+        name_is(nb_prefs.font, "console"))
+        gfx_font(NB_FONT_SYS);
+    else if (name_is(nb_prefs.font, "xen11"))
+        gfx_font(NB_FONT_XEN11);
+    else
+        gfx_font(NB_FONT_XEN);
 }
 
 /* ------------------------------------------------------------------ *

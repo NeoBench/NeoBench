@@ -5,10 +5,12 @@
 /* Xen at nine pixels, cut from the Amiga font of that name:
  * eight pixel advance, nine rows, each glyph centred in its
  * cell so column 7 is always clear. */
-#define NB_XEN_H      9
+#define NB_XEN9_H     9
+#ifndef NB_XEN_FIRST
 #define NB_XEN_FIRST  32
 #define NB_XEN_LAST   126
 #define NB_XEN_BOX    95      /* fallback block, after '~'     */
+#endif /* NB_XEN_FIRST: the grid every face is cut to */
 
 static const unsigned char fontxen9[96][9] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },   /*   */

@@ -49,16 +49,19 @@ void gfx_blur(int x, int y, int w, int h);
 /*
  * Text faces.  Xen is the standard -- eight pixel advance, nine rows,
  * one pixel strokes -- with the 8x8 console face kept behind it for
- * comparison.  Config/screen.cfg chooses with "font ="; the face
- * selected here is the one every gfx_text() caller gets, so one
- * preference restyles the whole desktop.
+ * comparison and Xen11 the same face cut at eleven rows, for a desk
+ * that wants its type a size bigger.  Config/screen.cfg chooses with
+ * "font ="; the face selected here is the one every gfx_text() caller
+ * gets, so one preference restyles the whole desktop.
  */
 #define NB_FONT_XEN   0
 #define NB_FONT_SYS   1
+#define NB_FONT_XEN11 2
 
 void gfx_font(int face);
 int  gfx_font_id(void);
 int  gfx_font_h(void);
+int  gfx_font_pitch(void);
 
 /* Bitmap text, MSB-left, eight pixels of advance either way. */
 void gfx_text(int x, int y, const char *s, uint16_t c);

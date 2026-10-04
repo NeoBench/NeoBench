@@ -810,10 +810,11 @@ static int text_dx, text_dy;
 #define NT_H        256
 #define NT_TX       (NT_X + 8)          /* the text's left edge          */
 #define NT_TY       (NT_Y + 30)         /* the first row's top           */
-#define NT_ROWS     22                  /* rows the pane stands          */
+#define NT_AREA     198                 /* the rows, in pixels: 22 of 9 */
+#define NT_ROWS     (NT_AREA / gfx_font_pitch())   /* lines in that area */
 #define NT_COLS     55                  /* and how wide they are         */
 #define NT_SB       (NT_X + NT_W - 17)  /* the scroll column             */
-#define NT_SBH      (NT_ROWS * 9)       /* and how far it runs           */
+#define NT_SBH      (NT_ROWS * gfx_font_pitch())   /* and how far it runs */
 #define NT_SBT      12                  /* an arrow is this tall         */
 #define NT_SBY      (NT_Y + 26)         /* where the column starts       */
 #define NT_SBTR     (NT_SBH - 2 * NT_SBT)   /* the groove between them   */
@@ -2276,7 +2277,8 @@ static void window_neotext(void)
     for (r = nt_top; r < nt_top + NT_ROWS; r++)
     {
         nt_rowline(r, line);
-        text_d(NT_TX, (int)(NT_TY + (r - nt_top) * 9), line, C_TEXT);
+        text_d(NT_TX, (int)(NT_TY + (r - nt_top) * gfx_font_pitch()),
+               line, C_TEXT);
     }
 
     /* the caret, when there is one and the view has it */
@@ -2287,11 +2289,11 @@ static void window_neotext(void)
         if (row >= nt_top && row < nt_top + NT_ROWS)
         {
             int cx = NT_TX + (int)(nt_cur - nt_rowstart(row)) * 8;
-            int cy = (int)(NT_TY + (row - nt_top) * 9);
+            int cy = (int)(NT_TY + (row - nt_top) * gfx_font_pitch());
 
             if (cx > NT_TX + NT_COLS * 8)
                 cx = NT_TX + NT_COLS * 8;
-            gfx_fill(cx, cy, 1, 9, C_WB_BLUE);
+            gfx_fill(cx, cy, 1, gfx_font_pitch(), C_WB_BLUE);
         }
     }
 
@@ -2506,9 +2508,10 @@ static int hit_neotext(int x, int y, int *changed)
     /* the text: a press in it puts the caret where it landed */
     if (nt_have && nt_mode == NT_TEXT &&
         x >= NT_TX && x < NT_TX + NT_COLS * 8 &&
-        y >= NT_TY && y < NT_TY + NT_ROWS * 9)
+        y >= NT_TY && y < NT_TY + NT_AREA)
     {
-        unsigned row = nt_top + (unsigned)((y - NT_TY) / 9);
+        unsigned row = nt_top +
+            (unsigned)((y - NT_TY) / gfx_font_pitch());
         unsigned col = (unsigned)(x - NT_TX + 4) / 8;
         unsigned start, end, k = 0;
 
@@ -3667,7 +3670,7 @@ static void uptime_text(void)
     unsigned s = nb_secs, h = 0, m = 0;
     char buf[16];
     int rx = DESK_X - 10;
-    int lx;
+    int lx, y;
 
     while (s >= 3600U) { s -= 3600U; h++; }
     while (s >= 60U)   { s -= 60U;   m++; }
@@ -3680,17 +3683,33 @@ static void uptime_text(void)
          * difference between it and the single line the Workbench bar
          * carries.  There is no date and no wall time to put there --
          * the machine has neither -- so the label says what the value
-         * actually is rather than implying a clock it does not have. */
-        text_right(rx, 493, buf, C_INK);
-        text_right(rx, 503, "uptime", C_AERO_TXT);
+         * actually is rather than implying a clock it does not have.
+         *
+         * The two lines are set from the bottom of the bar up: the
+         * label ends on the last row of the screen, and the value
+         * stands a line above it with whatever is left over, which is
+         * the one row of air the nine pixel face has always had here
+         * and none at all in eleven -- the pair would otherwise come
+         * back through each other, and the label would run off the
+         * bottom of the screen.  The bottom of the bar is 512, since
+         * that is where the screen stops.
+         */
+        int lo = 512 - gfx_font_pitch();
+        int hi = lo - gfx_font_pitch() - 1;
+
+        if (hi < 490)
+            hi = 490;
+        text_right(rx, hi, buf, C_INK);
+        text_right(rx, lo, "uptime", C_AERO_TXT);
         return;
     }
 
     lx = rx - strw(buf) - 24;
     if (lx < 546)                       /* never over the tray's rule     */
         lx = 546;
-    text_d(lx, 497, "up", C_MUTE);
-    text_right(rx, 497, buf, C_TEXT);
+    y = 490 + (23 - gfx_font_pitch()) / 2;  /* the middle of the bar   */
+    text_d(lx, y, "up", C_MUTE);
+    text_right(rx, y, buf, C_TEXT);
 }
 
 /*

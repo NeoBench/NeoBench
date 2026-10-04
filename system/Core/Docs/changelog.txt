@@ -2,6 +2,43 @@ NeoBench changelog
 ==================
 
 0.1.7
+  The same Xen, a size bigger.  font = in Config/screen.cfg takes a
+    third choice, Xen11: the standard face cut at eleven rows from the
+    Amiga font of that name, same one pixel strokes and the same eight
+    pixel cell -- Xen11 advances seven on every character, so strw()
+    counts it exactly as it counts Xen and nothing the chrome is built
+    round has to move.  The cutter no longer sizes the face itself: the
+    y size comes out of the font, and so does the first character it
+    draws, which is the one place the two sizes disagree -- nine starts
+    at 32, eleven at 0, and reading them before led to a face whose
+    space was a blob and whose A was an exclamation mark.  The header
+    is named after the file it is cut from, NB_XEN11_H and fontxen11
+    and NBFONTXEN11_H, which is what lets both faces be in one program
+    without either name meaning two things; what they hold in common --
+    the 32..126 grid and the hollow block behind it -- is written once
+    behind an ifndef.  The nine pixel header regenerates byte for byte
+    what it was, every one of its 96 glyph rows the proof that the cut
+    did not move.
+  A line steps by the face it is set in (gfx_font_pitch()).  gfx_text()
+    used to add nine for a newline whatever the face was, and the
+    reader laid its rows out at nine itself, which is the pair of them
+    disagreeing the moment a preference changed: an eleven row face
+    would have come back through the line it had just set, and
+    twenty-two rows of it would have run out of the pane.  The line now
+    asks the face -- never less than the nine both existing faces have
+    always stepped by, never less than a face's own rows -- and the
+    reader divides the pane it is given by the same number, so Xen11
+    gives it eighteen rows in the same 198 pixels rather than
+    twenty-two of them crammed.  Nothing else in the desktop counts
+    lines: a sweep for arithmetic on nine finds only icon drawing and
+    the window nudge.  The tray's uptime readout is the one place that
+    had pinned its two lines rather than measuring them: 493 and 503
+    are the nine pixel face's own fit inside a twenty-two pixel bar,
+    the label ending on the screen's last row, and in eleven they would
+    have come back through each other and run two pixels off the
+    bottom.  It is set from the bottom of the bar up now, which lands
+    on 493 and 503 exactly as they were and keeps the pair inside the
+    bar whatever the face is.
   An empty IDE bus stops reading as a ready one.  floating() recognised
     $FF and nothing else, but a channel with nobody on the other end
     reads $7F -- every line but BSY, which carries DRQ set in it -- so
