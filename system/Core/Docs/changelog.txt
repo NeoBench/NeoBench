@@ -2,6 +2,26 @@ NeoBench changelog
 ==================
 
 0.1.7
+  Tab walks the keyboard round the windows now, and Ctrl with a cursor
+    key carries one.  Tab gives the keyboard to the next program that is
+    running, in the order the task row numbers them and wrapping at the
+    end; Ctrl with a cursor key moves the window the keyboard is in by
+    eight pixels against the same wall the drag uses.  The keyboard
+    could read a window before, but it could not choose between them or
+    put one where it wanted it.  The menu keeps both while it stands,
+    as it keeps the cursor keys, and the reader's page moved off Tab
+    onto Shift with a cursor key -- the key the keymap has no Page Up
+    or Page Down for, and one that asks for more of what the plain key
+    gives: a line, then a pane.
+  A task button raises its window as well as putting it down.  The
+    button of the window that is in front still closes it in one press,
+    as a control does; any other button raises its window and gives it
+    the keyboard, which is what the lit button claims to be showing.  A
+    change of keyboard repaints every window that is up rather than the
+    bar alone: the keyboard and the z order are the same question here,
+    since the window with the keyboard is the one drawn last, so the
+    window that lost it drops back into the fixed order underneath and
+    every window it stood over shifts a place.
   The chainload takes the machine over now instead of handing it back.
     chain_entry reports the arrival mode and the address the loader put
     the hunk at, chain_safe decides whether the image may stay there --

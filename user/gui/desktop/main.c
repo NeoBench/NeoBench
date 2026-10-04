@@ -920,6 +920,30 @@ static int focus_p;             /* the program the panel shows as
 static int desk_hidden;         /* show-desktop has the windows down   */
 static int desk_saved;          /* which ones were up when it did      */
 
+/*
+ * Which of the six are up, asked by slot rather than by flag.
+ *
+ * The flags above are the whole of what is running -- scene() draws a
+ * program because one of them says so -- and a pass that has to walk
+ * all six, the task row, the keyboard's cycle and the rows a repaint
+ * owes, asks here rather than spelling the six out again.  Show-desktop
+ * has the flags themselves down, so it needs no rule of its own: what it
+ * has taken off the wallpaper is not up.
+ */
+static int win_open(int p)
+{
+    switch (p)
+    {
+    case 1:  return files_open;
+    case 2:  return clock_open;
+    case 3:  return monitor_open;
+    case 4:  return about_open;
+    case 5:  return prefs_open;
+    case 6:  return neotext_open;
+    default: return 0;
+    }
+}
+
 /* ------------------------------------------------------------------ *
  * The rows a repaint has to touch
  *
@@ -1374,6 +1398,14 @@ static int sel_clear(void)
  * ------------------------------------------------------------------ */
 
 /*
+ * The rows a change of keyboard owes.  The claim is made with the
+ * windows themselves, below, because that is where the rows they are
+ * known by are; this is only its name, since the press that gives the
+ * keyboard away is here.
+ */
+static void band_focus(void);
+
+/*
  * A press that lands inside a window with no gadget under it takes the
  * keyboard to that window: the lit button on the bar follows the
  * pointer, which is what makes the bar's claim that it shows the window
@@ -1385,7 +1417,7 @@ static int focus_here(int p, int *changed)
     if (focus_p != p)
     {
         focus_p = p;
-        band_add(486, 512);
+        band_focus();
         *changed = 1;
     }
     return 1;
@@ -1462,6 +1494,118 @@ static void win_band(int which, int bar)
 }
 
 /*
+ * The wall a window is kept off.  The same four for the pointer's drag
+ * and the keyboard's carry, so that a window cannot be walked round a
+ * corner with one and then pushed through it with the other.  What is
+ * held on the screen is the caption rather than the frame: a window may
+ * stand half off an edge, as they do on any desktop, but enough of the
+ * strip has to stay to pick it up by again.
+ */
+static void win_clamp(int ww, int *nx, int *ny)
+{
+    if (*nx < 48 - ww)
+        *nx = 48 - ww;
+    if (*nx > 640 - 48)
+        *nx = 640 - 48;
+    if (*ny < 0)
+        *ny = 0;
+    if (*ny > 512 - 24)
+        *ny = 512 - 24;
+}
+
+/*
+ * The rows a change of keyboard owes.
+ *
+ * The lit button on the bar is one of them.  The rest are every window
+ * that is up, and not only the two that changed places: the keyboard
+ * and the z order are the same question in this desktop, because the
+ * window with the keyboard is the one drawn last, so the window that
+ * lost it has dropped back into the fixed order underneath and every
+ * window it stood over has shifted up or down a place.  Claiming what
+ * each of them claims of its own is the simple true answer, they merge
+ * as they arrive, and a focus change is a press or a Tab rather than a
+ * frame.
+ */
+static void band_focus(void)
+{
+    int i;
+
+    band_add(486, 512);
+    for (i = 1; i <= 6; i++)
+        if (win_open(i))
+            win_band(i, 0);
+}
+
+/*
+ * Tab: the keyboard round the six slots, in the order the task row
+ * numbers them and wrapping at the top.  Only what is up answers, so
+ * with a single program running this is that program again and owes
+ * nothing, and with none running there is nowhere for the keyboard to
+ * go at all.
+ *
+ * This is the other half of the pointer's press inside a window: a
+ * window the keyboard can reach is a window the keyboard is half of,
+ * rather than a way of walking lists in front of it.
+ */
+static int focus_next(void)
+{
+    int i, from, changed = 0;
+
+    from = (focus_p >= 1 && focus_p <= 6) ? focus_p : 0;
+    for (i = 1; i <= 6; i++)
+    {
+        int p = from + i;
+
+        if (p > 6)
+            p -= 6;
+        if (win_open(p))
+        {
+            focus_here(p, &changed);
+            return changed;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Ctrl with a cursor key: the window the keyboard has, carried by eight
+ * pixels.  It is the caption's drag done by hand and to the same wall,
+ * so it claims the rows the window stood in and the rows it stands in,
+ * exactly as the drag does.  The step is eight rather than one because
+ * the move is meant to be seen: a pixel at a time is an adjustment
+ * nobody would believe they had made, and eight walks a window across
+ * the screen in a couple of dozen presses.
+ */
+static int win_nudge(int c)
+{
+    int which = focus_p, wx, wy, ww, wh, nx, ny;
+
+    if (!win_open(which))
+        return 0;
+
+    win_box(which, &wx, &wy, &ww, &wh);
+    nx = wx;
+    ny = wy;
+    if (c == NB_KEY_LEFT)
+        nx -= 8;
+    else if (c == NB_KEY_RIGHT)
+        nx += 8;
+    else if (c == NB_KEY_UP)
+        ny -= 8;
+    else
+        ny += 8;
+
+    win_clamp(ww, &nx, &ny);
+    if (nx == wx && ny == wy)
+        return 0;
+
+    win_band(which, 0);
+    win_place(which, nx, ny);
+    win_band(which, 0);
+    return 1;
+}
+
+/*
  * The press that picks a window up.  It gives the window the keyboard
  * -- the one being moved is the one being used, which is how the rest
  * of the desktop already treats a press inside a window -- and then
@@ -1510,14 +1654,7 @@ int nb_desktop_drag(void)
     nx = nb_pointer_x() - drag_ox;
     ny = nb_pointer_y() - drag_oy;
 
-    if (nx < 48 - ww)
-        nx = 48 - ww;
-    if (nx > 640 - 48)
-        nx = 640 - 48;
-    if (ny < 0)
-        ny = 0;
-    if (ny > 512 - 24)
-        ny = 512 - 24;
+    win_clamp(ww, &nx, &ny);
     if (nx == wx && ny == wy)
         return 0;
 
@@ -2277,9 +2414,10 @@ static int nt_back(void)
  * what the caller owes a repaint for.
  *
  * The cursor keys step the caret in the mode that has one and the view
- * in the two that do not; Tab is the page the keymap has no key for;
- * Return starts a line; and a character puts itself where the caret
- * stands.  Everything else is somebody else's key.
+ * in the two that do not; either of them with Shift held is the page
+ * the keymap has no key for; Return starts a line; and a character puts
+ * itself where the caret stands.  Everything else is somebody else's
+ * key.
  */
 static int neotext_key(int c)
 {
@@ -2290,14 +2428,22 @@ static int neotext_key(int c)
 
     if (c == NB_KEY_UP || c == NB_KEY_DOWN)
     {
+        /*
+         * Shift with a cursor key is the page the keymap has no key
+         * for.  It was Tab, and Tab belongs to the desktop now -- it
+         * walks the keyboard round the windows -- so the page moved to
+         * the modifier that asks for more of what the plain key gives:
+         * the plain key steps a line or a caret, and Shift steps a
+         * pane.  It answers in both modes, as Tab did.
+         */
+        if (nb_kbd_mods() & KMOD_SHIFT)
+            return neotext_scroll(c == NB_KEY_UP ? -NT_ROWS : NT_ROWS);
         if (ro)
             return neotext_scroll(c == NB_KEY_UP ? -1 : 1);
         return nt_caret_v(c == NB_KEY_UP ? -1 : 1);
     }
     if (c == NB_KEY_LEFT || c == NB_KEY_RIGHT)
         return ro ? 0 : nt_caret_h(c == NB_KEY_LEFT ? -1 : 1);
-    if (c == NB_KEY_TAB)
-        return neotext_scroll(NT_ROWS);
     if (ro)
         return 0;
 
@@ -2800,14 +2946,29 @@ int nb_desktop_click(int x, int y, int btn)
                 if (!task_slot(i, &t) || x < t.x || x >= t.x + t.w)
                     continue;
 
+                /*
+                 * One press either way, but not the same press: the
+                 * button of the window that already has the keyboard
+                 * puts it down, and the button of any other window
+                 * raises it and takes the keyboard.  The lit button is
+                 * the window on top, so this is what makes the row a row
+                 * of windows to move between rather than six more ways
+                 * of closing one.
+                 */
+                if (focus_p != i)
+                {
+                    focus_here(i, &changed);
+                    changed |= sel_clear();
+                    return 1;
+                }
+
                 if      (i == 1) { files_open   = 0; band_files(1); }
                 else if (i == 2) { clock_open   = 0; band_clock(); }
                 else if (i == 3) { monitor_open = 0; band_monitor(); }
                 else if (i == 4) { about_open   = 0; band_about(); }
                 else if (i == 5) { prefs_open   = 0; band_prefs(1); }
                 else             { neotext_open = 0; band_neotext(1); }
-                if (focus_p == i)
-                    focus_p = 0;
+                focus_p = 0;
                 changed |= sel_clear();
                 return 1;
             }
@@ -2936,6 +3097,40 @@ static void sel_mark(void)
 int nb_desktop_key(int c)
 {
     int count, kind, walk, from, down;
+
+    /*
+     * Two keys the desktop keeps for itself, ahead of everything the
+     * menu and the programs would have them do.
+     *
+     * Tab walks the keyboard round the programs that are running, in
+     * the order the task row numbers them and wrapping at the end.
+     * It is the other half of the pointer's press inside a window: a
+     * window the keyboard can reach, and can tell it has reached, is a
+     * window the keyboard is half of rather than a way of walking lists
+     * in front of.
+     *
+     * Ctrl with a cursor key carries that window by eight pixels.  It
+     * is the caption's drag done by hand and to the same wall, so a
+     * window moved with the pointer and a window moved with the
+     * keyboard obey one clamp -- and it is the only move the keyboard
+     * has, which is what makes the keyboard able to use a window rather
+     * than only to answer it.
+     *
+     * The menu keeps both the way it keeps the cursor keys: a list
+     * standing over the desktop owns the keys while it stands, and
+     * Escape is the one it gives back.  Once the key is the desktop's,
+     * it is the desktop's wholly -- the program does not also get to
+     * scroll its caret with a Ctrl it was given to move a window with.
+     */
+    if (!menu_open)
+    {
+        if (c == NB_KEY_TAB)
+            return focus_next();
+        if ((nb_kbd_mods() & KMOD_CTRL) != 0 &&
+            (c == NB_KEY_UP || c == NB_KEY_DOWN ||
+             c == NB_KEY_LEFT || c == NB_KEY_RIGHT))
+            return win_nudge(c);
+    }
 
     /*
      * The two Amiga keys are the orb, one on either side of the
@@ -3377,12 +3572,7 @@ static int task_slot(int id, struct task_cell *t)
         struct task_cell c;
         int on;
 
-        if      (i == 0) on = files_open;
-        else if (i == 1) on = clock_open;
-        else if (i == 2) on = monitor_open;
-        else if (i == 3) on = about_open;
-        else if (i == 4) on = prefs_open;
-        else             on = neotext_open;
+        on = win_open(i + 1);
         if (!on)
             continue;
 

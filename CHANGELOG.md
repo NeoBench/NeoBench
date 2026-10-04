@@ -106,6 +106,20 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Desktop
 
+- **Tab walks the keyboard round the windows, and Ctrl with a cursor key
+  carries one.** Tab gives the keyboard to the next program that is running,
+  in the order the task row numbers them and wrapping at the end; Ctrl with a
+  cursor key moves the window the keyboard is in by eight pixels, clamped to
+  the same wall as the drag. The start menu keeps both while it stands, as it
+  keeps the cursor keys, and the reader's page moved off Tab onto Shift with a
+  cursor key, which is the key the keymap has no Page Up or Page Down for.
+- **A task button raises as well as puts down.** One press on the button of
+  the window that is in front still puts it down; one press on any other
+  button raises its window and gives it the keyboard, which is what the lit
+  button claims to be showing. A change of keyboard repaints every window
+  that is up, because the keyboard and the z order are the same question
+  here -- the window with the keyboard is the one drawn last, and it is not
+  only where two windows overlap that the picture changes.
 - **Windows can be picked up and carried.** Press the caption — anywhere in
   the strip that is not one of its three buttons — and the window goes where
   the pointer goes until the button comes back up, taking the keyboard with

@@ -89,6 +89,12 @@ edge that takes the desktop away.  "bar" in screen.cfg cuts the same
 furniture the flat Workbench way it was drawn with first, and "glass"
 says how much of the backdrop the pane shows through.
 
+One press on one of those buttons gives that window the keyboard, and
+one press on the button of the window that is already lit puts it
+down.  So the row chooses between the windows that are standing as
+well as closing them, which is what the lit button claims to be
+showing.
+
 There are no icons on the wallpaper at all.  The five places the
 desktop used to carry down its left edge -- Home, Core, Bench, Docs
 and Media -- are entries at the top of the start menu the orb opens,
@@ -171,7 +177,13 @@ captions, the dial and the monitor by their own bodies.
 The keyboard follows the window you are in: the cursor keys walk the
 list that is standing or move the caret, Return opens what is lit or
 starts a new line, and Escape puts down whichever program has the
-keyboard.
+keyboard.  Tab walks the keyboard round the programs that are running,
+in the order the task row shows them and wrapping at the end; Ctrl
+with a cursor key carries the window the keyboard is in by eight
+pixels, against the same wall the drag uses; and either cursor key
+with Shift held pages the reader, which is the key the keymap has no
+Page Up or Page Down for.  The start menu keeps all three while it
+stands, as it keeps the cursor keys.
 
 Installing
 ----------

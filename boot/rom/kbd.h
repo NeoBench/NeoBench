@@ -34,6 +34,26 @@
 #define NB_KEY_RAMIGA  0x109   /* right Amiga: the same                   */
 
 /*
+ * What is held down, as the keymap latches it.
+ *
+ * The queue carries neither the modifiers nor the key that was down when
+ * the entry went in, so a consumer that needs to know whether Ctrl was
+ * held asks here while it still is: the state is the keys' own, it lives
+ * for as long as they do, and a key read after the modifier came up reads
+ * the modifier as up.  That is the right answer for what these are for --
+ * a chord is held while its key is pressed -- and the reason the queue
+ * stays one integer wide.
+ *
+ * The lock is a bit of its own: it turns over on the way down and is left
+ * alone on the way up, so it reads the same before and after the shift it
+ * is standing in for.
+ */
+#define KMOD_SHIFT      0x01u
+#define KMOD_CAPS       0x02u
+#define KMOD_CTRL       0x04u
+#define KMOD_ALT        0x08u
+
+/*
  * Where the key came from, for the serial read-out that accompanies
  * every one of them.  The queue itself does not carry it: a key is a key
  * once it has been decoded, and the line below the key is the only place
@@ -68,6 +88,9 @@ int  nb_kbd_get(void);
 
 /* How many keys the queue is holding. */
 int  nb_kbd_pending(void);
+
+/* What is held down now: the KMOD_ bits above, or nothing. */
+unsigned nb_kbd_mods(void);
 
 /*
  * A host controller's report: the keys that went down in it join the

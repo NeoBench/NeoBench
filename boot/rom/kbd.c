@@ -62,10 +62,8 @@
 #define RAW_LALT        0x64u
 #define RAW_RALT        0x65u
 
-#define KMOD_SHIFT      0x01u
-#define KMOD_CAPS       0x02u
-#define KMOD_CTRL       0x04u
-#define KMOD_ALT        0x08u
+/* the KMOD_ bits and their values are kbd.h's, where anything that reads
+ * them rather than setting them can find them too */
 
 /*
  * How long the acknowledgement is held, in empty loops.  Chosen, not
@@ -506,6 +504,38 @@ int nb_kbd_pending(void)
 }
 
 /*
+ * What is held down at this moment, which is only ever the answer for as
+ * long as it still is: the keys are read on the way down and on the way
+ * up, and a chord is read while its own key is being pressed, which is
+ * the one moment the answer has to be right.  The shell, which is the
+ * other consumer of the queue, never asks -- a character it has been
+ * given has already had its modifiers applied.
+ */
+unsigned nb_kbd_mods(void)
+{
+    return kmods;
+}
+
+/*
+ * What a HID report says is held down, read out of the boot keyboard's
+ * own bitmap: bits 0 to 3 are the left-hand control, shift, alt and
+ * left-Amiga, bits 4 to 7 the right-hand ones of the same four.  A
+ * report carries this as a state rather than as keys that went down and
+ * came up, so it is taken on every report and stands until the next;
+ * the lock is left where it is, since the keyboard on CIA-A is the one
+ * that has a light for it.
+ */
+static unsigned hid_mods(unsigned m)
+{
+    unsigned v = 0;
+
+    if (m & 0x11u) v |= KMOD_CTRL;
+    if (m & 0x22u) v |= KMOD_SHIFT;
+    if (m & 0x44u) v |= KMOD_ALT;
+    return v;
+}
+
+/*
  * A host controller's report, as it would arrive: the keys that went down
  * in it join the queue with the usage as their raw code, which is what
  * keeps the line below a key the same shape as one from CIA-A.
@@ -521,6 +551,7 @@ void nb_kbd_usb(const uint8_t report[NB_HID_REPORT])
     unsigned keys[6], usages[6];
     unsigned n, i;
 
+    kmods = (kmods & KMOD_CAPS) | hid_mods(report[0]);
     n = nb_hid_report(report, keys, usages, 6u);
     for (i = 0; i < n; i++)
         push(NB_SRC_USB, usages[i], (int)keys[i]);

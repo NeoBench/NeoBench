@@ -275,7 +275,15 @@ drawers.
 
 The keyboard follows the window you are in: the cursor keys walk the list
 that is standing or move the caret, Return opens what is lit or starts a new
-line, and Escape puts down whichever program has the keyboard.
+line, and Escape puts down whichever program has the keyboard. Tab walks the
+keyboard round the programs that are running, in the order the task row shows
+them and wrapping at the end; Ctrl with a cursor key carries the window the
+keyboard is in by eight pixels, against the same wall as the drag; and either
+cursor key with Shift held pages the reader, which is the key the keymap has
+no Page Up or Page Down for. The start menu keeps all three while it stands,
+as it keeps the cursor keys. A press on a task button gives that window the
+keyboard, and a press on the button of the window that is already lit puts it
+down.
 
 ## Building
 
@@ -467,7 +475,10 @@ detection ladder answer with the right model.
       boot a desktop Amiga, which cannot boot one) and streamed to a
       blank disk only, with installed, damaged and foreign disks left
       exactly as they are
-- [ ] Input handling and window management on top of the static scene
+- [x] Input handling and window management on top of the static scene:
+      task-row buttons that raise as well as put down, Tab to walk the
+      keyboard round the windows that are standing, and Ctrl with a cursor
+      key to carry one
 
 ## Licence
 
