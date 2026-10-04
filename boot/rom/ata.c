@@ -109,7 +109,7 @@ static int floating(uint8_t st)
  * the probe finishes, so an empty second unit cannot overwrite what the
  * first one saw -- the boot log has to report the unit it talked about.
  *
- * Deliberately zero-initialized: a global carrying a non-zero initializer
+ * Deliberately zero-initialised: a global carrying a non-zero initialiser
  * is emitted into .data, and rom.ld places .data in the ROM at $FC0000
  * where hardware drops the write, so the variable would never change.
  * Zero init lands it in .bss in chip RAM instead; nb_ata_identify() primes

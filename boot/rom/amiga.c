@@ -180,8 +180,8 @@ extern void nb_vbl_isr(void);
 /*
  * Uptime.  nb_vbl_tick() runs from vbl.S once per field -- PAL is 50
  * fields a second, so 50 ticks make one second.  Both live at file scope
- * with no initializer, which is what puts them in .bss in chip RAM: a
- * mutable global with an initializer would be assembled into .data, and
+ * with no initialiser, which is what puts them in .bss in chip RAM: a
+ * mutable global with an initialiser would be assembled into .data, and
  * rom.ld maps .data into the ROM at $FC0000, where every store is
  * dropped on the floor.
  */
@@ -331,7 +331,7 @@ int amiga_display_ready(void)
 
 /*
  * Shadow of the hardware palette: 256 RGB triples plus an upload counter.
- * Both are plain .bss -- zeroed by boot.S, no initializer to land in .data
+ * Both are plain .bss -- zeroed by boot.S, no initialiser to land in .data
  * and be dropped by the ROM mapping.
  */
 static uint8_t  nb_pal_rgb[256][3];

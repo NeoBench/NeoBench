@@ -10,7 +10,7 @@
  * The loader transfers control here after:
  *   - Loading all PT_LOAD segments
  *   - Clearing BSS
- *   - Initializing boot_info
+ *   - Initialising boot_info
  */
 typedef void (*nb_kernel_entry_t)(const nb_bootinfo_t *boot);
 

@@ -30,7 +30,7 @@
 #define AUD0LCH     0x0a0               /* sample address, high          */
 #define AUD0LCL     0x0a2               /* sample address, low           */
 #define AUD0LEN     0x0a4               /* length in words; write arms   */
-#define AUD0PER     0x0a6               /* period in color clock ticks   */
+#define AUD0PER     0x0a6               /* period in colour clock ticks  */
 #define AUD0VOL     0x0a8               /* 0..64, linear                 */
 #define DMACON      0x096
 #define DMACONR     0x002               /* read back of the same state    */
@@ -44,8 +44,8 @@
 
 #define INTF_AUD0   0x0001U             /* channel 0 reached its end     */
 
-/* 1 while a buffer is in flight.  File scope without an initializer: an
- * initialized global would land in .data, which the reset build maps
+/* 1 while a buffer is in flight.  File scope without an initialiser: an
+ * initialised global would land in .data, which the reset build maps
  * into write-only ROM. */
 static uint8_t nb_snd_state;
 static uint32_t nb_snd_t0;                 /* nb_fields when it started  */

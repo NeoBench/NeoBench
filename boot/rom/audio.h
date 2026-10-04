@@ -31,7 +31,7 @@
  * data of even length.
  *
  *      0  "NSND"
- *      4  period    Paula period in color clock ticks
+ *      4  period    Paula period in colour clock ticks
  *      6  channels  1
  *      8  length    sample bytes
  *     12  rate      samples per second, as generated

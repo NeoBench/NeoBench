@@ -111,7 +111,7 @@ help:
 	@echo "Targets:"
 	@echo "  make          Build"
 	@echo "  make debug    Debug build"
-	@echo "  make release  Optimized build"
+	@echo "  make release  Optimised build"
 	@echo "  make run      Build and create disk.nbfs"
 	@echo "  make clean    Remove build directory"
 	@echo ""

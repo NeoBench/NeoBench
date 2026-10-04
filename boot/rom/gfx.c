@@ -626,7 +626,7 @@ void gfx_blur(int x, int y, int w, int h)
  * The face in use.  Xen is NB_FONT_XEN, zero, and .bss starts zeroed,
  * so the boot console is already setting type in Xen before Config/ has
  * been read; a file can then move the selection to the console face or
- * back again.  No initializer here: .data is write-only ROM.
+ * back again.  No initialiser here: .data is write-only ROM.
  */
 static int cur_font;
 
