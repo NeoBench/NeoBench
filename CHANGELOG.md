@@ -217,6 +217,18 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Desktop
 
+- **The panel clock ticks** (`user/gui/desktop/main.c`). The uptime readout
+  had no paint of its own: the panel is drawn only when something marks its
+  rows, and nothing marked them as the seconds went, so an idle desktop sat
+  showing the number it had at the last event that happened to touch the
+  bar while `nb_secs` kept running behind it — minutes of it, until some
+  other change came along to repaint the glass. `nb_desktop_tick()`, the
+  call the field loop already owes the things that move without being
+  touched, watches the count now and bands the panel's rows the moment it
+  moves; the clock and the film are answered together so a second that is
+  also a frame costs one present rather than two. It is 26 rows against the
+  wallpaper's 512 — a band's worth of pack once a second — and the readout
+  is then as current as the field counter it is read from.
 - **NeoShell, the command line — the eighth program.**
   `N_PROGRAMS` is eight now: NeoShell takes slot 7 (`focus_p` 8, `win_open`
   case 8), a button on the task row, a stop in Tab's round, a row of the

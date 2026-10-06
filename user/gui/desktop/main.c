@@ -4510,18 +4510,51 @@ static int vlc_step(void)
 void nb_desktop_render(void);
 
 /*
- * The desktop's answer to a field passing: the player is the only
- * thing here that changes without anybody touching it, so this is the
- * one call the main loop owes it.  It paints its own rows and presents
- * them, and it says nothing on serial -- a log line every frame would
- * be a log nobody could read, and the two lines that matter, the open
- * and the end, are printed where they happen.
+ * The desktop's answer to a field passing: two things here change
+ * without anybody touching them -- the player, and the uptime in the
+ * panel -- so this is the one call the main loop owes them both.
+ *
+ * The panel is the awkward one.  It is drawn only when something marks
+ * its rows, and nothing marks them on the second: an idle desktop sits
+ * for ever showing the number it had at the last event that happened
+ * to touch the bar, while nb_secs behind it keeps running.  So when the
+ * count moves, the panel's rows go into the band set like any other
+ * changed thing, and the readout is then as current as the field
+ * counter it is read from.  That is a band's worth of pack once a
+ * second -- the film at full screen would be twenty times the rows.
+ *
+ * Both are answered together so a second which is also a frame costs
+ * one present rather than two, and neither says anything on serial: a
+ * log line every frame would be a log nobody could read, and the two
+ * lines that matter, the open and the end, are printed where they
+ * happen.
  */
+static unsigned clock_secs;          /* the uptime the panel shows       */
+
 void nb_desktop_tick(void)
 {
-    if (!vlc_open || !vlc_step())
+    int repaint = 0;
+
+    if (nb_secs != clock_secs)
+    {
+        clock_secs = nb_secs;
+
+        if (nb_prefs.taskbar)
+        {
+            band_add(486, 512);      /* the panel, all of it             */
+            repaint = 1;
+        }
+    }
+
+    if (vlc_open && vlc_step())
+    {
+        band_vlc(0);
+        repaint = 1;
+    }
+
+    if (!repaint)
         return;
-    band_vlc(0);
+
     nb_desktop_render();
     nb_pointer_after_present();
 }
