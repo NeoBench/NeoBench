@@ -317,8 +317,12 @@ make -C boot/rom
 ```
 
 Requires an m68k cross GCC (`m68k-linux-gnu-gcc` / `ld` / `objcopy`, or the
-bebbo toolchain on `PATH`). Output: `boot/rom/neobench.rom`, a 512 KB image
-vectors at 0, runnable as a Kickstart ROM replacement in an emulator.
+bebbo toolchain on `PATH`) and a Rust toolchain for the ROM's Rust half
+(`libs/nb_rs` — stable is enough, since `RUSTC_BOOTSTRAP=1` lets it drive
+`-Zbuild-std`; `rust-src` and an LLVM with the M68k backend are the two
+things it cannot do without, both explained in `libs/nb_rs/README.md`).
+Output: `boot/rom/neobench.rom`, a 512 KB image with vectors at 0, runnable
+as a Kickstart ROM replacement in an emulator.
 
 To press the install disc:
 
@@ -330,8 +334,9 @@ Output: `images/NeoBench-0.1.9.iso` — the ROM rebuilt and its chainload
 hunk linked after it, `system/` packed into `NBFS.IMG` by
 `tools/mknbfs.py` (checked by `tools/nbfs/info/nbfs-info`), and the six
 staged files pressed into a plain ISO 9660 level 1 volume by
-`tools/mkiso.py`. Nothing but the cross GCC and `python3` is needed on the
-host; like everything under `images/`, the disc itself is not tracked.
+`tools/mkiso.py`. Nothing but the cross GCC, a Rust toolchain and `python3`
+is needed on the host; like everything under `images/`, the disc itself is
+not tracked.
 
 ## The install disc
 

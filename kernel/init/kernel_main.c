@@ -28,6 +28,28 @@ extern int  nb_pointer_y(void);
 extern void nb_pointer_dump(void);
 extern void nb_desktop_dump(void);
 extern int  nb_shell_boot(void);
+extern unsigned nb_rs_selftest(unsigned seed);
+
+/* ------------------------------------------------------------------ *
+ * The Rust half's read-out: serial only, the line nb_prefs_dump()      *
+ * already writes, and never a second of the boot log.                  *
+ * ------------------------------------------------------------------ */
+
+static void rs_wire(const char *s)
+{
+    while (*s)
+        amiga_serial_putc(*s++);
+}
+
+/* Exactly eight hexadecimal digits, most significant first. */
+static void rs_mask(unsigned v)
+{
+    static const char dig[] = "0123456789abcdef";
+    int i;
+
+    for (i = 7; i >= 0; i--)
+        amiga_serial_putc(dig[(v >> (i * 4)) & 15u]);
+}
 
 void kernel_main(const nb_bootinfo_t *boot)
 {
@@ -57,6 +79,35 @@ void kernel_main(const nb_bootinfo_t *boot)
     nb_prefs_load();
     nb_prefs_dump();
     kernel_started("Load Preferences from Config/");
+
+    /*
+     * The Rust half of the ROM answers a selftest here, before
+     * anything else is trusted to it: six identities -- division with
+     * its remainder, signed and unsigned, multiplication against
+     * thirty-one additions, rotation against shift-or, byte order in
+     * memory, and a loop both halves can count -- each over a value
+     * the compiler did not know when it compiled the code, so the
+     * test cannot be folded into a constant that always passes.  A
+     * wrong instruction or a wrong data layout therefore fails here,
+     * on the wire, rather than on a screen; and it says nothing at
+     * all to the console, because a selftest that passed has no place
+     * in the log.  One amber line is the whole way it appears, and
+     * only when the codegen is at fault rather than the machine.
+     */
+    {
+        unsigned rs = nb_rs_selftest(nb_prefs.hold);
+
+        rs_wire(">rs ");
+        if (rs)
+        {
+            rs_wire("fail mask=");
+            rs_mask(rs);
+            rs_wire("\r\n");
+            kernel_warn("Rust codegen selftest");
+        }
+        else
+            rs_wire("ok\r\n");
+    }
 
     kernel_starting("NeoBench Kernel Initialisation");
     nb_sound_init();

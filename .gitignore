@@ -17,3 +17,6 @@ tools/nbfs/mkfs/*.nbfs
 # Python bytecode
 __pycache__/
 *.pyc
+
+# The Rust half's build tree; cargo builds inside the crate
+libs/nb_rs/target/

@@ -1,0 +1,15 @@
+[package]
+name = "nb_rs"
+version = "0.1.9"
+edition = "2021"
+description = "The Rust half of NeoBench, taken in phase by phase"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["staticlib"]
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+codegen-units = 1
+lto = false

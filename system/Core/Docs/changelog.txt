@@ -2,6 +2,28 @@ NeoBench changelog
 ==================
 
 0.1.9
+  The first Rust object in the ROM, held to a selftest (libs/nb_rs,
+  boot/rom/Makefile, kernel/init/kernel_main.c).
+    nb_rs is a static library cargo builds for m68k-unknown-none-elf, the
+    tier-3 bare-metal target, its core compiled from rust-src by the
+    stable toolchain with RUSTC_BOOTSTRAP=1, and the ROM link takes the
+    archive beside the C objects it has always taken.  Two pins keep it
+    honest with what is around it: RUSTFLAGS fixes LLVM's CPU at M68000,
+    because the target's own default is an M68010 and everything else
+    here is 68000 code, and the archive is linked after the objects so
+    lib32.c's __mulsi3 and __divsi3 answer first and compiler_builtins is
+    never opened.  nb_rs_selftest() runs at boot over six identities --
+    division with its remainder signed and unsigned, multiplication
+    against thirty-one additions, rotation against shift-or, byte order
+    in memory, and a loop both halves can count -- each against a value
+    the compiler did not know when it compiled the code, so the test
+    cannot be folded into a constant that always passes.  It reports on
+    serial alone (>rs ok), a selftest that passed having no place in the
+    log; only a failure earns the amber line "Rust codegen selftest".
+    222 bytes of ROM text, _end unmoved at $00139584, and both ways in
+    verified -- the ROM boots at 11 WARNs and 0 FAILED, and the
+    chainload from a genuine AmigaOS 3.2.3 S:Startup-Sequence answers
+    NBCHAIN mode=U and NBCHAIN cacr=00000000 before the same >rs ok.
   NeoShell, the command line -- the eighth program.
     N_PROGRAMS is eight now: NeoShell takes slot 7 (focus_p 8, win_open
     case 8), a button on the task row, a stop in Tab's round and an entry

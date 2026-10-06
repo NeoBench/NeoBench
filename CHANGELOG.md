@@ -4,6 +4,31 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ## 0.1.9
 
+### Rust
+
+- **The first Rust object in the ROM, held to a selftest** (`libs/nb_rs`,
+  `boot/rom/Makefile`, `kernel/init/kernel_main.c`). `nb_rs` is a static
+  library cargo builds for `m68k-unknown-none-elf`, the tier-3 bare-metal
+  target, `core` for it compiled from `rust-src` by the stable toolchain
+  with `RUSTC_BOOTSTRAP=1`; the ROM link takes the archive beside the C
+  objects it has always taken. Two pins keep it honest with what is
+  around it: `RUSTFLAGS` fixes LLVM's CPU at `M68000`, because the
+  target's own default is an `M68010` and everything else here is 68000
+  code, and the archive is linked *after* the objects so `lib32.c`'s
+  `__mulsi3` and `__divsi3` answer first, leaving `compiler_builtins`
+  unopened. `nb_rs_selftest()` runs at boot over six identities — division
+  with its remainder, signed and unsigned, multiplication against
+  thirty-one additions, rotation against shift-or, byte order in memory,
+  and a loop both halves can count — each against a value the compiler
+  did not know when it compiled the code, so the test cannot be folded
+  into a constant that always passes. It reports on serial alone
+  (`>rs ok`), because a selftest that passed has no place in the log; only
+  a failure earns the amber line `Rust codegen selftest`. 222 bytes of
+  ROM text, `_end` unmoved at `$00139584`, and both ways in verified: the
+  ROM boots at 11 WARNs / 0 FAILED, and the chainload from a genuine
+  AmigaOS 3.2.3 `S:Startup-Sequence` answers `NBCHAIN mode=U` and
+  `NBCHAIN cacr=00000000` before the same `>rs ok`.
+
 ### Installation
 
 - **An install disc, pressed by `make iso`**: `images/NeoBench-0.1.9.iso`,

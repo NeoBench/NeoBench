@@ -31,6 +31,16 @@ COMMON_CFLAGS := \
 KERNEL_DIR := ../../kernel
 USER_DIR   := ../../user/gui/desktop
 
+# The Rust half: a static library cargo builds for the bare-metal m68k
+# target and the link then takes beside the C like any other object.
+# RUSTC_BOOTSTRAP lets the stable toolchain drive -Zbuild-std, which is
+# what builds `core' for a tier-3 target that ships no prebuilt one, and
+# RUSTFLAGS pins LLVM's CPU back from the target's own default (M68010)
+# to the 68000 everything else in this ROM is compiled for.
+RS_DIR  := ../../libs/nb_rs
+RS_LIB  := $(RS_DIR)/target/m68k-unknown-none-elf/release/libnb_rs.a
+CARGO   := $(HOME)/.cargo/bin/cargo
+
 OBJS := \
     boot.o \
     amiga.o \
@@ -102,8 +112,16 @@ $(USER_DIR)/%.o: $(USER_DIR)/%.c
 # Header dependencies (font8x8.h, amiga.h, ...); generated next to the objects.
 -include $(OBJS:.o=.d)
 
-$(ELFS): $(OBJS) rom.ld
-	$(LD) -T rom.ld -nostdlib -o $@ $(OBJS)
+$(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock $(RS_DIR)/src/lib.rs
+	@command -v $(CARGO) >/dev/null 2>&1 || \
+	    { echo "rust: cargo is required and was not found at $(CARGO)"; exit 1; }
+	cd $(RS_DIR) && RUSTC_BOOTSTRAP=1 RUSTC=$(HOME)/.cargo/bin/rustc \
+	    RUSTFLAGS="-C target-cpu=M68000" \
+	    $(CARGO) build --release --target m68k-unknown-none-elf \
+	    -Zbuild-std=core,panic_abort
+
+$(ELFS): $(OBJS) rom.ld $(RS_LIB)
+	$(LD) -T rom.ld -nostdlib -o $@ $(OBJS) $(RS_LIB)
 	$(CROSS)size $@
 
 $(TARGET): $(ELFS)
@@ -116,8 +134,8 @@ $(TARGET): $(ELFS)
 # KEEP in ram.ld pinning chain_entry to offset 0 instead.
 CHAIN_OBJS := $(OBJS) chain.o
 
-$(CHAIN_ELF): $(CHAIN_OBJS) ram.ld
-	$(LD) -T ram.ld -nostdlib --emit-relocs -o $@ $(CHAIN_OBJS)
+$(CHAIN_ELF): $(CHAIN_OBJS) ram.ld $(RS_LIB)
+	$(LD) -T ram.ld -nostdlib --emit-relocs -o $@ $(CHAIN_OBJS) $(RS_LIB)
 	$(CROSS)size $@
 
 $(CHAIN_EXE): $(CHAIN_ELF) $(ELF2HUNK)
@@ -125,3 +143,4 @@ $(CHAIN_EXE): $(CHAIN_ELF) $(ELF2HUNK)
 
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) $(PFS_DATA) $(SND) $(ELFS) $(TARGET) $(CHAIN_ELF) $(CHAIN_EXE)
+	rm -rf $(RS_DIR)/target
