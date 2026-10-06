@@ -1152,22 +1152,38 @@ void gfx_present(void)
         }
 
         /*
-         * Hold the fetchers while the frame is rewritten.  The palette
-         * goes up first, so with bitplane DMA stopped the display shows
-         * COLOR00 -- slot 0 of the new palette, the wallpaper colour --
-         * for the whole pack instead of a half-old/half-new scrambled
-         * picture.  It is only uploaded when it has actually changed:
-         * the hardware already holds the last one, and a repaint that
-         * keeps the palette keeps the picture continuous too.
+         * The present is staged: the palette first under a hold of its
+         * own, then the pack with the fetchers running.
+         *
+         * The palette cannot be let out halfway -- either the whole
+         * frame is read through the new numbers or none of it is -- so
+         * it goes up under a hold that is a hundred-odd register
+         * writes, a fraction of a line, and invisible.  It is only
+         * uploaded when it has actually changed: the hardware already
+         * holds the last one, and a repaint that keeps the palette
+         * keeps the picture continuous too.
+         *
+         * The pack used to run under a hold as well, which put the
+         * wallpaper colour on the screen for every row of it.  That was
+         * a blink when a frame could be packed in a field; a frame
+         * this size takes seconds, so opening a program blanked the
+         * machine out and brought it back afterwards.  With the
+         * raster left running, the rows that have not been touched
+         * still hold their old numbers, and old numbers read through a
+         * new palette are the old picture in the new colours -- the
+         * window, the bar and the text all still where they were --
+         * while the new picture comes up behind them from the top
+         * down, in the order the raster reads it.  A half-updated
+         * picture over seconds, rather than no picture at all.
          */
-        amiga_display_hold(1);
-
         if (cut) {                      /* hardware palette            */
+            amiga_display_hold(1);
             for (i = 0; i < npal; i++)
                 amiga_set_color((unsigned)i, pal8[i * 3u],
                                 pal8[i * 3u + 1], pal8[i * 3u + 2]);
             for (; i < 256u; i++)
                 amiga_set_color((unsigned)i, 0, 0, 0);
+            amiga_display_hold(0);
         }
 
         /* planar pack: 8 pixels -> one byte per plane
@@ -1216,8 +1232,6 @@ void gfx_present(void)
             pack0 = (int)y0;
             pack1 = (int)y1;
         }
-
-        amiga_display_hold(0);
 
         if (worst <= PAL_FAR)
             break;

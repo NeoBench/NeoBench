@@ -1,0 +1,25 @@
+# NeoBench program entry.
+#
+# The first line of a file that is neither blank nor a comment may say
+# what the file is for.  "program = name" makes the file an entry rather
+# than a document: choosing it in Files starts that program instead of
+# opening it, so a drawer can hold a program the way the start menu
+# does.  The name is one of the desktop's own -- files, clock, monitor,
+# about, preferences, neotext, vlc -- and a file that names anything
+# else, or that says nothing at all, opens in the reader as it always
+# has.
+#
+# VLC is filed here, in the drawer that holds the media, because that
+# is the drawer it plays: the pictures, the films and the sounds are
+# the files it reads, so the entry stands beside them rather than in
+# the tools.  It is the one program of the seven that has to look at
+# the store before it can show anything at all, and it lists what it
+# finds -- the still pictures in Pictures, the films in Videos, the
+# sounds in Music, and whatever of the three is filed here with it.
+#
+# The start menu lists it as well, under the rule beside Preferences:
+# the menu keeps the programs the machine is for, and a player for the
+# media drawer is one of them.  This file is the way to it from where
+# the media itself is.
+
+program = vlc

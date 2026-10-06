@@ -2,11 +2,11 @@
 
 Notable changes to NeoBench, newest first. British English throughout.
 
-## 0.1.7
+## 0.1.9
 
 ### Installation
 
-- **An install disc, pressed by `make iso`**: `images/NeoBench-0.1.7.iso`,
+- **An install disc, pressed by `make iso`**: `images/NeoBench-0.1.9.iso`,
   five megs of plain ISO 9660 level 1 — `NBFS.IMG` (the system tree packed
   as an NBFS volume by `tools/mknbfs.py`), `NEOBENCH.EXE` (the chainload
   hunk), `NEOBENCH.ROM` and the three text files, with NeoBench's own
@@ -64,6 +64,12 @@ Notable changes to NeoBench, newest first. British English throughout.
 - `system/Core/Docs/guide.pdf` ships as a real document to open: two pages,
   Flate content streams, a real cross-reference table, written for the reader
   to read.
+- **`system/Core/Docs/neoshell.txt`, the NeoCommands reference.** The same
+  thirteen commands `help` prints at the prompt, written out with what each
+  of them reads and what none of them can do, the keys the line takes, the
+  three ways in — the hold, `failsafe`, and the entry in Tools — and the one
+  way out. It is a document like any other: Files opens it in the reader,
+  and `type neoshell.txt` from the shell prints its first thirty lines.
 - The reader is honest about the store: a text file can be typed into and says
   so on its status line — edited, not saved — because PFS has no write path
   yet.
@@ -99,13 +105,144 @@ Notable changes to NeoBench, newest first. British English throughout.
   drawer as well as from the start menu or from the document that needs it.
   The drawer carries `tools.txt`, its own note saying what is filed there and
   what is coming, so a directory holding a program says so the way `Config/`
-  does. NeoShell and the calculator are the next two names for it.
+  does. NeoShell stands in it now; the calculator is the next name for it.
 - **Files shows seven rows where it showed six.** The root carries six
   drawers now — Apps, Config, Core, Home, Temp and Tools — so the list, its
   object count and the window's height grew by one row.
+- **NeoShell is the second entry in it.** `Tools/NeoShell` reads
+  `program = neoshell` on its first line, exactly as its neighbours do, so
+  the command line starts from the drawer the way the dial and the reader
+  do. The browser draws its tile for it in the sky hue the set keeps for
+  it — a screen cut out of the ramp, a chevron standing on its first line
+  and a caret under that, which is the one mark none of the others
+  carries — and the drawer's note says what it is and what boots with it.
+  Its name comes out of `prog_name[]`, hoisted out of `program_slot_of()`
+  and shared with the task row and with the shell's own `progs`, so the
+  store's entries and the command line read one list rather than two that
+  have to be kept in step.
+
+### Media
+
+- **VLC, a player for what the store holds — the seventh program.**
+  `N_PROGRAMS` is eight now, the media player being the seventh of them: it
+  takes slot 6 (`focus_p` 7, `win_open` case 7),
+  a button on the task row, a stop in Tab's round and
+  an entry of its own in the store at `system/Core/Media/VLC`, so Files
+  starts it the way it starts any program and the browser draws its icon
+  for it. It is the only one of the eight that has to look at the store
+  before it can show anything at all: `vlc_scan()` walks four drawers —
+  `Home/Pictures`, `Home/Videos`, `Home/Music` and `Core/Media` — and
+  keeps the files it can read, to `VLC_MAX` (24) of them. The window is a
+  240×136 pane with the list and the name beside it and the transport
+  under that: `window_vlc()` draws the whole of it, `hit_vlc()` takes the
+  presses in it, and `vlc_key()` takes the keys — Space or Return starts
+  and stops, the left and right arrows walk a film a frame at a time, and
+  Escape puts the player down like anything else.
+- **Six decoders, and what each of them will and will not read.**
+  `vlc_kind_of()` decides from the first bytes of a file which one to
+  call, and a file that fits none of them is reported as unsupported
+  rather than guessed at: portable pixmaps, P6 and P3, comments and all,
+  maximum value 255; Windows bitmaps of 8, 24 or 32 bits, either way up,
+  uncompressed, with the palette an eight-bit one names; network graphics
+  of colour types 0, 2, 3, 4 and 6 at eight bits a sample, not
+  interlaced, one run of image data or several, and all five of the row
+  filters; IFF ILBM of one to eight planes, uncompressed or ByteRun1
+  over the whole body at once; YUV4MPEG2, four-two-zero, at whatever
+  frame rate the header carries and nothing else — a file that names
+  another sampling is refused rather than decoded as though it had named
+  none; and the two sounds, RIFF wave of eight or sixteen bits in one
+  channel or two, and NeoBench's own NSND. Both chunk-bearing formats
+  read their chunks the way they are written: the name first and the
+  length after it, which is what IFF and RIFF do and what a PNG does
+  not — a PNG's length comes before its name.
+- **Where each decode goes.** A picture is built in `vlc_pix`, 65,280
+  bytes of `.bss` and the one new thing in it that is large, and handed
+  across to the pane when it is finished; sound goes to the chip Paula
+  reads at `NB_SND_BASE`, which the player has stopped before it starts.
+  A PNG inflates into that same chip buffer, because the raw bytes behind
+  a picture are more than the pane can hold compressed, and when a file
+  carries its stream in several runs they are gathered into `vlc_pix`
+  first, since that is the only room big enough for them. Every size is
+  checked against the pane before the decode begins, so a picture too big
+  for it says so rather than running off the end of the frame, and
+  nothing any of this does comes near `$D80000..$FFFFFF`.
+- **The film steps on the field count, not on a press**
+  (`nb_desktop_tick()`). Every other program here answers a press and
+  costs nothing between them; the player has to move by itself, so the
+  kernel's input loop asks it once a field, after `nb_sound_poll()`,
+  whether anything is due. It repaints through `band_vlc()` and
+  `nb_desktop_render()` only when a frame actually is, and otherwise
+  returns without touching the screen. Hiding the desktop does not stop
+  what is playing: the window goes down and the sound does not, because a
+  player that had opinions about what you were doing would be a poor one.
+- **Six samples, and the tool that makes them** (`tools/genmedia.py`).
+  The tree ships one file of each kind it reads — `Home/Pictures/` gets
+  `spectrum.ppm`, `tiles.bmp`, `plasma.png` and `rings.iff`,
+  `Home/Videos/` gets `orbit.y4m` and `Home/Music/` gets
+  `arpeggio.wav` — 49,082 bytes between them, all of it written from
+  arithmetic that does not depend on the day it is run, so regenerating
+  changes nothing in the tree unless a shape in the script changes. The
+  colours are deliberately smooth because the desktop quantises every
+  pixel to one hundred and twenty-eight of them anyway, and a sample of
+  near-identical colours would be a sample of the quantiser rather than
+  of itself. Each format is exercised where it is least likely to be
+  trivial: the network graphic cycles all five row filters and carries
+  its stream in two runs of image data, and the sound is sixteen bits in
+  two channels so the downmix has a pair of channels to downmix.
 
 ### Desktop
 
+- **NeoShell, the command line — the eighth program.**
+  `N_PROGRAMS` is eight now: NeoShell takes slot 7 (`focus_p` 8, `win_open`
+  case 8), a button on the task row, a stop in Tab's round, a row of the
+  z order and an entry of its own in the store at `system/Tools/NeoShell`,
+  so Files starts it the way it starts any other program and the browser
+  draws its terminal tile for it. The window is a 536×360 pane of the wash
+  the wallpaper carries, lit along its top edge with the prompt standing at
+  the foot: `window_shell()` draws it, `hit_shell()` takes the presses in it
+  and `sh_key()` takes the keys — left and right carry the caret, backspace
+  takes the letter in front of it, Return runs the line, and the two arrows
+  bring back what has scrolled off the top of the pane, which is the one
+  thing this shell does with them and the reason they are not handed to a
+  list standing behind it. Escape still puts the program down like anything
+  else; on the boot screen, where there is no window to put down, it clears
+  the line.
+  What it holds is a ring of forty-eight lines and the line being typed, and
+  the commands — NeoCommands — read only the store the ROM carries and what
+  the hardware probe answered: `help`, `ver`, `cls`, `echo`, `info`, `cfg`,
+  `pwd`, `dir`, `cd`, `type`, `progs`, `run` and `desktop`. A verb is read
+  without regard to case and a name after one is spelled as the store spells
+  it, also without regard to case; there is no path outside the store for a
+  command to name, which is what makes this a shell for NeoBench rather than
+  a shell that happens to be running on it. `Core/Docs/neoshell.txt` carries
+  the same list `help` prints, and the `>ui` dump on the wire carries `h=`
+  for whether the program is up, with the rest of the flags.
+- **Wash, Vista: the Aurora under the Aero chrome**
+  (`system/Config/screen.cfg`, `user/gui/desktop/main.c`). `bg_top` and
+  `bg_bot` now run from a deep navy `#0A1E45` down to `#0A4E86`, the blue the
+  glass is cut for — the two colours a store without a `screen.cfg` falls
+  back to as well — and the wash is Windows Vista's own wallpaper: the
+  aurora, five blooms laid end to end down the screen from the upper left to
+  the lower right, overlapping by more than half their own radius so the run
+  reads as one ribbon of light rather than five lamps, white at the two
+  points where its core shows. It crosses the mark, which is what lights the
+  branding rather than inks it, and has fallen clear of the wordmark by the
+  time it reaches that. The artwork reads the weight of the field it stands
+  on as before: `wallpaper()` asks the top colour whether it is a night one
+  and answers with the aurora's three blues and a pale hairline grid that a
+  cream field never sees; the four fixed backdrops are untouched and still
+  light, where the ink does the work exactly as it did. The start orb is
+  Vista's on the glass too — a lit blue sphere, its top turned to the sky the
+  glass is cut for and its foot falling to a navy — with NeoBench's mark
+  still on the pearl and the brand teal still thrown as the halo when the
+  menu opens, which is the one piece of that desktop's branding that is not
+  somebody else's. The caption is
+  glass rather than a tint now — brightest under its own lit edge, stepping
+  down, shading where it meets the body, three alphas — the title is set
+  white over a pixel of the pane's own dark, and the close button is Vista's:
+  red, lit along its top edge, pooling dark at the foot, the cross cut in
+  white, and the only warm colour on a window, which is the whole of what
+  makes it the one the eye finds without reading.
 - **Tab walks the keyboard round the windows, and Ctrl with a cursor key
   carries one.** Tab gives the keyboard to the next program that is running,
   in the order the task row numbers them and wrapping at the end; Ctrl with a
@@ -126,8 +263,8 @@ Notable changes to NeoBench, newest first. British English throughout.
   it on the way, as a press inside a window always does. The clamp is on the
   caption rather than the frame, so a window may stand half off an edge, as
   windows do on any desktop, but enough of the strip stays on the screen to
-  be picked up by again. All six move: the four program windows by their
-  captions, the dial and the monitor by their own bodies.
+  be picked up by again. All eight move: the six program windows by
+  their captions, the dial and the monitor by their own bodies.
 - **The windows are drawn in Aero**, which is what the bar and the start menu
   were already drawn in: a pane of glass across the caption with the backdrop
   still reading through it, a light steel rim, a shadow thrown below and to
@@ -153,9 +290,9 @@ Notable changes to NeoBench, newest first. British English throughout.
   on the task row is the same as it was. Clock and Monitor become entries in
   `Tools/`, beside NeoText and the note that says what the drawer holds, and
   About becomes one in `Core/Docs/`, beside the documentation it summarises.
-  Clock, Monitor and NeoText then come off the menu altogether: a program
-  filed in a drawer is started from the drawer, and `Apps/` and `Tools/`
-  both say where the three went.
+  Clock, Monitor and NeoText then come off the menu altogether, and About
+  follows them in the same pass: a program filed in a drawer is started from
+  the drawer, and `Apps/`, `Core/Docs/` and `Tools/` all say so.
 - **The start menu sets its name down its left edge.** The caption comes off
   the rule at the head of the pane and turns a quarter, standing in a band
   down the left of it with a divider beside the band, so it reads down the
@@ -167,14 +304,44 @@ Notable changes to NeoBench, newest first. British English throughout.
   `bar = classic` still gives the grey panel, the blue row and the hard edge.
 - **The menu is set in alphabetical order, and stands in the bar.** Both
   sections sort: the drawers run Bench, Core, Docs, Files, Home, Media, and
-  the rows under the rule run **About** then **Preferences** — which comes
-  back to the menu as its second program and still stands in `Config/`
-  beside the files it reads. A menu is a list the eye runs down looking for
-  one name, and no entry is worth keeping at the head of it against that.
+  the rows under the rule run **Preferences** then **VLC** — Preferences
+  comes back to the menu and still stands in `Config/` beside the files it
+  reads, VLC is the player described above, and About is the one that goes,
+  since a program filed in a drawer is started from the drawer. A menu is a
+  list the eye runs down looking for one name, and no entry is worth
+  keeping at the head of it against that.
   The panel's foot is the bar's top edge now, so it rises out of the
   furniture the orb sits in rather than floating over the middle of the
   screen, and it throws no shadow down there — nothing comes between the
   two.
+- **The menu is flush with the screen's edge and answers a letter.**
+  `MENU_X` is 0, so the pane stands against the left edge of the display
+  rather than a little way in from it. It has no left margin to carry:
+  the band that sets its name down is already the thing at its left, and
+  a pane hanging in the middle of the screen with a band beside it would
+  be a pane that had missed. Type a letter while it stands and the choice
+  jumps to the next entry beginning with it, in either section, wrapping
+  past the one already chosen (`menu_jump()`); an uppercase letter and
+  its lowercase are the same key, and a letter nothing is called by
+  leaves the choice where it was rather than clearing it.
+- **The present is staged, so a repaint no longer blanks the screen**
+  (`gfx_present()`). The palette goes up under a hold of its own — a
+  hundred-odd register writes, a fraction of a line, and not something
+  that can be let out halfway — and the pack then runs with the
+  fetchers going. It used to run held as well, which put slot 0 of the
+  palette on the screen for every row of it: the right answer while a
+  frame could be packed inside a field, and a machine that went blank
+  and came back once a frame took seconds, which is what opening a
+  program did. Left running, the rows the pack has not reached still
+  hold their old numbers, and old numbers read through a new palette
+  are the old picture in the new colours — the menu, the bar and the
+  text all still where they were — while the new picture comes up
+  behind them from the top down, in the order the raster reads it. A
+  half-updated picture rather than no picture at all. The bill is bus
+  time: with the fetchers asking for chip RAM while the frame is
+  rewritten, a repaint takes about twice as long as it did behind the
+  hold, which is a slower one you can watch instead of a fast one you
+  could not see.
 
 ### Fonts
 
@@ -227,6 +394,22 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Boot
 
+- **Three seconds to decide where the machine boots, and NeoShell is what
+  they can be spent on** (`kernel/init/kernel_main.c`, `boot/rom/prefs.c`).
+  The hold after the chime is a window as well as a pause: the receivers are
+  polled through it for the whole of it and Escape calls NeoShell up instead
+  of the compositor, so a machine that will not start its desktop — or that
+  is being asked about rather than used — is reached with no tool and no
+  rebuild, and a key typed early is still in the queue when the hold begins.
+  The grey hint line over it says so, `Config/boot.cfg`'s `failsafe = on`
+  asks for the shell outright for a machine kept for recovery, and a store
+  with no `Config/screen.cfg` in it goes there with a warning: the wash, the
+  bar and the face all come out of that file, so there is no desktop to
+  composite. All three print `[ OK ] Reached target NeoShell.` and land at
+  the same prompt, and the shell is the thing that decides when the desktop
+  comes up — `desktop` at the prompt is what returns here — which is what
+  makes it a place to fall back to rather than one to be stuck in. `failsafe`
+  is read, defaulted to off and dumped with the rest of `boot.cfg`.
 - **The BFG9060 says what it is** (`boot/rom/probe.c`). The A3000/A4000
   CPU-slot accelerator is not on the Zorro bus, so no scan of `$E80000` or
   `$FF000000` can ever mention it: the entry that names it is added to

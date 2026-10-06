@@ -1,4 +1,4 @@
-NEOBENCH 0.1.7 -- m68k / AGA
+NEOBENCH 0.1.9 -- m68k / AGA
 ============================
 
 NeoBench is an operating system for 68060 AGA and RTG Amigas
@@ -14,8 +14,9 @@ them is borrowed from anywhere else.  Open Files and walk down from
 the root to see it.
 
   Apps/                  programs; the entries so far are filed in
-                         Config/ and Tools/, and this drawer is kept
-                         for the ones that arrive as files of their own
+                         Config/, Core/ and Tools/, each beside what it
+                         goes with, and this drawer is kept for the
+                         ones that arrive as files of their own
   Config/                settings, read at boot straight from the image
     Preferences          the pane that changes the desktop now; this is
                          a program entry rather than a document, so
@@ -31,13 +32,15 @@ the root to see it.
   Core/                  the operating system itself
     Bench/               the benchmark harness
     Docs/                this directory
-    Media/               the startup sound and the desktop's artwork
+    Media/               the startup sound, the desktop's artwork,
+                          and VLC's own entry, standing with the media
+                          it plays
   Home/                  your own content
     Desktop/             what the desktop would hold
     Documents/           writing
-    Music/               audio
-    Pictures/            still images
-    Videos/              moving pictures
+    Music/               audio; a sound to play is filed here
+    Pictures/            still images; one of each kind is filed here
+    Videos/              moving pictures; a film is filed here
   Temp/                  where downloads land; there is no RAM disk
   Tools/                 the programs that are filed rather than
                          started from a document
@@ -47,6 +50,8 @@ the root to see it.
                          is doing with itself while you watch it
     NeoText              the reader, as an entry that reads
                          "program = neotext"
+    NeoShell             the command line, as an entry that reads
+                         "program = neoshell"
     tools.txt            what is filed in this drawer, and what is
                          coming
 
@@ -72,17 +77,27 @@ The boot
      card reader rather than a hard disk
   4. the startup chime sounds, once: the pass is timed against the
      sample rather than left to Paula, which would play it again
-  5. the log is held on screen for three seconds
-  6. the desktop takes the screen
+  5. the log is held on screen for three seconds, and Escape at any
+     point in it brings NeoShell up instead of the desktop
+  6. the desktop takes the screen -- unless Config/boot.cfg asks for
+     failsafe, or the store has no Config/screen.cfg to compose one
+     from, in which case NeoShell takes it instead
 
-Steps 3 and 5 are preferences -- "scan" and "hold" in boot.cfg.
+Steps 3 and 5 are preferences -- "scan" and "hold" in boot.cfg.  So is
+the third way into the shell: "failsafe = on" boots to NeoShell rather
+than to the desktop, which is the way in on a machine kept for
+recovery, and the shell's "desktop" command is what brings the
+compositor up again.
 
 The desktop
 -----------
 
-The bar along the bottom is cut the way Aero cuts the Windows 7
+The bar along the bottom is cut the way Aero cuts the Vista
 taskbar: a pane of tinted glass laid over the backdrop with a lit edge
-along the top of it, carrying the start orb, the pinned launchers, one
+along the top of it, carrying the start orb -- a lit blue sphere, its
+top turned to the sky the glass is cut for and its foot falling to a
+navy, with NeoBench's mark on the pearl it turns -- the pinned
+launchers, one
 button per program that is running (the lit one is the window you are
 in), the tray, the clock set in two lines, and a sliver on the very
 edge that takes the desktop away.  "bar" in screen.cfg cuts the same
@@ -109,13 +124,16 @@ with a divider between the band and the entries; the chosen row is
 the flat Workbench blue under the classic field "bar" asks for in
 screen.cfg, and under the default glass it lights the way every other
 surface here lights.  Both sections list in alphabetical order --
-Bench to Media above the rule, About then Preferences below it --
+Bench to Media above the rule, Preferences then VLC below it --
 because a menu is a list the eye runs down looking for one name.
 
 The icons themselves are drawn the way MUI drew its own: a rounded
 tile whose body ramps from a saturated tint to a deep one, a white rim
 round it, an arc of light along the top of it, and the mark cut out of
-the ramp in white.  One routine draws the tile at every size it is
+the ramp in white.  They are NeoBench's own set: nothing here is a
+drawing of somebody else's icon, and the only mark on the desktop that
+carries any name at all is NeoBench's.  One routine draws the tile at
+every size it is
 used at -- 24 pixels in the menu, 16 on the bar, 14 for the programs,
 12 in a directory row -- so the set stays one set as it gets smaller.
 Five hues carry the places, a sixth of slate carries an ordinary file,
@@ -131,12 +149,12 @@ The programs
 ------------
 
 The start menu names three of them: Files, which is one of the
-drawers above the rule, and About and Preferences, the two rows under
-it.  The other three are filed where they belong instead -- Clock,
-Monitor and NeoText in Tools/, and Preferences also in Config/ beside
-the files it changes -- so each is started from the drawer it stands
-in.  Tools/ is where NeoShell and the calculator will stand when they
-are written.
+drawers above the rule, and Preferences and VLC, the two rows under
+it.  The other five are filed where they belong instead -- Clock,
+Monitor, NeoText and NeoShell in Tools/, About in Core/Docs with the
+guide it explains, and Preferences also in Config/ beside the files
+it changes -- so each is started from the drawer it stands in.  Tools/
+is where the calculator will stand when it is written.
 
   Files        the directory browser, reading the store the image was
                built with; choosing a file in it opens NeoText, and
@@ -144,17 +162,25 @@ are written.
   Clock        an analogue dial, from Tools/Clock
   Monitor      two bars: fast memory in use, and the uptime, from
                Tools/Monitor
-  About        what this build is
+  About        what this build is, from Core/Docs/About
   NeoText      the reader, from Tools/NeoText
   Preferences  the backdrop, and the grid and the glow over it, from
                Config/Preferences
+  VLC          the player for pictures, film and sound, from
+               Core/Media/VLC
+  NeoShell     the command line, from Tools/NeoShell
 
 Preferences offers five backdrops -- wash, paper, azure, dusk and
 slate -- and paints the one you choose at once; "backdrop" in
 Config/screen.cfg says which the machine comes up with.  The grid and
-the glow are check boxes in the same pane.  All five are the same
-light field in five hues, so the mark, the wordmark and the chrome
-over them read alike on every one.
+the glow are check boxes in the same pane.  All five carry the same
+mark, wordmark and chrome, but they are not the same weight: wash is
+Windows Vista's own -- a deep navy falling to the blue the glass is
+cut for, with the aurora laid down it from the upper left to the
+lower right -- and the other four are light fields where the ink does
+the work.  The wallpaper asks the top colour which way to draw the
+glow and the grid, so neither goes missing over a dark field and
+neither washes out over a light one.
 
 NeoText opens any file: plain text as it is written, a PDF with its
 text lifted out of the page, and anything else as the bytes it is,
@@ -162,6 +188,29 @@ eight to a line.  It follows the caret as you type and says on its
 status line what it is showing and where you are in it.  The store
 has no write path yet, so a file you have typed into is labelled
 edited but not saved.
+
+VLC is the one program here that has to look at the store before it
+can show anything at all.  It lists every file it can read in the
+four drawers media is kept in -- Home/Pictures, Home/Videos,
+Home/Music and Core/Media -- puts the one that is chosen on a pane
+of its own, and carries the list and four transport buttons beside
+it.  A picture opens as it stands; a film steps frame by frame on
+the field count; a sound runs from the head, because Paula's
+position in a sample cannot be read back to come back to.  Space or
+Return starts and stops, the left and right arrows walk a film a
+frame at a time, and Escape puts the player down like anything
+else.
+
+NeoShell is the command line, and it is the one program here that
+starts over something rather than beside it: chosen from Tools/ it
+opens as a window with the desktop standing underneath it, while at
+boot it is the whole screen and the desktop has not come up yet.  Its
+commands are its own -- help, ver, cls, echo, info, cfg, pwd, dir, cd,
+type, progs, run and desktop -- and they read the store the image was
+built with and what the hardware probe answered, and nothing outside
+either, because there is no path outside the store for one of them to
+name.  "help" prints the list and Core/Docs/neoshell.txt writes it
+out.
 
 The windows are drawn in Aero terms -- a pane of glass across the
 caption with the backdrop still reading through it, a light steel rim
@@ -171,7 +220,7 @@ that is not one of its three buttons and the window goes where the
 pointer goes until the button comes back up, taking the keyboard with
 it on the way.  The clamp keeps the caption on the screen rather than
 the frame, so a window may stand half off an edge and still be picked
-up by again.  All six move: the four program windows by their
+up by again.  All eight move: the six program windows by their
 captions, the dial and the monitor by their own bodies.
 
 The keyboard follows the window you are in: the cursor keys walk the
@@ -194,7 +243,7 @@ The install disc is pressed by
 
   make iso
 
-into images/NeoBench-0.1.7.iso -- the disc this file came on, if you
+into images/NeoBench-0.1.9.iso -- the disc this file came on, if you
 are reading it from one.  It carries NBFS.IMG as its payload, the hunk
 executable and the ROM beside it, and NeoBench's NBISO block in sector
 0.  Attach it to the IDE bus beside a blank disk and boot: the ATAPI

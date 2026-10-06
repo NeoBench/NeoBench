@@ -3,6 +3,28 @@ NeoBench Music
 
 Audio goes here.
 
+VLC plays the sounds in this directory, and the ones filed with the
+system in Core/Media appear in the same list: the store is the
+whole of what the player can see, and it walks these four drawers
+in turn rather than the one it happens to be standing in.
+
+Two kinds are read.  RIFF wave files of eight or sixteen bits, one
+channel or two, and NeoBench's own NSND -- which is what the store
+ships in Core/Media, and what the sound the kernel makes arrives
+as.  Either way the samples end up in the chip RAM Paula reads,
+stereo down to the one channel Paula has, and the right hand
+brought under the left on the way.
+
+The sound runs from the head again after it has been stopped.  That
+is not a limit the player would choose: Paula's position in a
+sample is not something that can be read back, so there is nothing
+to come back to.  What is true of the restart is that it is the
+whole file again, at the volume the desktop's preferences carry.
+
+arpeggio.wav is here as an example: four notes, the right channel
+held at half of the left, so a machine listening for the downmix
+can hear the difference.
+
 The startup chime does not live in this directory.  It ships in
 Core/Media as startup.snd and is played by the kernel, because it
 has to be there before there is a store to look in and a sound

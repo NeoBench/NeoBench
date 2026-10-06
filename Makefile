@@ -23,7 +23,7 @@ iso:
 	cp system/Core/Docs/changelog.txt images/iso-root/CHANGES.TXT
 	python3 tools/mknbfs.py system images/iso-root/NBFS.IMG
 	tools/nbfs/info/nbfs-info images/iso-root/NBFS.IMG | grep -q '^Config$$'
-	python3 tools/mkiso.py images/iso-root images/NeoBench-0.1.7.iso
+	python3 tools/mkiso.py images/iso-root images/NeoBench-0.1.9.iso
 
 clean:
 	$(MAKE) -C libs/libnbfs clean

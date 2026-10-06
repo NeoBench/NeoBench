@@ -193,11 +193,15 @@ int nb_bd_index(const char *v)
  * The pair of colours the gradient is painted with.  Wash takes the two
  * Config/screen.cfg carries, so a file that sets them and says nothing
  * about the backdrop has exactly the desktop it had before there were
- * backdrops to choose from -- and the four fixed pairs are all light
- * fields, because the mark, the wordmark, the horizon glows and the
- * Workbench chrome over them were drawn against one.  They differ by
- * hue rather than by weight: a cream, a sky, a peach falling to lilac
- * and a cool grey-blue, against wash's white and mint.
+ * backdrops to choose from -- a deep navy falling to the blue Vista's
+ * glass is cut for, which is the field the chrome above it is cut for
+ * too: glass over it, and the artwork lit rather than inked.  The four
+ * fixed pairs are the other way round, all light fields, because a
+ * cream or a sky wants the mark and the wordmark drawn in ink.  They
+ * differ by hue rather than by weight: a cream, a sky, a peach falling
+ * to lilac and a cool grey-blue, against wash's two blues.  Which way
+ * the artwork goes is decided by the weight of the top colour, in
+ * wallpaper().
  */
 void nb_bd_colours(int i, uint16_t *top, uint16_t *bot)
 {
@@ -332,6 +336,8 @@ static void set_key(const char *k, unsigned klen, const char *v)
     }
     else if (key_is(k, klen, "scan"))
         nb_prefs.hwscan = on_off(v, 1);
+    else if (key_is(k, klen, "failsafe"))
+        nb_prefs.failsafe = on_off(v, 0);
 }
 
 static void apply(const struct pfs_node *n)
@@ -392,10 +398,10 @@ static void defaults(void)
     nb_prefs.grid    = 1;
     nb_prefs.glow    = 1;
     nb_prefs.taskbar = 1;
-    /* the NeoBench backdrop the desktop draws when there is no file to
-     * read: white over mint */
-    nb_prefs.bg_top  = NB_RGB(31, 63, 31);
-    nb_prefs.bg_bot  = NB_RGB(27, 59, 28);
+    /* the Vista wash the desktop draws when there is no file to read:
+     * deep navy over the blue the glass is cut for */
+    nb_prefs.bg_top  = NB_RGB(1, 7, 8);
+    nb_prefs.bg_bot  = NB_RGB(1, 19, 16);
     nb_prefs.backdrop = NB_BD_WASH;
 
     nb_prefs.shape   = NB_PTR_ARROW;
@@ -416,6 +422,7 @@ static void defaults(void)
 
     nb_prefs.hold      = 3;
     nb_prefs.hwscan    = 1;
+    nb_prefs.failsafe  = 0;
     nb_prefs.bar_style = BAR_AERO;
     nb_prefs.bar_glass = 20;
 }
@@ -557,5 +564,6 @@ void nb_prefs_dump(void)
     put(">prefs boot hold=");
     put_u(nb_prefs.hold);
     put(nb_prefs.hwscan ? " scan=on" : " scan=off");
+    put(nb_prefs.failsafe ? " failsafe=on" : " failsafe=off");
     put("\n\r");
 }

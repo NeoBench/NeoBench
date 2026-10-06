@@ -3,6 +3,19 @@ NeoBench Pictures
 
 Still images go here.
 
+VLC opens one of these on its own pane: the file is read, the pixels
+it carries are put into the pane, and the next name in the list
+takes the same route when it is chosen.  Four kinds are read as they
+stand, and there is one of each in this directory as an example:
+
+  spectrum.ppm    portable pixmap, P6, three samples a byte
+  tiles.bmp       Windows bitmap, eight bits and a palette
+  plasma.png      network graphic, zlib and all five row filters
+  rings.iff       IFF ILBM, eight planes and ByteRun1
+
+Anything else is reported as what it is rather than guessed at, and
+the message under the transport says so in as many words.
+
 The wallpaper is not a picture and is not in this directory: the
 desktop draws its own backdrop out of a gradient, three glows, a
 hairline grid and the NeoBench mark, all of it composited in the

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a NeoBench installer ISO.
 
-    python3 tools/mkiso.py images/iso-root images/NeoBench-0.1.7.iso
+    python3 tools/mkiso.py images/iso-root images/NeoBench-0.1.9.iso
 
 An ISO 9660 volume with NeoBench's installer boot block in the system
 area -- sector 0 carries the signature "NBISO", and that signature is

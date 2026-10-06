@@ -16,6 +16,7 @@ extern void kernel_starting(const char *unit);
 extern void kernel_started(const char *unit);
 extern void kernel_target(const char *target);
 extern void nb_desktop_render(void);
+extern void nb_desktop_tick(void);
 extern int  nb_desktop_click(int x, int y, int btn);
 extern int  nb_desktop_drag(void);
 extern int  nb_desktop_key(int c);
@@ -26,6 +27,7 @@ extern int  nb_pointer_x(void);
 extern int  nb_pointer_y(void);
 extern void nb_pointer_dump(void);
 extern void nb_desktop_dump(void);
+extern int  nb_shell_boot(void);
 
 void kernel_main(const nb_bootinfo_t *boot)
 {
@@ -135,13 +137,69 @@ void kernel_main(const nb_bootinfo_t *boot)
      * counter rather than on a loop of no-ops, so it is three seconds
      * however long a frame takes to compose, and the sound is polled
      * through it because that is what the main loop below would do.
+     *
+     * The hold is a window as well as a pause: Escape at any point in
+     * it brings NeoShell up instead of the compositor, which is the
+     * failsafe's manual side -- a machine that will not start its
+     * desktop, or that is being asked about rather than used, is
+     * reached from here with no tool and no rebuild.  Nothing is lost
+     * by a key typed early or late: the receivers are polled for the
+     * whole of the hold and the queue holds everything they caught.
+     *
+     * The other two ways in are Config/boot.cfg's own.  `failsafe = on`
+     * boots to the shell without asking, for a machine kept for
+     * recovery; and a store with no Config/screen.cfg in it has no
+     * desktop to composite -- the wash, the bar and the face all come
+     * out of that file -- so the shell is where it goes rather than to
+     * a screen nothing can be drawn on.  Either way the shell decides
+     * when the desktop comes up: `desktop` at the prompt is what
+     * returns here, which is what makes it a place to fall back to
+     * rather than a place to be stuck in.
      */
-    if (nb_prefs.hold)
     {
-        uint32_t t0 = nb_fields;
+        int shell = 0;
 
-        while (nb_fields - t0 < nb_prefs.hold * 50u)
-            nb_sound_poll();
+        if (!pfs_find("Config/screen.cfg"))
+        {
+            kernel_warn("Config/screen.cfg missing -- NeoShell");
+            shell = 1;
+        }
+        else if (nb_prefs.failsafe)
+        {
+            kernel_ok("Failsafe (Config/boot.cfg) -- NeoShell");
+            shell = 1;
+        }
+
+        if (!shell && nb_prefs.hold)
+        {
+            uint32_t t0 = nb_fields;
+            int esc = 0;
+            int c;
+
+            console_set_color(NB_COL_GREY);
+            console_write("         Esc for NeoShell\n");
+            console_set_color(NB_COL_GREEN);
+
+            while (nb_fields - t0 < nb_prefs.hold * 50u)
+            {
+                while (!amiga_vbl_pending())
+                    nb_kbd_poll();
+                while ((c = nb_kbd_get()) >= 0)
+                    if (c == NB_KEY_ESC)
+                        esc = 1;
+                nb_sound_poll();
+                if (esc)
+                    break;
+            }
+            if (esc)
+                shell = 1;
+        }
+
+        if (shell)
+        {
+            kernel_target("NeoShell");
+            nb_shell_boot();
+        }
     }
 
     /* Desktop scene replaces the boot log on screen. */
@@ -226,5 +284,15 @@ void kernel_main(const nb_bootinfo_t *boot)
             nb_pointer_after_present();
             nb_desktop_dump();          /* where the window has got to  */
         }
+
+        /*
+         * And the one thing that moves without anybody touching it: the
+         * player's film steps on the field counter rather than on a key,
+         * so it is asked here, once a field, whether anything is due.  It
+         * answers with nothing at all nine fields in ten and paints for
+         * itself the tenth, so it owes the loop no decision -- only the
+         * knowledge that a field happened.
+         */
+        nb_desktop_tick();
     }
 }

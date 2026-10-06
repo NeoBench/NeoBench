@@ -16,7 +16,7 @@ What works today, on real hardware or the FS-UAE/WinUAE emulator:
   phosphor green (`#33FF33`) palette and an upright 80×32 bitmap console:
 
   ```
-  NeoBench 0.1.7 m68k-aga
+  NeoBench 0.1.9 m68k-aga
   [  OK  ] CPU detected (Motorola 68060)
   [  OK  ] RTG detected (hires 640x512 lace, 8 bpp)
   [  OK  ] MMU detected
@@ -326,7 +326,7 @@ To press the install disc:
 make iso
 ```
 
-Output: `images/NeoBench-0.1.7.iso` — the ROM rebuilt and its chainload
+Output: `images/NeoBench-0.1.9.iso` — the ROM rebuilt and its chainload
 hunk linked after it, `system/` packed into `NBFS.IMG` by
 `tools/mknbfs.py` (checked by `tools/nbfs/info/nbfs-info`), and the six
 staged files pressed into a plain ISO 9660 level 1 volume by
@@ -490,7 +490,7 @@ detection ladder answer with the right model.
       bound because the hardware answered, each saying what it can do
       (`io=read,write`, `io=read`, `io=none`), with a boot self-test that
       reads sector 0 of the disk and the volume header of a CD
-- [x] Install disc: `make iso` presses `images/NeoBench-0.1.7.iso`, an
+- [x] Install disc: `make iso` presses `images/NeoBench-0.1.9.iso`, an
       ISO 9660 level 1 volume carrying `NBFS.IMG` as the payload with
       NeoBench's `NBISO` installer block in sector 0 — mounted off the
       ATAPI bus by NeoBench's own reader (the disc does not claim to

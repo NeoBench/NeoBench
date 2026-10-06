@@ -218,7 +218,7 @@ void kernel_ok_sound(unsigned rate, unsigned vol)
 void kernel_banner(void)
 {
     console_set_color(NB_COL_WHITE);
-    console_write("NeoBench 0.1.7 m68k-aga\n");
+    console_write("NeoBench 0.1.9 m68k-aga\n");
 }
 
 /*

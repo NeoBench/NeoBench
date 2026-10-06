@@ -49,7 +49,7 @@ bus and a CD):
   kickstart_file = .../boot/rom/neobench.rom   <- or your own ROM
   hard_drive_0 = /path/to/blank.hdf
   hard_drive_0_controller = ide0
-  cdrom_drive_0 = /path/to/NeoBench-0.1.7.iso
+  cdrom_drive_0 = /path/to/NeoBench-0.1.9.iso
   cdrom_drive_0_controller = ide0
 
 Boot.  The log answers for everything it did:

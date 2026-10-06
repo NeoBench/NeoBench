@@ -1,0 +1,21 @@
+# NeoBench program entry.
+#
+# The first line of a file that is neither blank nor a comment may say
+# what the file is for.  "program = name" makes the file an entry rather
+# than a document: choosing it in Files starts that program instead of
+# opening it, so a drawer can hold a program the way the start menu
+# does.  The name is one of the desktop's own -- files, clock, monitor,
+# about, preferences, neotext, vlc, neoshell -- and a file that names
+# anything else, or that says nothing at all, opens in the reader as it
+# always has.
+#
+# NeoShell is the command line: the NeoCommands, read against the file
+# store the ROM carries and against what the hardware probe found, and
+# nothing outside either.  It is also what boots in place of the
+# desktop when Escape is pressed during the hold, and what Config/
+# boot.cfg's "failsafe = on" asks for, so this entry is the third way
+# to it -- the one that keeps the desktop standing underneath while you
+# are at the prompt.  "desktop" closes it again from the inside, which
+# is the same command the boot-time shell uses to let the compositor up.
+
+program = neoshell

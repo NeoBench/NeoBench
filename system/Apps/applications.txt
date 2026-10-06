@@ -7,14 +7,16 @@ nothing to install and nothing to launch from a path.
 
 The program entries that do exist are filed where they belong rather
 than here: Config/Preferences starts the preferences pane, Tools/ holds
-the clock, the monitor and the reader, and Core/Docs holds About --
-each standing beside the files it goes with.  This directory is kept
-for the ones that arrive as files of their own -- an archive unpacked
-into the store, or a fetch that landed in Temp/ and was moved here
-afterwards.  Until one does, it holds this note and nothing else.
+the clock, the monitor, the reader and the shell, Core/Docs holds About
+and Core/Media holds VLC -- each standing beside the files it goes with.
+This directory is kept for the ones that arrive as files of their own
+-- an archive unpacked into the store, or a fetch that landed in Temp/
+and was moved here afterwards.  Until one does, it holds this note and
+nothing else.
 
-  Clock, Monitor, NeoText    filed in Tools/, opened from there
-  About                      filed in Core/Docs, also on the start menu
-  Preferences                filed in Config, taken off the menu
+  Clock, Monitor, NeoText, NeoShell    filed in Tools/, opened from there
+  About                      filed in Core/Docs, off the start menu
+  Preferences                filed in Config, first row below the rule
+  VLC                        filed in Core/Media, the row after it
   Files                      the drawer that leads the start menu
   the rest                   not written yet

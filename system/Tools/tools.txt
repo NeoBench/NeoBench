@@ -10,10 +10,20 @@ something rather than being read.
   NeoText      the reader.  Plain text as written, a PDF with its
                text lifted out of the page, and a hex view of
                anything else, eight bytes to the line.
+  NeoShell     the command line.  The NeoCommands, read against the
+               store in the ROM and the hardware the probe found;
+               `help` at the prompt lists them.
 
-None of the three is on the start menu, so this drawer is how they are
+None of the four is on the start menu, so this drawer is how they are
 started; a document chosen in Files still opens in NeoText whatever
 you do.
 
+NeoShell is also what boots in place of the desktop when Escape is
+pressed during the three-second hold, and what Config/boot.cfg's
+"failsafe = on" asks for on a machine kept for recovery.  Starting it
+from this drawer leaves the desktop standing underneath it: `desktop`
+closes the window again, and at boot it is the same word that lets the
+compositor up.
+
 Tools grows as the programs that belong in a toolbox are written:
-NeoShell and the calculator are the next two on the list.
+the calculator is the next one on the list.

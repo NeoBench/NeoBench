@@ -1,0 +1,89 @@
+NeoShell
+========
+
+NeoShell is NeoBench's command line: the NeoCommands, read against the
+file store in the ROM image and against what the hardware probe
+answered at boot, and against nothing else.
+
+There are three ways to it:
+
+  1. press Escape during the three-second hold after the chime, before
+     the desktop takes the screen
+  2. set "failsafe = on" in Config/boot.cfg, for a machine kept for
+     recovery
+  3. choose Tools/NeoShell in Files, which starts it over the desktop
+     and leaves it standing underneath
+
+All three print "Reached target NeoShell" in the log and land at the
+same prompt:
+
+  neobench>
+
+A store with no Config/screen.cfg in it goes to the shell too, with a
+warning: every surface NeoBench draws takes its colours out of that
+file, so there is no desktop to composite without it.
+
+The NeoCommands
+---------------
+
+  help            this list
+  ver             what is running
+  cls             clear what has been printed
+  echo <text>     say it back
+  info            the machine the probe found
+  cfg             the preferences in force
+  pwd             where the prompt is standing
+  dir [name]      the store, one name to a line
+  cd <name|..>    move the prompt through the store
+  type <name>     print a file from the store
+  progs           what the desktop can start
+  run <name>      start one of them
+  desktop         go to the desktop
+
+A verb is read without regard to case, and the name after one is
+spelled as the store spells it, also without regard to case.  There is
+no path outside the store for a command to name: dir and cd walk the
+tree the image was built with, type prints from it, and run starts one
+of the eight programs the desktop has.  Nothing here writes -- the
+store is an image, and a file typed into in NeoText is labelled edited
+but not saved for the same reason.
+
+`type` prints the first thirty lines and stops, and it will not type
+what is not text: the first 256 bytes decide, and a byte that is not
+printable comes back as a dot, so a sound or a picture chosen by
+mistake costs the ring a line of dots and nothing else.  NeoText reads
+the rest.
+
+`info` asks the probe again rather than of a copy of what the boot log
+printed, which is what makes it worth asking on a machine that has been
+running for a while: CPU, MMU, FPU, RTG, the width of the bus, the fast
+memory in megabytes against the 136 MB this build is made for, and the
+BFG9060 if one answers.
+
+The keys
+--------
+
+  Left, Right      carries the caret along the line
+  Backspace        takes the letter in front of it
+  Return           runs the line
+  Up, Down         bring back what has scrolled off the top
+  Escape           clears the line, where there is no window to close
+
+On the desktop Escape still puts the program down, exactly as it does
+for every other program, and Tab still walks the keyboard round the
+windows: the shell takes the keys only while it is the program that
+has the keyboard, which is what the lit button on the task row is
+showing.  The two arrows belong to the shell for the same reason they
+belong to the reader -- a line nobody could move the caret in would be
+a line nobody could type -- so they do not walk a list standing behind
+it while the shell is the one being used.
+
+Getting out
+-----------
+
+`desktop` is the way back.  At boot it is what lets the compositor up,
+and the desktop takes the screen from there; in the window it closes
+the shell and leaves the desktop as it was.  `exit` says the same
+thing.  There is no way out of the shell that does not come from the
+shell, which is the point of it: a place to fall back to, rather than
+one to be stuck in.

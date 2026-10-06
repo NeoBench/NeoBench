@@ -43,6 +43,7 @@ struct nb_prefs
     /* boot.cfg */
     unsigned hold;             /* seconds the boot log is held up      */
     int      hwscan;           /* walk the hardware before binding     */
+    int      failsafe;         /* boot to NeoShell rather than the desk */
 };
 
 #define NB_PTR_ARROW  0
@@ -53,10 +54,14 @@ struct nb_prefs
 /*
  * The five backdrops, in the order the Preferences pane lays them out.
  * Config/screen.cfg names one with "backdrop = wash" and the pane picks
- * one while the machine is running.  Wash is the NeoBench wash -- the
- * gradient bg_top and bg_bot carry -- and the other four are pairs of
- * their own; all five are light fields, because the mark, the wordmark,
- * the glows and the chrome over them were all drawn against one.
+ * one while the machine is running.  Wash is Windows Vista's own: a
+ * deep navy falling to the blue its glass is cut for, the two colours
+ * bg_top and bg_bot carry, with the aurora laid over them.  The other
+ * four are pairs of their own: four light fields, because a cream, a
+ * sky, a peach and a grey-blue want the mark, the wordmark and the
+ * chrome over them inked rather than lit.  Which way the artwork goes
+ * on any of them is decided by the weight of the top colour, in
+ * wallpaper().
  */
 #define NB_BD_WASH   0
 #define NB_BD_PAPER  1

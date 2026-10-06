@@ -8,7 +8,9 @@
 # guide and the readme, which is where the answer to "what is this?"
 # ought to live.
 #
-# It is still on the start menu as well -- this is one more way to it,
-# not the only one.
+# It came off the start menu when VLC went on: the menu keeps two rows
+# under the rule and no more, and this drawer is where the
+# documentation lives, so the answer to "what is this?" stands with the
+# answer to everything else.
 
 program = about

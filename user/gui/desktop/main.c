@@ -14,10 +14,14 @@
  *
  * The scene, top to bottom:
  *
- *   wallpaper  white -> mint vertical gradient with three soft mint
- *              glows and a 32 px hairline grid under them, and the
- *              NeoBench mark and wordmark laid over the top of it all
- *   taskbar    the panel, cut as Aero cuts the Windows 7 bar: a pane
+ *   wallpaper  the wash, which is Windows Vista's own: a deep navy ->
+ *              blue vertical gradient with five soft blooms laid end to
+ *              end down it so the run reads as one ribbon of light --
+ *              the aurora -- a 32 px hairline grid over them, and the
+ *              NeoBench mark and wordmark laid over the top of it all.
+ *              The four fixed backdrops are light fields and keep the
+ *              glows and the ink they were drawn for
+ *   taskbar    the panel, cut as Aero cuts the Vista bar: a pane
  *              of tinted glass over the backdrop, lit along its top
  *              edge, carrying the mark-only start orb flush left, the
  *              pinned launchers, one task button per program that is
@@ -46,6 +50,8 @@
 #include "../../../boot/rom/prefs.h"
 #include "../../../boot/rom/pfs.h"
 #include "../../../boot/rom/pdf.h"
+#include "../../../boot/rom/inflate.h"
+#include "../../../boot/rom/audio.h"
 #include "../../../boot/rom/pointer.h"
 #include "../../../boot/rom/probe.h"
 #include "logo.h"
@@ -96,6 +102,29 @@
 #define C_AERO_TXT NB_RGB(23, 49, 27)   /* type set on the glass       */
 
 /*
+ * The one caption cell that is not glass.  Vista's close is red -- lit
+ * along its own top edge and pooling dark at the foot -- and it is the
+ * only warm colour anywhere on a window, which is the whole of what
+ * makes it the one the eye finds without reading.  The rim keeps the
+ * steel the other two cells wear so the three still stand in a row.
+ */
+#define C_CLOSE    NB_RGB(25, 9, 8)     /* the red itself, lit end      */
+#define C_CLOSE_D  NB_RGB(18, 5, 5)     /* ... and its dark end         */
+#define C_CLOSE_R  NB_RGB(14, 4, 4)     /* the rim round it             */
+
+/*
+ * The start orb.  Vista's is a lit blue sphere: a saturated blue body,
+ * its top turned to the sky the glass is cut for, its foot falling to
+ * a navy, and a bead of light across the top of it.  The one piece of
+ * that desktop's branding is the piece here that stays NeoBench's --
+ * the pearl carries NeoBench's mark rather than anybody's flag, and
+ * the halo it throws when the menu opens is the brand teal.
+ */
+#define C_ORB_T   NB_RGB(9, 44, 31)    /* its lit top                  */
+#define C_ORB_B   NB_RGB(1, 20, 30)    /* the body's blue              */
+#define C_ORB_S   NB_RGB(0, 8, 16)     /* the shade at its foot        */
+
+/*
  * The row the next press takes, lit the way Aero lights everything: a
  * rim of the same teal a shade up, and a field that runs from its lit
  * end at the top to its dark end at the foot.  Workbench has no truck
@@ -111,6 +140,28 @@
 #define C_GLOW_B  NB_RGB(20, 53, 28)     /* sky glow                    */
 #define C_GLOW_C  NB_RGB(19, 56, 25)     /* aqua glow                   */
 #define C_GRID    NB_RGB(21, 58, 28)     /* hairline grid               */
+
+/*
+ * The wash is Windows Vista's own wallpaper: a deep navy falling to the
+ * blue the glass is cut for, with the aurora drawn across it -- the
+ * ribbon of ice light that is the one thing everybody remembers that
+ * desktop by -- in three shades of itself.  Blue at the ribbon's ends,
+ * a paler ice through its middle, a brighter blue where it turns, and
+ * white for the two points where its core shows.  C_GRID_L is the
+ * hairline the grid is drawn in over a field this dark, where the dark
+ * green the four light backdrops use would be a grid nobody could see.
+ *
+ * The bloom constants are read three ways: for the wash as the aurora
+ * above, and for a dark field or a light one by wallpaper()'s own
+ * choice of the older glows.  Which field is which is asked of the top
+ * colour rather than of the backdrop's index, because wash is not a
+ * fixed pair -- Config/screen.cfg carries its two colours, and a file
+ * is free to set them to anything.
+ */
+#define C_AUR_A   NB_RGB(8, 44, 30)     /* the ribbon's blue            */
+#define C_AUR_B   NB_RGB(20, 58, 31)    /* its pale ice                 */
+#define C_AUR_C   NB_RGB(14, 52, 31)    /* the brighter blue            */
+#define C_GRID_L  NB_RGB(16, 44, 30)    /* the hairline, lit            */
 
 /*
  * The icon set is MUI's manner rather than the modern plate-and-mark:
@@ -141,6 +192,8 @@
 #define MUI_ROS_B NB_RGB(17, 5, 7)       /* #881337 rose, deep           */
 #define MUI_GRY_T NB_RGB(11, 29, 17)     /* #5B7488 slate, lit     file  */
 #define MUI_GRY_B NB_RGB(4, 14, 9)       /* #24384A slate, deep          */
+#define MUI_CYA_T NB_RGB(6, 46, 30)       /* #21A1F1 sky, lit       NeoShell */
+#define MUI_CYA_B NB_RGB(3, 22, 18)       /* #105193 sky, deep            */
 
 /* ------------------------------------------------------------------ *
  * Small helpers
@@ -270,32 +323,107 @@ static void glow(int cx, int cy, int r, uint16_t c, uint8_t a)
         gfx_disc_a(cx, cy, (r * i) / 5, c, (uint8_t)(a / 5));
 }
 
+/*
+ * Is the field this artwork stands on a night one?
+ *
+ * Asked of the gradient's top colour rather than of the backdrop's
+ * index, because wash is not a fixed pair: Config/screen.cfg carries
+ * its two colours, and a file is free to set them to anything.  The
+ * weights are the eye's, in the five-six-five the palette is packed
+ * in, and the answer only has to separate the five fields this
+ * desktop can be showing -- a night blue and a cream are an order of
+ * magnitude apart, so the threshold sits well clear of both.
+ */
+static int bd_dark(uint16_t c)
+{
+    unsigned r = (unsigned)((c >> 11) & 31);
+    unsigned g = (unsigned)((c >> 5) & 63);
+    unsigned b = (unsigned)(c & 31);
+
+    return (r * 10u + g * 10u + b * 4u) < 600u;
+}
+
 static void wallpaper(void)
 {
-    int i;
-    uint16_t top, bot;
+    int i, dark, vista;
+    uint16_t top, bot, gl_a, gl_b, gl_c, grid;
 
     nb_bd_colours(nb_prefs.backdrop, &top, &bot);
     gfx_vgrad(0, 0, 640, 512, top, bot);
 
+    dark = bd_dark(top);
+    vista = (nb_prefs.backdrop == NB_BD_WASH);
+
+    if (dark)
+    {
+        gl_a = C_AUR_A;
+        gl_b = C_AUR_B;
+        gl_c = C_AUR_C;
+        grid = C_GRID_L;
+    }
+    else
+    {
+        gl_a = C_GLOW_A;
+        gl_b = C_GLOW_B;
+        gl_c = C_GLOW_C;
+        grid = C_GRID;
+    }
+
     if (nb_prefs.glow)
     {
-        glow(300, 452, 250, C_GLOW_A, 165);
-        glow(556, 476, 210, C_GLOW_B, 175);
-        glow(596, 58, 170, C_GLOW_C, 185);
+        if (vista)
+        {
+            /*
+             * The aurora: five blooms laid end to end down the screen
+             * from the upper left to the lower right, overlapping by
+             * more than half their own radius so that the run reads as
+             * one ribbon of light rather than as five lamps, and two of
+             * them white where the ribbon's own core shows.  It is the
+             * one shape that desktop is remembered by, and it is laid
+             * to miss the wordmark: it crosses the mark's top edge on
+             * its way, which is what lights the branding rather than
+             * inked it has to be read against, and it has fallen clear
+             * of the name by the time it reaches it.
+             */
+            glow(40, 58, 150, gl_a, 104);
+            glow(192, 138, 150, gl_b, 112);
+            glow(342, 240, 150, gl_c, 118);
+            glow(472, 356, 150, gl_b, 112);
+            glow(604, 482, 150, gl_a, 104);
+            glow(340, 238, 74, C_INK, 76);
+            glow(470, 354, 62, C_INK, 64);
+        }
+        else
+        {
+            glow(300, 452, 250, gl_a, 165);
+            glow(556, 476, 210, gl_b, 175);
+            glow(596, 58, 170, gl_c, 185);
+        }
     }
 
     if (nb_prefs.grid)
     {
         for (i = 0; i < 512; i += 32)
-            gfx_alpha(0, i, 640, 1, C_GRID, 26);
+            gfx_alpha(0, i, 640, 1, grid, 26);
         for (i = 16; i < 640; i += 32)
-            gfx_alpha(i, 0, 1, 512, C_GRID, 15);
+            gfx_alpha(i, 0, 1, 512, grid, 15);
     }
+
+    /*
+     * On a night field the mark cannot be inked -- the navy it is cut
+     * in is the colour of the field itself -- so it is lit instead:
+     * a bloom behind it, the same ice the aurora carries, which puts
+     * light where the mark has to be read against and leaves the navy
+     * standing as the silhouette on it.  Over a pale field there is
+     * nothing to light and the ink does the work on its own.
+     */
+    if (dark)
+        glow(215, 315, 165, gl_b, 96);
 
     logo_mark(110, 210, 210);
     gfx_text_s(111, 429, "NEOBENCH", LOGO_TEAL, 3);   /* shadow, down-right */
-    gfx_text_s(110, 428, "NEOBENCH", LOGO_NAVY, 3);   /* the wordmark       */
+    gfx_text_s(110, 428, "NEOBENCH",
+               dark ? C_INK : LOGO_NAVY, 3);          /* the wordmark       */
 }
 
 /* ------------------------------------------------------------------ *
@@ -395,11 +523,16 @@ static void icon_files(int x, int y)
  * The program glyphs of the start menu -- the same tile at 14 pixels
  * with a mark that fits the eight rows the hairline leaves clear.
  * Files shares Core's blue, the clock takes Docs' amber, the monitor
- * Bench's green, About Home's violet and Preferences Media's rose, so
- * every hue in the set is the same hue wherever it turns up and none of
- * them is invented for a single place.  NeoText takes the slate that is
- * neither: it is the colour a plain file wears in the browser, and the
- * reader that opens plain files wears it too.
+ * Bench's green, About Home's violet and Preferences the violet About
+ * leaves standing free, so every hue in the set is the same hue
+ * wherever it turns up and none of them is invented for a single
+ * place.  Media keeps its rose for the one thing filed in Media:
+ * VLC wears the drawer's own badge at this size, the disc and triangle
+ * icon_media() cuts at twenty-four, so the violet pane and the rose
+ * player that follow one another down the menu are never the same tile
+ * twice.  NeoText takes the slate that is neither: it is the colour a
+ * plain file wears in the browser, and the reader that opens plain
+ * files wears it too.
  */
 static void menu_glyph(int i, int x, int y)
 {
@@ -433,11 +566,28 @@ static void menu_glyph(int i, int x, int y)
     case 4:                                          /* Preferences */
         /* two sliders, one above the other: the marks the pane itself
          * draws, so the glyph is the program at a size it fits in */
-        mui_plate(x, y, 14, 4, MUI_ROS_T, MUI_ROS_B);
+        mui_plate(x, y, 14, 4, MUI_VIO_T, MUI_VIO_B);
         gfx_fill(x + 3, y + 6, 8, 1, C_INK);
         gfx_fill(x + 3, y + 10, 8, 1, C_INK);
         gfx_fill(x + 5, y + 4, 2, 5, C_INK);         /* knobs */
         gfx_fill(x + 8, y + 8, 2, 5, C_INK);
+        break;
+    case 6:                                          /* VLC      */
+        /* Media's own badge, cut to this size: the disc icon_media()
+         * draws at twenty-four and the triangle out of it */
+        mui_plate(x, y, 14, 4, MUI_ROS_T, MUI_ROS_B);
+        gfx_disc(x + 7, y + 7, 5, C_INK);
+        gfx_tri(x + 6, y + 4, x + 6, y + 10, x + 11, y + 7, MUI_CUT);
+        break;
+    case 7:                                          /* NeoShell */
+        /* a terminal, at this size: the screen cut out of the plate,
+         * the prompt standing on its first line and the caret under
+         * it, which is the one mark none of the others carries */
+        mui_plate(x, y, 14, 4, MUI_CYA_T, MUI_CYA_B);
+        gfx_fill_r(x + 2, y + 4, 10, 8, 1, C_INK);
+        gfx_line(x + 4, y + 6, x + 6, y + 8, MUI_CUT);
+        gfx_line(x + 6, y + 8, x + 4, y + 10, MUI_CUT);
+        gfx_fill(x + 7, y + 10, 4, 1, MUI_CUT);
         break;
     default:                                         /* NeoText */
         mui_plate(x, y, 14, 4, MUI_GRY_T, MUI_GRY_B);
@@ -544,6 +694,7 @@ static void place_icon(int i, int x, int y)
 #define SEL_NONE  0
 #define SEL_MENU  1
 #define SEL_ROW   2
+#define SEL_VLC   3     /* a line of the player's playlist             */
 
 #define DBL_FIELDS  25        /* 500 ms -- fifty fields to the second  */
 #define DBL_SLOP    24        /* pixels of drift between the presses   */
@@ -617,14 +768,28 @@ static void wb_frame(int x, int y, int w, int h)
  */
 static void cap_btn(int x, int y, int kind)
 {
+    if (kind == 2) {
+        /*
+         * Close, in Vista's own terms: the red field, the light along
+         * its top edge, the darker red pooling in its bottom third,
+         * and the cross cut in white rather than in the glass's type
+         * colour -- the white is what says this cell is not one of
+         * the two beside it.
+         */
+        gfx_alpha_r(x, y, 13, 11, 3, C_CLOSE_R, 215);
+        gfx_alpha_r(x + 1, y + 1, 11, 9, 2, C_CLOSE, 238);
+        gfx_alpha(x + 2, y + 1, 9, 1, C_INK, 128);
+        gfx_alpha(x + 3, y + 6, 7, 3, C_CLOSE_D, 92);
+        gfx_line(x + 4, y + 3, x + 9, y + 8, C_INK);
+        gfx_line(x + 4, y + 8, x + 9, y + 3, C_INK);
+        return;
+    }
+
     gfx_alpha_r(x, y, 13, 11, 3, C_AERO_RIM, 205);
     gfx_alpha_r(x + 1, y + 1, 11, 9, 2, C_AERO_BTN, 225);
     gfx_alpha(x + 2, y + 1, 9, 1, C_INK, 92);
 
-    if (kind == 2) {
-        gfx_line(x + 4, y + 3, x + 9, y + 8, C_AERO_TXT);
-        gfx_line(x + 4, y + 8, x + 9, y + 3, C_AERO_TXT);
-    } else if (kind == 1) {
+    if (kind == 1) {
         gfx_fill(x + 4, y + 3, 6, 6, C_AERO_TXT);
     } else {
         gfx_fill(x + 4, y + 7, 6, 2, C_AERO_TXT);
@@ -670,6 +835,17 @@ static void glass_window(int x, int y, int w, int h, int th,
     /* the caption's glass, over whatever the scene had put there */
     gfx_alpha(x + 1, y + 1, w - 2, th - 1, C_AERO, 200);
 
+    /*
+     * The reflection in it.  A pane of glass is brightest just under
+     * the lit edge of its own frame and pools darker where it meets
+     * the body, and that one gradient is what stops the caption being
+     * a tint of a single colour: three alphas, bright, the step down,
+     * then the shade gathering at the foot of the pane.
+     */
+    gfx_alpha(x + 2, y + 3, w - 4, (th - 7) / 2, C_INK, 44);
+    gfx_alpha(x + 2, y + 3 + (th - 7) / 2, w - 4, 1, C_INK, 26);
+    gfx_alpha(x + 2, y + th / 2, w - 4, th / 2 - 2, C_SHADOW, 46);
+
     /* the body, opaque, from where the caption stops */
     gfx_fill(x, y + th, w, h - th, C_WB_GREY);
 
@@ -697,7 +873,11 @@ static void glass_window(int x, int y, int w, int h, int th,
     gfx_alpha(x + 1, y + th - 2, w - 2, 1, C_AERO_RIM, 96);
     gfx_alpha(x + 1, y + th - 1, w - 2, 1, C_SHADOW, 128);
 
-    text_d(x + 14, y + (th - 8) / 2, title, C_AERO_TXT);
+    /* the title sits on the lit half of the pane: white over a pixel
+     * of the pane's own dark, so it reads as type on glass rather than
+     * as a lighter patch of it */
+    text_d(x + 15, y + (th - 8) / 2 + 1, title, C_SHADOW);
+    text_d(x + 14, y + (th - 8) / 2, title, C_INK);
 
     bx = x + w - 8 - nbtn * 15;
     for (i = 0; i < nbtn; i++)
@@ -743,7 +923,7 @@ static void window_main(void)
 
     glass_window(x, y, w, h, 20, "NeoBench", 3);
 
-    text_d(x + 10, y + 28, "NeoBench 0.1.7", C_TEXT);
+    text_d(x + 10, y + 28, "NeoBench 0.1.9", C_TEXT);
     text_d(x + 10, y + 42, "Futuristic desktop on AGA", C_MUTE);
     text_d(x + 10, y + 56, "(c) lord_protector 2026 & MiMo", C_MUTE);
     text_d(x + 10, y + 70, "060 AGA/RTG only (A1200/T A4000/T)", C_MUTE);
@@ -821,6 +1001,33 @@ static int text_dx, text_dy;
 #define NT_SBMID    (NT_SBY + NT_SBT + NT_SBTR / 2)
 
 /*
+ * NeoShell, the eighth program: the command line as a window on the
+ * desktop, and the console it is before there is a desktop at all.
+ *
+ * The pane is cut to the line rather than the other way round -- sixty
+ * four characters of prompt and answer, and as many rows as the window
+ * has between its caption and its status strip, counted off the face in
+ * force so that Xen and System both fit.  The same width stands on the
+ * boot screen, where there is no window to cut it into and the rows run
+ * the whole raster; the ring below is what holds the lines either way.
+ */
+static int shell_dx, shell_dy;
+
+#define SH_X       (52 + shell_dx)
+#define SH_Y       (74 + shell_dy)
+#define SH_W       536
+#define SH_H       360
+#define SH_TX      (SH_X + 12)             /* the type's left edge        */
+#define SH_TY      (SH_Y + 28)             /* the first row's top         */
+#define SH_AREA    (SH_H - 56)             /* the rows, in pixels         */
+#define SH_ROWS    (SH_AREA / gfx_font_pitch())
+#define SH_COLS    ((SH_W - 24) / 8)       /* and how wide they are       */
+#define SH_WD      (SH_COLS + 1)           /* one line, and its NUL       */
+#define SH_RING    48                      /* lines held behind the prompt */
+#define SH_BTY     34                      /* the boot screen's first row */
+#define SH_BROWS   ((512 - SH_BTY - 10) / gfx_font_pitch())
+
+/*
  * The two gadgets in the corner, laid out the same way as the windows:
  * a base that is a constant in ROM and an offset that a drag owns.  The
  * clock's base is its centre rather than its corner, because that is
@@ -839,6 +1046,51 @@ static int mon_dx, mon_dy;
 #define MON_Y       (116 + mon_dy)
 #define MON_W       172
 #define MON_H       48
+
+/* ------------------------------------------------------------------ *
+ * VLC: the media player, and where it stands
+ * ------------------------------------------------------------------ *
+ *
+ * One window for the three kinds of thing the store holds that are not
+ * text: a picture, a run of pictures, and a sound.  The left of it is
+ * the picture -- a fixed 240x136 pane, because a player shows what the
+ * file is rather than what it would look like stretched over the
+ * window, and a file bigger than the pane is said to be too large
+ * rather than quietly cropped.  The column at its right is the same
+ * file in numbers, the five rows under both are the playlist the store
+ * offered, and the transport and the status line close the window off
+ * at the foot.  The corner is a base like every other window's: a
+ * constant in the ROM image and a .bss offset beside it.
+ */
+static int vlc_dx, vlc_dy;
+
+#define VLC_X       (140 + vlc_dx)
+#define VLC_Y       (96 + vlc_dy)
+#define VLC_W       376
+#define VLC_H       300
+
+#define VLC_VX      (VLC_X + 8)          /* the picture, rim and all    */
+#define VLC_VY      (VLC_Y + 28)
+#define VLC_VW      240
+#define VLC_VH      136
+
+#define VLC_IX      (VLC_X + 252)        /* the column of figures       */
+#define VLC_IY      (VLC_Y + 30)         /* its first line              */
+#define VLC_IH      14                   /* line pitch, 14 px of type   */
+#define VLC_IN      6                    /* and how many lines there are*/
+
+#define VLC_SEP     (VLC_Y + 169)        /* the rule over the playlist  */
+#define VLC_PLY     (VLC_Y + 174)        /* its first row               */
+#define VLC_PLH     14                   /* row pitch                   */
+#define VLC_PLN     5                    /* rows that stand at once     */
+#define VLC_PLX     (VLC_X + 8)
+#define VLC_PLW     (VLC_W - 16)
+
+#define VLC_TRULE   (VLC_Y + 246)        /* the rule over the transport */
+#define VLC_TY      (VLC_Y + 250)        /* the buttons themselves      */
+#define VLC_BW      56                   /* one button                  */
+#define VLC_BG      6                    /* and the gap it stands in    */
+#define VLC_BY      (VLC_Y + 276)        /* the status line             */
 
 /* ------------------------------------------------------------------ *
  * Start menu: geometry and state, shared by the draw and click passes
@@ -860,7 +1112,7 @@ static int mon_dx, mon_dy;
  * The flags below are the whole of what is running; they are file scope
  * without an initialiser because .data lands in write-only ROM.
  */
-#define MENU_X      8
+#define MENU_X      0            /* flush with the screen's left edge   */
 #define MENU_W      196
 #define MENU_H      258          /* the foot lands on the bar's top edge */
 #define MENU_Y      (490 - MENU_H)   /* it stands in the bar at y=490    */
@@ -871,7 +1123,7 @@ static int mon_dx, mon_dy;
 #define MENU_ITEMW  (MENU_W - 12 - MENU_STRIP)
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
 #define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
-#define N_PROGRAMS  6            /* programs the desktop can run         */
+#define N_PROGRAMS  8            /* programs the desktop can run         */
 #define MENU_PROGS  2            /* of which the menu shows this many    */
 #define MENU_ITEMS  (N_PLACES + MENU_PROGS)
 
@@ -882,20 +1134,30 @@ static int mon_dx, mon_dy;
 /*
  * Which program each row of the menu's program section starts.  The
  * numbers are the slots the whole desktop counts in -- the panel, the
- * task row and the keyboard's focus all go 1..6 in this order -- while
- * the menu lists two of the six, in the order their names sort in,
- * About before Preferences, as the drawers above the rule sort among
+ * task row and the keyboard's focus all go 1..7 in this order -- while
+ * the menu lists two of the seven, in the order their names sort in,
+ * Preferences before VLC, as the drawers above the rule sort among
  * themselves.  Files leads those drawers rather than sitting in this
- * list, and Clock, Monitor and NeoText are filed in the store instead,
- * the three of them in Tools/ beside the note that says what the
- * drawer holds.  About and Preferences are what the menu keeps -- the
- * two programs that are about the machine rather than the files around
- * it -- and each still stands in the store as well, About in Core/Docs
- * and Preferences in Config/ beside the files it reads.  All six are
- * still programs, and all six still take their buttons on the bar when
- * they are running.
+ * list, and Clock, Monitor and NeoText are filed in Tools/ beside the
+ * note that says what the drawer holds, while About stands in
+ * Core/Docs, where it has always stood.  About came off the menu when
+ * VLC went on: it is still a program, it still opens from its entry
+ * and from the reader, and it is one press away either way -- but the
+ * menu is a list of what the machine is for, and the two lines it
+ * keeps are the pane that sets it up and the player for the drawer
+ * that holds the media.  Preferences still stands in Config/
+ * beside the files it reads and VLC in Core/Media beside the files it
+ * plays.  All seven are still programs, and all seven still take their
+ * buttons on the bar when they are running.
  */
-static const unsigned char menu_slot[MENU_PROGS] = { 3, 4 };
+static const unsigned char menu_slot[MENU_PROGS] = { 4, 6 };
+
+/* What those two rows say.  File scope rather than a local of the draw
+ * pass, because the keyboard's first-letter jump asks the same two
+ * names and two lists that could disagree would be two menus. */
+static const char *const menu_name[MENU_PROGS] = {
+    "Preferences", "VLC"
+};
 
 /* the show-desktop sliver: the last eight columns of the panel, which
  * is the width Aero gives it -- a strip you can find without looking,
@@ -916,18 +1178,21 @@ static int prefs_open;          /* the Preferences pane                */
 static int pr_lay;              /* which of its rows the keys work on:
                                  * 0 the five swatches, 1 grid, 2 glow  */
 static int neotext_open;        /* the text and document reader        */
+static int vlc_open;            /* the media player: pictures, film,
+                                 * sound, out of the store             */
+static int shell_open;          /* NeoShell: the command line          */
 static int focus_p;             /* the program the panel shows as
-                                 * active: 0 none, else its menu slot  */
+                                 * active: 0 none, else its slot       */
 static int desk_hidden;         /* show-desktop has the windows down   */
 static int desk_saved;          /* which ones were up when it did      */
 
 /*
- * Which of the six are up, asked by slot rather than by flag.
+ * Which of the seven are up, asked by slot rather than by flag.
  *
  * The flags above are the whole of what is running -- scene() draws a
  * program because one of them says so -- and a pass that has to walk
- * all six, the task row, the keyboard's cycle and the rows a repaint
- * owes, asks here rather than spelling the six out again.  Show-desktop
+ * all seven, the task row, the keyboard's cycle and the rows a repaint
+ * owes, asks here rather than spelling the seven out again.  Show-desktop
  * has the flags themselves down, so it needs no rule of its own: what it
  * has taken off the wallpaper is not up.
  */
@@ -941,6 +1206,8 @@ static int win_open(int p)
     case 4:  return about_open;
     case 5:  return prefs_open;
     case 6:  return neotext_open;
+    case 7:  return vlc_open;
+    case 8:  return shell_open;
     default: return 0;
     }
 }
@@ -1052,6 +1319,33 @@ static void band_neotext(int bar)
         band_add(486, 512);
 }
 
+/* The same for the player: its own rows, and the slice of the bar that
+ * carries its button when the button comes or goes with it. */
+static void band_vlc(int bar)
+{
+    band_add(VLC_Y - 4, VLC_Y + VLC_H + 14);
+    if (bar)
+        band_add(486, 512);
+}
+
+/* And the shell's: its window, and the slice of the bar that carries
+ * its button when the button comes or goes with it. */
+static void band_shell(int bar)
+{
+    band_add(SH_Y - 4, SH_Y + SH_H + 14);
+    if (bar)
+        band_add(486, 512);
+}
+
+/*
+ * The shell's two doors, both defined down with the engine: the press
+ * inside its window, and the key into its line.  Both are asked for by
+ * passes that run long before that section of the file does -- the click
+ * pass and the keyboard's -- so both are named here first.
+ */
+static int hit_shell(int x, int y, int *changed);
+static int sh_key(int c);
+
 /*
  * Every program window at once, for the one control that takes them
  * all down together, plus the buttons their closes and opens leave
@@ -1094,6 +1388,12 @@ static void band_select(int kind, int idx)
         int ry = FILES_Y + FILES_ROW0 + idx * FILES_ROWH;
 
         band_add(ry - 3, ry + FILES_ROWH + 3);
+    }
+    else if (kind == SEL_VLC)
+    {
+        int ry = VLC_PLY + idx * VLC_PLH;
+
+        band_add(ry - 3, ry + VLC_PLH + 3);
     }
 }
 
@@ -1208,6 +1508,18 @@ static int tok_is(const unsigned char *s, const unsigned char *e,
 }
 
 /*
+ * The names a `program = ` line may carry, one per slot, in the order
+ * the slots are numbered.  The store's entries are written against
+ * this list and NeoShell's `progs` and `run` ask it the same question,
+ * so a program added here cannot be missing from a drawer or from the
+ * command line.
+ */
+static const char *const prog_name[N_PROGRAMS] = {
+    "files", "clock", "monitor", "about", "preferences", "neotext",
+    "vlc", "neoshell"
+};
+
+/*
  * Is this file a program rather than a document?
  *
  * The first line of a file that is neither blank nor a comment may name
@@ -1225,9 +1537,6 @@ static int tok_is(const unsigned char *s, const unsigned char *e,
  */
 static int program_slot_of(unsigned t)
 {
-    static const char *const names[N_PROGRAMS] = {
-        "files", "clock", "monitor", "about", "preferences", "neotext"
-    };
     const unsigned char *p = nb_pfs_nodes[t].data;
     const unsigned char *end = p + nb_pfs_nodes[t].size;
     int ret = -1;
@@ -1268,7 +1577,7 @@ static int program_slot_of(unsigned t)
                 ve--;
             if (tok_is(k, ke, "program"))
                 for (i = 0; i < N_PROGRAMS; i++)
-                    if (tok_is(v, ve, names[i]))
+                    if (tok_is(v, ve, prog_name[i]))
                         ret = i;
         }
         break;
@@ -1434,12 +1743,12 @@ static int drag_ox, drag_oy;    /* where into it the pointer went down */
 
 /*
  * The box as the drag pass asks for it: where the window stands and
- * how big it was laid out.  The four program windows answer with their
+ * how big it was laid out.  The program windows answer with their
  * corner; the dial answers with the square its centre stands in, which
  * is the one base in this file that is a centre rather than a corner
  * and is squared up here rather than at every call.  Everything the
  * drag does is asked in these terms, so the offset, the clamp and the
- * two bands are one piece of code for all six.
+ * two bands are one piece of code for all seven.
  */
 static void win_box(int which, int *x, int *y, int *w, int *h)
 {
@@ -1451,13 +1760,15 @@ static void win_box(int which, int *x, int *y, int *w, int *h)
     case 3:  *x = MON_X; *y = MON_Y; *w = MON_W; *h = MON_H; break;
     case 4:  *x = AB_X; *y = AB_Y; *w = AB_W; *h = AB_H; break;
     case 5:  *x = PR_X; *y = PR_Y; *w = PR_W; *h = PR_H; break;
-    default: *x = NT_X; *y = NT_Y; *w = NT_W; *h = NT_H; break;
+    case 6:  *x = NT_X; *y = NT_Y; *w = NT_W; *h = NT_H; break;
+    case 7:  *x = VLC_X; *y = VLC_Y; *w = VLC_W; *h = VLC_H; break;
+    default: *x = SH_X; *y = SH_Y; *w = SH_W; *h = SH_H; break;
     }
 }
 
 /*
  * Put it down somewhere new: the offset against the base that is a
- * constant in the ROM image.  This is the only write any of the six
+ * constant in the ROM image.  This is the only write any of the seven
  * positions is, and it lands in .bss, which is the part of the image
  * that is RAM.
  */
@@ -1471,7 +1782,9 @@ static void win_place(int which, int x, int y)
     case 3:  mon_dx = x - 452; mon_dy = y - 116; break;
     case 4:  about_dx = x - 124; about_dy = y - 40; break;
     case 5:  prefs_dx = x - 110; prefs_dy = y - 150; break;
-    default: text_dx = x - 60; text_dy = y - 150; break;
+    case 6:  text_dx = x - 60; text_dy = y - 150; break;
+    case 7:  vlc_dx = x - 140; vlc_dy = y - 96; break;
+    default: shell_dx = x - 52; shell_dy = y - 74; break;
     }
 }
 
@@ -1490,7 +1803,9 @@ static void win_band(int which, int bar)
     case 3:  band_monitor(); break;
     case 4:  band_about(); break;
     case 5:  band_prefs(bar); break;
-    default: band_neotext(bar); break;
+    case 6:  band_neotext(bar); break;
+    case 7:  band_vlc(bar); break;
+    default: band_shell(bar); break;
     }
 }
 
@@ -1532,13 +1847,13 @@ static void band_focus(void)
     int i;
 
     band_add(486, 512);
-    for (i = 1; i <= 6; i++)
+    for (i = 1; i <= N_PROGRAMS; i++)
         if (win_open(i))
             win_band(i, 0);
 }
 
 /*
- * Tab: the keyboard round the six slots, in the order the task row
+ * Tab: the keyboard round the eight slots, in the order the task row
  * numbers them and wrapping at the top.  Only what is up answers, so
  * with a single program running this is that program again and owes
  * nothing, and with none running there is nowhere for the keyboard to
@@ -1552,13 +1867,13 @@ static int focus_next(void)
 {
     int i, from, changed = 0;
 
-    from = (focus_p >= 1 && focus_p <= 6) ? focus_p : 0;
-    for (i = 1; i <= 6; i++)
+    from = (focus_p >= 1 && focus_p <= N_PROGRAMS) ? focus_p : 0;
+    for (i = 1; i <= N_PROGRAMS; i++)
     {
         int p = from + i;
 
-        if (p > 6)
-            p -= 6;
+        if (p > N_PROGRAMS)
+            p -= N_PROGRAMS;
         if (win_open(p))
         {
             focus_here(p, &changed);
@@ -2536,14 +2851,1744 @@ static int hit_neotext(int x, int y, int *changed)
     return focus_here(6, changed);
 }
 
+/* ------------------------------------------------------------------ *
+ * VLC: the media player
+ * ------------------------------------------------------------------ *
+ *
+ * The one program here that reads rather than draws.  The store holds
+ * three kinds of thing that are not text -- a picture, a run of
+ * pictures, and a sound -- and this is what turns each of them into
+ * something the pane, the channel or the playlist can hold.
+ *
+ * Everything decodes straight out of the ROM's own file store: there
+ * is no allocator, no libc and no second buffer to speak of, so a
+ * picture lands in the frame buffer this window blits, a sound lands
+ * in the chip RAM Paula reads from, and the one decoder that needs
+ * room of its own -- PNG, whose raw stream is four bytes a pixel
+ * before it is two -- borrows the same chip RAM because nothing else
+ * is playing while a file is being opened.
+ *
+ * Nothing here is a scaler.  A file that does not fit the pane is
+ * reported as too large rather than quietly cut down to size, because
+ * a player that shrinks a picture is a player that lies about what the
+ * file was, and this one has a status line to say the truth in.
+ */
+#define VK_NONE 0               /* nothing is on                      */
+#define VK_PIC  1               /* one picture                        */
+#define VK_VID  2               /* a run of them                      */
+#define VK_AUD  3               /* sound                              */
+
+#define VS_STOP 0
+#define VS_PLAY 1
+#define VS_PAUSE 2
+
+#define DC_NO   0               /* not this kind of file              */
+#define DC_OK   1               /* decoded, the pane has it           */
+#define DC_OVER 2               /* the right file, too big for the pane */
+
+#define VLC_MAX 24              /* what the playlist holds            */
+
+static uint16_t vlc_pix[VLC_VW * VLC_VH];  /* the pane, as RGB565      */
+static unsigned vlc_item[VLC_MAX];         /* the playlist: store nodes*/
+static int      vlc_n;                     /* entries standing         */
+static int      vlc_sel;                   /* the one that is on       */
+static int      vlc_top;                   /* the first row on show    */
+static unsigned vlc_node;                  /* what is loaded           */
+static int      vlc_kind;                  /* VK_                      */
+static int      vlc_state;                 /* VS_                      */
+static int      vlc_iw, vlc_ih;            /* the picture's own size   */
+static unsigned vlc_rate, vlc_pcm;         /* sound: rate and bytes    */
+static unsigned vlc_pos;                   /* film: first frame's data */
+static unsigned vlc_fsz;                   /* ... and its payload      */
+static unsigned vlc_fall;                  /* ... and one frame stride */
+static unsigned vlc_frames;                /* how many of them         */
+static unsigned vlc_at;                    /* which one is showing     */
+static unsigned vlc_fpsn, vlc_fpsd;        /* frames a second, over    */
+static unsigned vlc_acc;                   /* the field's own account  */
+static unsigned vlc_secs, vlc_field;       /* how long it has run      */
+static char     vlc_name[20];              /* the file, for the caption*/
+static char     vlc_msg[48];               /* the status line          */
+static const char *vlc_what;               /* the format, for the figures */
+static unsigned char vlc_prev0[4 * VLC_VW];/* a blank row, for the first
+                                            * line of a PNG's filters  */
+
+/* the status line, in one place so no arm of the player can leave a
+ * message the next one does not clear */
+static void vlc_say(const char *s)
+{
+    char *d = put_str(vlc_msg, s);
+
+    *d = '\0';
+}
+
+/* a development line, the way the rest of the desktop talks to serial */
+static void vlc_log(const char *s)
+{
+    while (*s)
+        amiga_serial_putc(*s++);
+}
+
+/* the four readers the file formats are written in: BMP, WAV and RIFF
+ * are little endian, IFF and PNG are big, and neither is allowed to be
+ * guessed at by a cast */
+static unsigned r16le(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8);
+}
+
+static unsigned r32le(const unsigned char *p)
+{
+    return (unsigned)p[0] | ((unsigned)p[1] << 8) |
+           ((unsigned)p[2] << 16) | ((unsigned)p[3] << 24);
+}
+
+static unsigned r16be(const unsigned char *p)
+{
+    return ((unsigned)p[0] << 8) | (unsigned)p[1];
+}
+
+static unsigned r32be(const unsigned char *p)
+{
+    return ((unsigned)p[0] << 24) | ((unsigned)p[1] << 16) |
+           ((unsigned)p[2] << 8) | (unsigned)p[3];
+}
+
+static int s16le(const unsigned char *p)
+{
+    unsigned u = r16le(p);
+
+    return (u & 0x8000u) ? (int)u - 65536 : (int)u;
+}
+
+static int clip8(int v)
+{
+    if (v < 0)
+        return 0;
+    if (v > 255)
+        return 255;
+    return v;
+}
+
+/* one sample of the pane, centred by the caller rather than here */
+static void vlc_put(int x, int y, unsigned r, unsigned g, unsigned b)
+{
+    if (x < 0 || y < 0 || x >= VLC_VW || y >= VLC_VH)
+        return;
+    vlc_pix[y * VLC_VW + x] =
+        (uint16_t)((((r >> 3) & 31u) << 11) |
+                   (((g >> 2) & 63u) << 5) |
+                   ((b >> 3) & 31u));
+}
+
+static void vlc_clear(void)
+{
+    unsigned i;
+
+    for (i = 0; i < (unsigned)(VLC_VW * VLC_VH); i++)
+        vlc_pix[i] = 0;
+}
+
+/* the next whole number in a header, over whatever separates it */
+static const unsigned char *ppm_num(const unsigned char *p,
+                                    const unsigned char *e,
+                                    unsigned *v)
+{
+    unsigned n = 0;
+
+    for (;;)
+    {
+        if (p >= e)
+            return 0;
+        if (*p == '#')                      /* a comment runs to the line */
+        {
+            while (p < e && *p != '\n')
+                p++;
+            continue;
+        }
+        if (*p > ' ')
+            break;
+        p++;
+    }
+    if (*p < '0' || *p > '9')
+        return 0;
+    while (p < e && *p >= '0' && *p <= '9')
+    {
+        n = n * 10u + (unsigned)(*p - '0');
+        p++;
+    }
+    *v = n;
+    return p;
+}
+
+/*
+ * A portable pixmap: the plainest picture a file can be, and the one
+ * the status line names first because everything else here could be
+ * read as a variant of it.  Six is binary and three is ASCII, and both
+ * are three samples a pixel of at most 255.
+ */
+static int vlc_ppm(const unsigned char *d, unsigned n)
+{
+    const unsigned char *p, *e = d + n;
+    unsigned w, h, max, i, j;
+    int ox, oy;
+
+    if (n < 3 || d[0] != 'P' || (d[1] != '6' && d[1] != '3'))
+        return DC_NO;
+    p = d + 2;
+    p = ppm_num(p, e, &w);
+    if (!p)
+        return DC_NO;
+    p = ppm_num(p, e, &h);
+    if (!p)
+        return DC_NO;
+    p = ppm_num(p, e, &max);
+    if (!p || max != 255 || w == 0 || h == 0)
+        return DC_NO;
+    if (w > VLC_VW || h > VLC_VH)
+        return DC_OVER;
+
+    vlc_iw = (int)w;
+    vlc_ih = (int)h;
+    ox = ((int)VLC_VW - (int)w) / 2;
+    oy = ((int)VLC_VH - (int)h) / 2;
+
+    if (d[1] == '6')
+    {
+        if (p < e)
+            p++;                            /* the whitespace after maxval */
+        if (p + w * h * 3u > e)
+            return DC_NO;
+        for (j = 0; j < h; j++)
+            for (i = 0; i < w; i++)
+            {
+                const unsigned char *q = p + (j * w + i) * 3u;
+
+                vlc_put(ox + (int)i, oy + (int)j, q[0], q[1], q[2]);
+            }
+        return DC_OK;
+    }
+
+    for (j = 0; j < h; j++)
+        for (i = 0; i < w; i++)
+        {
+            unsigned r, g, b;
+
+            p = ppm_num(p, e, &r);
+            if (!p)
+                return DC_NO;
+            p = ppm_num(p, e, &g);
+            if (!p)
+                return DC_NO;
+            p = ppm_num(p, e, &b);
+            if (!p)
+                return DC_NO;
+            vlc_put(ox + (int)i, oy + (int)j, r, g, b);
+        }
+    return DC_OK;
+}
+
+/*
+ * A Windows bitmap, uncompressed, at the three depths a file is
+ * usually cut at: eight with its palette, twenty-four in BGR order and
+ * thirty-two with a byte of alpha nobody asked for.  The rows stand
+ * from the bottom up unless the height came in negative, which is the
+ * one piece of the header that is allowed to disagree with the rest.
+ */
+static int vlc_bmp(const unsigned char *d, unsigned n)
+{
+    unsigned off, w, bpp, rowb, i, j;
+    int sh, hh, topdown, ox, oy;
+    const unsigned char *pal;
+
+    if (n < 54)
+        return DC_NO;
+    off = r32le(d + 10);
+    if (r32le(d + 14) < 40u)                /* an OS/2 header is not this */
+        return DC_NO;
+    w = r32le(d + 18);
+    sh = (int)r32le(d + 22);
+    bpp = r16le(d + 28);
+    if (r32le(d + 30) != 0u)
+        return DC_NO;                       /* compressed only            */
+    if (bpp != 8 && bpp != 24 && bpp != 32)
+        return DC_NO;
+    if (w == 0 || sh == 0)
+        return DC_NO;
+    topdown = (sh < 0);
+    hh = topdown ? -sh : sh;
+    if (w > VLC_VW || hh > VLC_VH)
+        return DC_OVER;
+
+    rowb = (bpp == 8)  ? ((w + 3u) & ~3u) :
+           (bpp == 24) ? ((w * 3u + 3u) & ~3u) : (w * 4u);
+    if (off + rowb * (unsigned)hh > n)
+        return DC_NO;
+
+    pal = d + 54;
+    if (bpp == 8)
+    {
+        unsigned ncol = r32le(d + 46);
+
+        if (ncol == 0 || ncol > 256u)
+            ncol = 256u;
+        if (54u + ncol * 4u > off)
+            return DC_NO;
+    }
+
+    vlc_iw = (int)w;
+    vlc_ih = hh;
+    ox = ((int)VLC_VW - (int)w) / 2;
+    oy = ((int)VLC_VH - hh) / 2;
+
+    for (j = 0; j < (unsigned)hh; j++)
+    {
+        unsigned sy = topdown ? j : ((unsigned)hh - 1u - j);
+        const unsigned char *row = d + off + sy * rowb;
+
+        for (i = 0; i < w; i++)
+        {
+            unsigned r, g, b;
+
+            if (bpp == 8)
+            {
+                const unsigned char *e2 = pal + row[i] * 4u;
+
+                b = e2[0];
+                g = e2[1];
+                r = e2[2];
+            }
+            else if (bpp == 24)
+            {
+                b = row[i * 3u];
+                g = row[i * 3u + 1u];
+                r = row[i * 3u + 2u];
+            }
+            else
+            {
+                b = row[i * 4u];
+                g = row[i * 4u + 1u];
+                r = row[i * 4u + 2u];
+            }
+            vlc_put(ox + (int)i, oy + (int)j, r, g, b);
+        }
+    }
+    return DC_OK;
+}
+
+/*
+ * ByteRun1, the compression IFF cuts its BODY with: a positive byte
+ * counts the following bytes as they stand, a negative one repeats the
+ * next byte, and -128 does nothing at all.  One pass over the whole
+ * stream, which is how the spec writes it -- the runs do not restart
+ * at every row.
+ */
+static unsigned vlc_rle(const unsigned char *s, unsigned n,
+                        unsigned char *o, unsigned cap)
+{
+    unsigned i = 0, k = 0;
+
+    while (i < n && k < cap)
+    {
+        int b = (int)(signed char)s[i++];
+
+        if (b >= 0)
+        {
+            unsigned c = (unsigned)b + 1u;
+
+            while (c-- && i < n && k < cap)
+                o[k++] = s[i++];
+        }
+        else if (b != -128)
+        {
+            unsigned c = (unsigned)(1 - b);
+            unsigned char v = (i < n) ? s[i++] : 0;
+
+            while (c-- && k < cap)
+                o[k++] = v;
+        }
+    }
+    return k;
+}
+
+/*
+ * An IFF ILBM: eight planes of one-bit image, cut row across row and
+ * painted through the colour map, with the body run through ByteRun1
+ * when the header says so.  This is the picture format the Amiga has
+ * always had, and the only one here that is native to the machine
+ * rather than borrowed from somewhere else.
+ */
+static int vlc_ilbm(const unsigned char *d, unsigned n)
+{
+    unsigned off = 12, w = 0, h = 0, planes = 0, comp = 0;
+    unsigned rowb, i, j, p, slen;
+    unsigned char *src;
+    const unsigned char *cmap = 0, *body = 0;
+    unsigned cmapn = 0, bodyn = 0;
+    int ox, oy;
+
+    while (off + 8u <= n)
+    {
+        /* IFF names the chunk before it says how big it is, the way
+         * RIFF does and a PNG does not: the four at the head are the
+         * name, the four after them the length, and the body starts
+         * eight in whatever the order of the two is */
+        unsigned len = r32be(d + off + 4);
+        const unsigned char *t = d + off;
+
+        if (off + 8u + len > n)
+            break;
+        if (t[0] == 'B' && t[1] == 'M' && t[2] == 'H' && t[3] == 'D' &&
+            len >= 20u)
+        {
+            w = r16be(d + off + 8);
+            h = r16be(d + off + 10);
+            planes = d[off + 16];
+            comp = d[off + 18];
+        }
+        else if (t[0] == 'C' && t[1] == 'M' && t[2] == 'A' && t[3] == 'P')
+        {
+            cmap = d + off + 8;
+            cmapn = len;
+        }
+        else if (t[0] == 'B' && t[1] == 'O' && t[2] == 'D' && t[3] == 'Y')
+        {
+            body = d + off + 8;
+            bodyn = len;
+        }
+        off += 8u + len + (len & 1u);       /* IFF pads to an even byte   */
+    }
+
+    if (!body || w == 0 || h == 0 || planes == 0 || planes > 8u)
+        return DC_NO;
+    if (w > VLC_VW || h > VLC_VH)
+        return DC_OVER;
+    if (comp > 1u)
+        return DC_NO;
+    if (!cmap || cmapn < ((1u << planes) * 3u))
+        return DC_NO;
+
+    rowb = (w + 7u) / 8u;
+    if (comp == 0u)
+    {
+        src = (unsigned char *)body;
+        slen = bodyn;
+    }
+    else
+    {
+        slen = vlc_rle(body, bodyn, nt_scr, sizeof nt_scr);
+        src = nt_scr;
+    }
+    if (slen < rowb * planes * h)
+        return DC_NO;
+
+    vlc_iw = (int)w;
+    vlc_ih = (int)h;
+    ox = ((int)VLC_VW - (int)w) / 2;
+    oy = ((int)VLC_VH - (int)h) / 2;
+
+    for (j = 0; j < h; j++)
+    {
+        const unsigned char *row = src + j * planes * rowb;
+
+        for (i = 0; i < w; i++)
+        {
+            unsigned v = 0;
+            const unsigned char *e2;
+
+            for (p = 0; p < planes; p++)
+                if (row[p * rowb + (i >> 3)] & (0x80u >> (i & 7u)))
+                    v |= 1u << p;
+            e2 = cmap + v * 3u;
+            vlc_put(ox + (int)i, oy + (int)j, e2[0], e2[1], e2[2]);
+        }
+    }
+    return DC_OK;
+}
+
+/* one PNG row's filter, run across the row it belongs to.  Sub and
+ * Paeth look left along the same row, which has already been
+ * unfiltered, and Up and Average look at the row above, which was
+ * unfiltered before this one started -- so one forward pass answers
+ * all five. */
+static void vlc_unfilter(unsigned char *row, const unsigned char *prev,
+                         unsigned stride, unsigned bpp, unsigned f)
+{
+    unsigned char *p = row + 1;
+    unsigned x;
+
+    if (f == 1u)
+    {
+        for (x = bpp; x < stride; x++)
+            p[x] = (unsigned char)(p[x] + p[x - bpp]);
+    }
+    else if (f == 2u)
+    {
+        for (x = 0; x < stride; x++)
+            p[x] = (unsigned char)(p[x] + prev[x]);
+    }
+    else if (f == 3u)
+    {
+        for (x = 0; x < stride; x++)
+        {
+            unsigned a = (x >= bpp) ? p[x - bpp] : 0u;
+
+            p[x] = (unsigned char)(p[x] + ((a + prev[x]) >> 1));
+        }
+    }
+    else if (f == 4u)
+    {
+        for (x = 0; x < stride; x++)
+        {
+            unsigned a = (x >= bpp) ? p[x - bpp] : 0u;
+            unsigned b = prev[x];
+            unsigned c = (x >= bpp) ? prev[x - bpp] : 0u;
+            unsigned pp = a + b - c;
+            unsigned da = (pp > a) ? pp - a : a - pp;
+            unsigned db = (pp > b) ? pp - b : b - pp;
+            unsigned dc = (pp > c) ? pp - c : c - pp;
+
+            p[x] = (unsigned char)(p[x] +
+                   ((da <= db && da <= dc) ? a : (db <= dc ? b : c)));
+        }
+    }
+    /* filter 0 is the row as it arrived, and needs nothing */
+}
+
+/*
+ * A portable network graphic.  The stream between the chunks is a zlib
+ * wrapper rather than the raw DEFLATE a PDF carries, so the two bytes
+ * of header are stepped over and the Adler checksum at the tail is
+ * left to go unread -- nb_inflate stops at the final block and has
+ * never been asked what came after it.
+ *
+ * The raw stream is four bytes a pixel before the pane's two, so it is
+ * inflated into the sound buffer: 448 KiB of chip RAM, none of which
+ * anything else can be using, because opening a file stops whatever
+ * was playing and this file is being opened.
+ */
+static int vlc_png(const unsigned char *d, unsigned n)
+{
+    unsigned off, w = 0, h = 0, depth, colour, ch, stride, raw;
+    unsigned idat_off = 0, idat_len = 0, idat_n = 0;
+    const unsigned char *pal = 0;
+    unsigned paln = 0;
+    unsigned char *dst = (unsigned char *)NB_SND_BASE;
+    unsigned char *s2;
+    int got;
+    unsigned x, y;
+    int ox, oy;
+
+    if (n < 8u + 25u)
+        return DC_NO;
+    if (d[0] != 0x89u || d[1] != 'P' || d[2] != 'N' || d[3] != 'G' ||
+        d[4] != 0x0du || d[5] != 0x0au || d[6] != 0x1au || d[7] != 0x0au)
+        return DC_NO;
+    if (d[12] != 'I' || d[13] != 'H' || d[14] != 'D' || d[15] != 'R')
+        return DC_NO;
+
+    w = r32be(d + 16);
+    h = r32be(d + 20);
+    depth = d[24];
+    colour = d[25];
+    if (d[26] != 0u || d[27] != 0u || d[28] != 0u)
+        return DC_NO;                       /* deflate, filter 0, not inter */
+    if (depth != 8u)
+        return DC_NO;                       /* eight bits a sample          */
+
+    if      (colour == 0u) ch = 1;
+    else if (colour == 2u) ch = 3;
+    else if (colour == 3u) ch = 1;
+    else if (colour == 4u) ch = 2;
+    else if (colour == 6u) ch = 4;
+    else return DC_NO;
+
+    if (w == 0 || h == 0)
+        return DC_NO;
+    if (w > VLC_VW || h > VLC_VH)
+        return DC_OVER;
+
+    off = 8;
+    while (off + 8u <= n)
+    {
+        unsigned len = r32be(d + off);
+        const unsigned char *t = d + off + 4;
+
+        if (off + 12u + len > n)
+            break;
+        if (t[0] == 'P' && t[1] == 'L' && t[2] == 'T' && t[3] == 'E')
+        {
+            pal = d + off + 8;
+            paln = len;
+        }
+        else if (t[0] == 'I' && t[1] == 'D' && t[2] == 'A' && t[3] == 'T')
+        {
+            if (idat_n == 0)
+                idat_off = off + 8;
+            idat_len += len;
+            idat_n++;
+        }
+        else if (t[0] == 'I' && t[1] == 'E' && t[2] == 'N' && t[3] == 'D')
+            break;
+        off += 12u + len;                   /* PNG never pads             */
+    }
+
+    if (idat_n == 0 || (colour == 3u && (!pal || paln < 3u)))
+        return DC_NO;
+
+    stride = w * ch;
+    raw = (stride + 1u) * h;
+    if (raw > (unsigned)NB_SND_MAX)
+        return DC_OVER;
+
+    /* The two bytes at the head of the stream are its own: the window
+     * size and a flag that says there is no dictionary behind it.  The
+     * four bytes at the tail are the check on the whole of it, and the
+     * decoder stops at the final block long before they are asked for,
+     * but the head has to be gone past or the first block is read out
+     * of a header rather than out of the deflate that follows it. */
+    if (idat_len < 2u)
+        return DC_NO;
+
+    if (idat_n == 1u)
+        got = nb_inflate(d + idat_off + 2u, idat_len - 2u, dst, raw);
+    else
+    {
+        /* several runs of image data have to be one stream before they
+         * can be inflated, and the picture is the only room big enough
+         * to hold them while the sound buffer holds the answer */
+        unsigned i, k = 0;
+
+        if (idat_len > sizeof vlc_pix)
+            return DC_OVER;
+        off = 8;
+        while (off + 8u <= n && k < idat_len)
+        {
+            unsigned len = r32be(d + off);
+            const unsigned char *t = d + off + 4;
+
+            if (off + 12u + len > n)
+                break;
+            if (t[0] == 'I' && t[1] == 'D' && t[2] == 'A' && t[3] == 'T')
+            {
+                for (i = 0; i < len && k + i < idat_len; i++)
+                    ((unsigned char *)vlc_pix)[k + i] = d[off + 8 + i];
+                k += len;
+            }
+            off += 12u + len;
+        }
+        if (k != idat_len)
+            return DC_NO;
+        got = nb_inflate((const unsigned char *)vlc_pix + 2u, idat_len - 2u,
+                         dst, raw);
+    }
+
+    if (got < 0 || (unsigned)got != raw)
+        return DC_NO;
+
+    /* The filters, forward and in place: each row is finished before the
+     * next one asks anything of it.  A row in the stream is its filter
+     * byte and then its samples, and prev has to be the samples of the
+     * row above rather than the head of that row -- taking the head
+     * hands the first sample that row's filter byte instead of its first
+     * sample, and hands every sample after that the one to its left, so
+     * each row is rebuilt out of a row that is itself a sample out of
+     * place.  Three filters of the five look upward and all three were
+     * asking for the row one byte early. */
+    s2 = dst;
+    for (y = 0; y < h; y++)
+    {
+        const unsigned char *prev = (y == 0) ? vlc_prev0
+                                             : (s2 - stride);
+
+        vlc_unfilter(s2, prev, stride, ch, s2[0]);
+        s2 += stride + 1u;
+    }
+
+    /* And across into the pane, which is where they were going.  The
+     * pane is swept first because a stream split over several runs of
+     * image data has nowhere else to lie while they are gathered into
+     * one, and it gathers them here: the compressed bytes are still in
+     * the pane for every row the picture does not cover, which is the
+     * top and bottom of a picture smaller than it. */
+    vlc_clear();
+    vlc_iw = (int)w;
+    vlc_ih = (int)h;
+    ox = ((int)VLC_VW - (int)w) / 2;
+    oy = ((int)VLC_VH - (int)h) / 2;
+    for (y = 0; y < h; y++)
+    {
+        const unsigned char *q = dst + y * (stride + 1u) + 1u;
+
+        for (x = 0; x < w; x++)
+        {
+            const unsigned char *e2 = q + x * ch;
+            unsigned r, g, b;
+
+            if (colour == 0u || colour == 4u)
+                r = g = b = e2[0];
+            else if (colour == 3u)
+            {
+                unsigned k = e2[0] * 3u;
+
+                r = pal[k];
+                g = pal[k + 1u];
+                b = pal[k + 2u];
+            }
+            else
+            {
+                r = e2[0];
+                g = e2[1];
+                b = e2[2];
+            }
+            vlc_put(ox + (int)x, oy + (int)y, r, g, b);
+        }
+    }
+    return DC_OK;
+}
+
+/*
+ * A run of pictures with a header that says how many there are and how
+ * fast they come: YUV4MPEG2, four-two-zero, one luma byte a pixel and
+ * a byte of each chroma for every four.  The conversion is the one the
+ * maths is usually written in -- 298 over 256 for the luma's own
+ * scale, then the two chroma weights against it -- and every one of
+ * those is a constant times a byte, so it is shifts and adds rather
+ * than a multiply a pixel.
+ */
+static int vlc_y4m(const unsigned char *d, unsigned n)
+{
+    unsigned off = 9, w = 0, h = 0, fsz;
+
+    while (off < n && d[off] != '\n')
+    {
+        unsigned char k = d[off];
+
+        if (k == ' ')
+        {
+            off++;
+            continue;
+        }
+        if (k == 'W' || k == 'H')
+        {
+            unsigned v = 0;
+
+            off++;
+            while (off < n && d[off] >= '0' && d[off] <= '9')
+            {
+                v = v * 10u + (unsigned)(d[off] - '0');
+                off++;
+            }
+            if (k == 'W')
+                w = v;
+            else
+                h = v;
+            continue;
+        }
+        if (k == 'F')
+        {
+            unsigned a = 0, b = 1;
+
+            off++;
+            while (off < n && d[off] >= '0' && d[off] <= '9')
+            {
+                a = a * 10u + (unsigned)(d[off] - '0');
+                off++;
+            }
+            if (off < n && d[off] == ':')
+            {
+                b = 0;
+                off++;
+                while (off < n && d[off] >= '0' && d[off] <= '9')
+                {
+                    b = b * 10u + (unsigned)(d[off] - '0');
+                    off++;
+                }
+            }
+            if (a != 0 && b != 0)
+            {
+                vlc_fpsn = a;
+                vlc_fpsd = b;
+            }
+            continue;
+        }
+        if (k == 'C')
+        {
+            /* four-two-zero is the one sampling this reads, and a file
+             * that says otherwise would be decoded as though it had not
+             * said anything at all -- which is the way a picture comes
+             * out wrong rather than a file that does not open */
+            off++;
+            if (off + 3u > n || d[off] != '4' || d[off + 1] != '2' ||
+                d[off + 2] != '0')
+                return DC_NO;
+            continue;
+        }
+        while (off < n && d[off] != ' ' && d[off] != '\n')
+            off++;
+    }
+    if (off >= n)
+        return DC_NO;
+    off++;                                  /* the newline that ends it   */
+
+    if (w == 0 || h == 0 || (w & 1u) || (h & 1u))
+        return DC_NO;                       /* four-two-zero wants evens  */
+    if (w > VLC_VW || h > VLC_VH)
+        return DC_OVER;
+    if (off + 6u > n)
+        return DC_NO;
+    if (d[off] != 'F' || d[off + 1] != 'R' || d[off + 2] != 'A' ||
+        d[off + 3] != 'M' || d[off + 4] != 'E' || d[off + 5] != '\n')
+        return DC_NO;
+
+    fsz = w * h + (w * h) / 4u;
+    vlc_pos = off + 6u;
+    vlc_fsz = fsz;
+    vlc_fall = fsz + 6u;
+    if (fsz == 0 || vlc_pos + fsz > n)
+        return DC_NO;
+    vlc_frames = 1u + (n - vlc_pos - fsz) / vlc_fall;
+    vlc_at = 0;
+
+    vlc_iw = (int)w;
+    vlc_ih = (int)h;
+    if (vlc_fpsn == 0)
+    {
+        vlc_fpsn = 25;
+        vlc_fpsd = 1;
+    }
+    return DC_OK;
+}
+
+/* the frame at index k, straight out of the file and into the pane */
+static int vlc_frame_show(unsigned k)
+{
+    const unsigned char *s, *Y, *U, *V;
+    unsigned w, h, x, y;
+    int ox, oy;
+
+    if (vlc_kind != VK_VID || k >= vlc_frames)
+        return 0;
+    s = nb_pfs_nodes[vlc_node].data + vlc_pos + k * vlc_fall;
+    w = (unsigned)vlc_iw;
+    h = (unsigned)vlc_ih;
+    Y = s;
+    U = s + w * h;
+    V = U + (w * h) / 4u;
+    ox = ((int)VLC_VW - (int)w) / 2;
+    oy = ((int)VLC_VH - (int)h) / 2;
+
+    for (y = 0; y < h; y++)
+    {
+        const unsigned char *yl = Y + y * w;
+        const unsigned char *ul = U + (y >> 1) * (w >> 1);
+        const unsigned char *vl = V + (y >> 1) * (w >> 1);
+
+        for (x = 0; x < w; x++)
+        {
+            int c = (int)yl[x] - 16;
+            int u = (int)ul[x >> 1] - 128;
+            int v = (int)vl[x >> 1] - 128;
+            int r = clip8((298 * c + 409 * v + 128) >> 8);
+            int g = clip8((298 * c - 100 * u - 208 * v + 128) >> 8);
+            int b = clip8((298 * c + 516 * u + 128) >> 8);
+
+            vlc_put(ox + (int)x, oy + (int)y,
+                    (unsigned)r, (unsigned)g, (unsigned)b);
+        }
+    }
+    return 1;
+}
+
+/*
+ * A sound out of a RIFF wave: one channel or two, eight bits unsigned
+ * or sixteen little endian, decoded into the chip RAM Paula reads and
+ * nothing else.  Two channels are mixed down because Paula has one
+ * channel here, and mixing is an average -- which is the only division
+ * in this file that is not by a power of two.
+ */
+static int vlc_wave(const unsigned char *d, unsigned n)
+{
+    unsigned off = 12, fmt = 0, ch = 0, rate = 0, bits = 0;
+    const unsigned char *pcm = 0;
+    unsigned pn = 0, i, o = 0;
+    unsigned char *out = (unsigned char *)NB_SND_BASE;
+    unsigned cap = (unsigned)NB_SND_MAX;
+
+    if (n < 12)
+        return DC_NO;
+    while (off + 8u <= n)
+    {
+        /* RIFF names the chunk before it says how big it is -- the
+         * other way round, and the way a PNG does it -- so the four at
+         * the head are the name and the four after them the length,
+         * little endian, and the body starts eight in either way */
+        unsigned len = r32le(d + off + 4);
+        const unsigned char *t = d + off;
+
+        if (off + 8u + len > n)
+            break;
+        if (t[0] == 'f' && t[1] == 'm' && t[2] == 't' && t[3] == ' ' &&
+            len >= 16u)
+        {
+            fmt = r16le(d + off + 8);
+            ch = r16le(d + off + 10);
+            rate = r32le(d + off + 12);
+            bits = r16le(d + off + 22);
+        }
+        else if (t[0] == 'd' && t[1] == 'a' && t[2] == 't' && t[3] == 'a')
+        {
+            pcm = d + off + 8;
+            pn = len;
+        }
+        off += 8u + len + (len & 1u);
+    }
+
+    if (!pcm || fmt != 1u)
+        return DC_NO;                       /* linear PCM, nothing else    */
+    if (ch != 1u && ch != 2u)
+        return DC_NO;
+    if (bits != 8u && bits != 16u)
+        return DC_NO;
+    if (rate == 0)
+        return DC_NO;
+
+    if (ch == 1u)
+    {
+        if (bits == 8u)
+        {
+            if (pn > cap)
+                pn = cap;
+            for (i = 0; i < pn; i++)
+                out[i] = (unsigned char)((int)pcm[i] - 128);
+            o = pn;
+        }
+        else
+        {
+            unsigned cnt = pn / 2u;
+
+            if (cnt > cap)
+                cnt = cap;
+            for (i = 0; i < cnt; i++)
+                out[i] = pcm[i * 2u + 1u];  /* the high byte is the sample */
+            o = cnt;
+        }
+    }
+    else
+    {
+        unsigned cnt = pn / ((bits / 8u) * 2u);
+
+        if (cnt > cap)
+            cnt = cap;
+        if (bits == 8u)
+        {
+            for (i = 0; i < cnt; i++)
+            {
+                int a = (int)pcm[i * 2u] - 128;
+                int b = (int)pcm[i * 2u + 1u] - 128;
+
+                out[i] = (unsigned char)((a + b) / 2);
+            }
+        }
+        else
+        {
+            for (i = 0; i < cnt; i++)
+            {
+                int a = s16le(pcm + i * 4u);
+                int b = s16le(pcm + i * 4u + 2u);
+
+                out[i] = (unsigned char)(((a + b) / 2) >> 8);
+            }
+        }
+        o = cnt;
+    }
+
+    if (o < 2u)
+        return DC_NO;
+    vlc_pcm = o & ~1u;                      /* Paula takes whole words     */
+    vlc_rate = rate;
+    return DC_OK;
+}
+
+/* NeoBench's own sample, header and all: the same sixteen bytes the
+ * boot chime is read from, so it goes across as it stands */
+static int vlc_nsnd(const unsigned char *d, unsigned n)
+{
+    unsigned take, i, rate;
+    unsigned char *out = (unsigned char *)NB_SND_BASE;
+
+    if (n < 16u)
+        return DC_NO;
+    rate = r32be(d + 12);
+    if (rate == 0)
+        return DC_NO;
+    take = n - 16u;
+    if (r32be(d + 8) < take)
+        take = r32be(d + 8);
+    if (take > (unsigned)NB_SND_MAX)
+        take = (unsigned)NB_SND_MAX;
+    take &= ~1u;
+    if (take < 2u)
+        return DC_NO;
+    for (i = 0; i < take; i++)
+        out[i] = d[16u + i];
+    vlc_pcm = take;
+    vlc_rate = rate;
+    return DC_OK;
+}
+
+/* what a file is, from the first bytes of it and from nothing else:
+ * the playlist is built out of this, so a file the player cannot open
+ * never reaches the list to be chosen and then refused */
+static int vlc_kind_of(const unsigned char *d, unsigned n)
+{
+    if (n >= 3u && d[0] == 'P' && (d[1] == '6' || d[1] == '3'))
+        return VK_PIC;
+    if (n >= 2u && d[0] == 'B' && d[1] == 'M')
+        return VK_PIC;
+    if (n >= 8u && d[0] == 0x89u && d[1] == 'P' && d[2] == 'N' &&
+        d[3] == 'G' && d[4] == 0x0du && d[5] == 0x0au &&
+        d[6] == 0x1au && d[7] == 0x0au)
+        return VK_PIC;
+    if (n >= 12u && d[0] == 'F' && d[1] == 'O' && d[2] == 'R' &&
+        d[3] == 'M' && d[8] == 'I' && d[9] == 'L' && d[10] == 'B' &&
+        d[11] == 'M')
+        return VK_PIC;
+    if (n >= 9u && d[0] == 'Y' && d[1] == 'U' && d[2] == 'V' &&
+        d[3] == '4' && d[4] == 'M' && d[5] == 'P' && d[6] == 'E' &&
+        d[7] == 'G' && d[8] == '2')
+        return VK_VID;
+    if (n >= 12u && d[0] == 'R' && d[1] == 'I' && d[2] == 'F' &&
+        d[3] == 'F' && d[8] == 'W' && d[9] == 'A' && d[10] == 'V' &&
+        d[11] == 'E')
+        return VK_AUD;
+    if (n >= 16u && d[0] == 'N' && d[1] == 'S' && d[2] == 'N' &&
+        d[3] == 'D')
+        return VK_AUD;
+    return VK_NONE;
+}
+
+/*
+ * What the store is holding that this player can open: the four
+ * directories media is kept in, walked once when the window comes up
+ * and never after, because the store is in the ROM and a ROM does not
+ * change its mind.  Only the files that answer their own magic are
+ * listed, so the playlist is a list of what plays rather than a list
+ * of what is in the drawer.
+ */
+static void vlc_scan(void)
+{
+    static const char *const dirs[4] = {
+        "Home/Pictures", "Home/Videos", "Home/Music", "Core/Media"
+    };
+    int i;
+
+    vlc_n = 0;
+    vlc_sel = 0;
+    vlc_top = 0;
+
+    for (i = 0; i < 4; i++)
+    {
+        const struct pfs_node *dn = pfs_find(dirs[i]);
+        unsigned self, c;
+
+        if (!dn || !dn->dir)
+            continue;
+        self = (unsigned)(dn - nb_pfs_nodes);
+        c = pfs_first_child(self);
+        while (c != PFS_NONE && vlc_n < VLC_MAX)
+        {
+            const struct pfs_node *f = &nb_pfs_nodes[c];
+
+            if (!f->dir && f->size && vlc_kind_of(f->data, f->size))
+                vlc_item[vlc_n++] = c;
+            c = pfs_next_child(self, c);
+        }
+    }
+}
+
+/* keep the chosen line inside the five the window shows */
+static void vlc_show(void)
+{
+    if (vlc_sel < vlc_top)
+        vlc_top = vlc_sel;
+    if (vlc_sel >= vlc_top + VLC_PLN)
+        vlc_top = vlc_sel - VLC_PLN + 1;
+    if (vlc_top < 0)
+        vlc_top = 0;
+    if (vlc_n <= VLC_PLN)
+        vlc_top = 0;
+    else if (vlc_top > vlc_n - VLC_PLN)
+        vlc_top = vlc_n - VLC_PLN;
+}
+
+/*
+ * One file, opened.  Whatever was playing is let go first, which is
+ * the whole of what "choose something else" means -- Paula has one
+ * channel and this player has one pane, and a player that kept the old
+ * sound running under the new picture would be showing two files at
+ * once.
+ */
+static void vlc_load(int i)
+{
+    const struct pfs_node *nd;
+    const unsigned char *d;
+    unsigned n, k;
+    char buf[128], *b;
+    int kind, r;
+
+    if (i < 0 || i >= vlc_n)
+        return;
+
+    nb_sound_stop();
+    vlc_state = VS_STOP;
+    vlc_acc = vlc_secs = vlc_field = 0;
+    vlc_iw = vlc_ih = 0;
+    vlc_rate = vlc_pcm = 0;
+    vlc_pos = vlc_fsz = vlc_fall = vlc_frames = vlc_at = 0;
+    vlc_fpsn = 25;
+    vlc_fpsd = 1;
+    vlc_what = "-";
+    vlc_clear();
+
+    vlc_sel = i;
+    vlc_node = vlc_item[i];
+    nd = &nb_pfs_nodes[vlc_node];
+    d = nd->data;
+    n = nd->size;
+
+    k = 0;
+    while (k + 1u < sizeof vlc_name && nd->name[k])
+    {
+        vlc_name[k] = nd->name[k];
+        k++;
+    }
+    vlc_name[k] = '\0';
+
+    kind = vlc_kind_of(d, n);
+    vlc_kind = kind;
+    r = DC_NO;
+    if (kind == VK_PIC)
+    {
+        if (n >= 3u && d[0] == 'P')
+        {
+            vlc_what = "ppm";
+            r = vlc_ppm(d, n);
+        }
+        else if (n >= 2u && d[0] == 'B')
+        {
+            vlc_what = "bmp";
+            r = vlc_bmp(d, n);
+        }
+        else if (n >= 8u && d[0] == 0x89u)
+        {
+            vlc_what = "png";
+            r = vlc_png(d, n);
+        }
+        else
+        {
+            vlc_what = "ilbm";
+            r = vlc_ilbm(d, n);
+        }
+    }
+    else if (kind == VK_VID)
+    {
+        vlc_what = "yuv4mpeg2";
+        r = vlc_y4m(d, n);
+    }
+    else if (kind == VK_AUD)
+    {
+        if (n >= 4u && d[0] == 'R')
+        {
+            vlc_what = "wav";
+            r = vlc_wave(d, n);
+        }
+        else
+        {
+            vlc_what = "nsnd";
+            r = vlc_nsnd(d, n);
+        }
+    }
+
+    if (r == DC_OVER)
+        vlc_say("too large for the pane");
+    else if (r != DC_OK)
+    {
+        vlc_kind = VK_NONE;
+        vlc_iw = vlc_ih = 0;
+        vlc_say("unsupported file");
+    }
+    else if (kind == VK_PIC)
+        vlc_say("a still picture");
+    else
+        vlc_say("Space plays");
+
+    if (r == DC_OK && kind == VK_VID)
+        vlc_frame_show(0);
+    vlc_show();
+
+    /* the line a log can be read back from: which file, what of it,
+     * and the numbers the pane is showing */
+    b = put_str(buf, ">vlc open ");
+    b = put_str(b, nd->path);
+    b = put_str(b, " kind=");
+    b = put_num(b, (unsigned)kind);
+    if (r == DC_OK && (kind == VK_PIC || kind == VK_VID))
+    {
+        b = put_str(b, " w=");
+        b = put_num(b, (unsigned)vlc_iw);
+        b = put_str(b, " h=");
+        b = put_num(b, (unsigned)vlc_ih);
+        if (kind == VK_VID)
+        {
+            b = put_str(b, " frames=");
+            b = put_num(b, vlc_frames);
+            b = put_str(b, " fps=");
+            b = put_num(b, vlc_fpsn);
+            *b++ = '/';
+            b = put_num(b, vlc_fpsd);
+        }
+    }
+    else if (r == DC_OK && kind == VK_AUD)
+    {
+        b = put_str(b, " rate=");
+        b = put_num(b, vlc_rate);
+        b = put_str(b, " pcm=");
+        b = put_num(b, vlc_pcm);
+    }
+    b = put_str(b, (r == DC_OVER) ? " too-large" :
+                   (r == DC_OK)   ? " ok" : " unsupported");
+    *b++ = '\r';
+    *b++ = '\n';
+    *b = '\0';
+    vlc_log(buf);
+}
+
+/* arm what has been decoded: the run starts at the head of the buffer
+ * every time, because Paula's position is not a thing this machine can
+ * read back and a resume that guessed would be a lie */
+static int vlc_arm(void)
+{
+    if (vlc_kind != VK_AUD || vlc_pcm < 2u || vlc_rate == 0)
+        return 0;
+    if (nb_sound_start((unsigned)NB_SND_BASE, vlc_pcm, vlc_rate,
+                       nb_prefs.snd_volume) == 0)
+    {
+        vlc_say("Paula would not take it");
+        return 0;
+    }
+    return 1;
+}
+
+/*
+ * The window coming up, and going away.
+ *
+ * Opening asks the store what it has and puts the first of it in the
+ * pane straight away: a player that opened onto an empty window would
+ * be a player nobody could tell was working.  Closing lets go of the
+ * channel first, because nothing else is going to -- the sound belongs
+ * to this window and does not outlive it.
+ */
+static void vlc_start(void)
+{
+    vlc_open = 1;
+    vlc_scan();
+    if (vlc_n > 0)
+    {
+        vlc_load(vlc_sel);
+        return;
+    }
+    vlc_name[0] = '\0';
+    vlc_kind = VK_NONE;
+    vlc_iw = vlc_ih = 0;
+    vlc_what = "-";
+    vlc_clear();
+    vlc_say("no media in the store");
+}
+
+static void vlc_close(void)
+{
+    nb_sound_stop();
+    vlc_state = VS_STOP;
+    vlc_open = 0;
+    sel_clear();
+}
+
+/* the transport: 0 play/pause, 1 stop, 2 back, 3 on */
+static int vlc_transport(int which)
+{
+    if (which == 2 || which == 3)
+    {
+        int i;
+
+        if (vlc_n == 0)
+            return 0;
+        i = vlc_sel + ((which == 3) ? 1 : -1);
+        if (i >= vlc_n)
+            i = 0;
+        if (i < 0)
+            i = vlc_n - 1;
+        vlc_load(i);
+        return 1;
+    }
+
+    if (which == 1)
+    {
+        nb_sound_stop();
+        vlc_state = VS_STOP;
+        vlc_secs = vlc_field = 0;
+        if (vlc_kind == VK_VID && vlc_frames)
+        {
+            vlc_at = 0;
+            vlc_frame_show(0);
+        }
+        vlc_say("stopped");
+        return 1;
+    }
+
+    if (vlc_state == VS_PLAY)
+    {
+        if (vlc_kind == VK_AUD)
+            nb_sound_stop();
+        vlc_state = VS_PAUSE;
+        vlc_say("paused");
+        return 1;
+    }
+
+    if (vlc_kind == VK_PIC)
+    {
+        vlc_say("a picture does not run");
+        return 1;
+    }
+    if (vlc_kind == VK_NONE || (vlc_kind == VK_VID && vlc_frames == 0))
+    {
+        vlc_say("nothing to play");
+        return 1;
+    }
+    if (vlc_kind == VK_AUD)
+    {
+        if (vlc_pcm < 2u)
+        {
+            vlc_say("nothing to play");
+            return 1;
+        }
+        if (!vlc_arm())
+            return 1;               /* the line already says why          */
+    }
+    vlc_state = VS_PLAY;
+    vlc_say("playing");
+    return 1;
+}
+
+/* one transport gadget: a raised cell with the word set in the middle,
+ * the way the rest of the chrome draws a button it expects to be read
+ * rather than recognised */
+static void vlc_btn(int x, int y, int w, const char *s, int on)
+{
+    gfx_fill(x, y, w, 14, C_WB_GREY);
+    gfx_fill(x, y, w, 1, C_INK);
+    gfx_fill(x, y, 1, 14, C_INK);
+    gfx_fill(x, y + 13, w, 1, C_WB_SHADE);
+    gfx_fill(x + w - 1, y, 1, 14, C_WB_SHADE);
+    if (on)
+        gfx_fill(x + 1, y + 1, w - 2, 12, C_WB_BLUE);
+    text_d(x + (w - strw(s)) / 2, y + 3, s, on ? C_INK : C_WB_LINE);
+}
+
+/*
+ * The window itself: the pane, the column of figures beside it, the
+ * playlist, the transport and the status line, in that order from the
+ * top.  The pane is blitted whole every time it is drawn -- the scene
+ * is a pure function of the flags and may be rebuilt for any band of
+ * rows at any time, so the picture cannot be left standing in the
+ * middle of a repaint.
+ */
+static void window_vlc(void)
+{
+    const int x = VLC_X, y = VLC_Y, w = VLC_W, h = VLC_H;
+    char title[40], line[48];
+    char *d;
+    int i, r;
+
+    if (vlc_name[0])
+    {
+        d = put_str(title, "VLC: ");
+        d = put_str(d, vlc_name);
+    }
+    else
+        d = put_str(title, "VLC media player");
+    *d = '\0';
+    glass_window(x, y, w, h, 20, title, 3);
+
+    /* the pane, sunken into the body the way the reader's text field is */
+    gfx_fill(VLC_VX - 1, VLC_VY - 1, VLC_VW + 2, VLC_VH + 2, C_WB_SHADE);
+    gfx_fill(VLC_VX, VLC_VY, VLC_VW, VLC_VH, NB_RGB(0, 0, 0));
+    for (r = 0; r < VLC_VH; r++)
+        for (i = 0; i < VLC_VW; i++)
+            gfx_pixel(VLC_VX + i, VLC_VY + r,
+                      vlc_pix[r * VLC_VW + i]);
+    gfx_fill(VLC_VX - 1, VLC_VY + VLC_VH, VLC_VW + 2, 1, C_INK);
+    gfx_fill(VLC_VX + VLC_VW, VLC_VY - 1, 1, VLC_VH + 1, C_INK);
+
+    /* The column of figures: what it is, how big, where it stands in
+     * the list, whether it is running, how long by, and what it is cut
+     * from.  Every arm writes into the same line[] and every arm owes
+     * it a terminator, because put_str does not lay one and the bytes
+     * an earlier arm left past its own end are still there: the arm
+     * that says "png" reads "pped" out of the arm that said "stopped"
+     * before it, and the figure is a word nobody wrote. */
+    for (i = 0; i < VLC_IN; i++)
+    {
+        int ly = VLC_IY + i * VLC_IH;
+
+        switch (i)
+        {
+        case 0:
+            d = put_str(line, vlc_kind == VK_PIC ? "picture" :
+                              vlc_kind == VK_VID ? "film" :
+                              vlc_kind == VK_AUD ? "sound" : "none");
+            *d = '\0';
+            break;
+        case 1:
+            if (vlc_kind == VK_AUD && vlc_rate)
+            {
+                d = put_str(line, "");
+                d = put_num(d, vlc_rate);
+                d = put_str(d, " Hz");
+                *d = '\0';
+            }
+            else if (vlc_iw)
+            {
+                d = put_str(line, "");
+                d = put_num(d, (unsigned)vlc_iw);
+                *d++ = 'x';
+                d = put_num(d, (unsigned)vlc_ih);
+                *d = '\0';
+            }
+            else
+                d = put_str(line, "-");
+            *d = '\0';
+            break;
+        case 2:
+            d = put_str(line, "");
+            d = put_num(d, (unsigned)(vlc_sel + ((vlc_n > 0) ? 1 : 0)));
+            *d++ = ' ';
+            *d++ = 'o';
+            *d++ = 'f';
+            *d++ = ' ';
+            d = put_num(d, (unsigned)vlc_n);
+            *d = '\0';
+            break;
+        case 3:
+            d = put_str(line, vlc_state == VS_PLAY  ? "playing" :
+                              vlc_state == VS_PAUSE ? "paused"
+                                                    : "stopped");
+            *d = '\0';
+            break;
+        case 4:
+            if (vlc_kind == VK_AUD && vlc_secs)
+            {
+                d = put_str(line, "");
+                d = put_num(d, vlc_secs / 60u);
+                *d++ = ':';
+                if ((vlc_secs % 60u) < 10u)
+                    *d++ = '0';
+                d = put_num(d, vlc_secs % 60u);
+                *d = '\0';
+            }
+            else
+                d = put_str(line, vlc_what ? vlc_what : "-");
+            *d = '\0';
+            break;
+        default:
+            d = put_str(line, (vlc_kind == VK_PIC) ? "still" : "Space");
+            *d = '\0';
+            break;
+        }
+        text_d(VLC_IX, ly, line, (i == 3) ? C_TEXT : C_MUTE);
+    }
+
+    /* the playlist */
+    gfx_fill(VLC_PLX, VLC_SEP, VLC_PLW, 1, C_WB_SHADE);
+    for (i = 0; i < VLC_PLN; i++)
+    {
+        int k = vlc_top + i;
+        int ry = VLC_PLY + i * VLC_PLH;
+        const char *nm;
+        int len = 0;
+
+        if (k >= vlc_n)
+            break;
+        nm = nb_pfs_nodes[vlc_item[k]].name;
+        if (k == vlc_sel)
+            gfx_fill(VLC_PLX, ry, VLC_PLW, VLC_PLH - 2, C_WB_BLUE);
+        while (len < (VLC_PLW - 16) / 8 && nm[len])
+            len++;
+        for (r = 0; r < len; r++)
+            line[r] = nm[r];
+        line[len] = '\0';
+        text_d(VLC_PLX + 8, ry + 3, line, k == vlc_sel ? C_INK : C_TEXT);
+    }
+    if (vlc_n == 0)
+        text_d(VLC_PLX + 8, VLC_PLY + 3, "no media in the store", C_MUTE);
+
+    /* the transport */
+    gfx_fill(VLC_PLX, VLC_TRULE, VLC_PLW, 1, C_WB_SHADE);
+    for (i = 0; i < 4; i++)
+    {
+        static const char *const lab[4] = {
+            "Play", "Stop", "Prev", "Next"
+        };
+        const char *s = (i == 0 && vlc_state == VS_PLAY) ? "Pause"
+                                                         : lab[i];
+
+        vlc_btn(VLC_PLX + i * (VLC_BW + VLC_BG), VLC_TY, VLC_BW, s, 0);
+    }
+
+    /* the status line */
+    gfx_fill(VLC_PLX, y + h - 34, VLC_PLW, 1, C_WB_SHADE);
+    text_d(VLC_PLX, VLC_BY, vlc_msg, C_MUTE);
+}
+
+/* one press in the player: its cross, its caption, the transport, a
+ * line of the playlist, or nothing at all.  A press that names a line
+ * comes back with 2, so the double press gate decides whether the
+ * naming was worth a load -- exactly as it does for the browser. */
+static int hit_vlc(int x, int y, int *cls, int *idx, int *changed)
+{
+    int i;
+
+    if (!vlc_open ||
+        x < VLC_X || x >= VLC_X + VLC_W || y < VLC_Y || y >= VLC_Y + VLC_H)
+        return 0;
+
+    if (on_close(x, y, VLC_X, VLC_Y, VLC_W))
+    {
+        vlc_close();
+        band_vlc(1);
+        *changed = 1;
+        return 1;
+    }
+    if (on_caption(x, y, VLC_X, VLC_Y, VLC_W, 3))
+        return drag_here(7, x, y, changed);
+
+    for (i = 0; i < 4; i++)
+    {
+        int bx = VLC_PLX + i * (VLC_BW + VLC_BG);
+
+        if (x >= bx && x < bx + VLC_BW &&
+            y >= VLC_TY && y < VLC_TY + 14)
+        {
+            if (focus_p != 7)
+            {
+                focus_p = 7;
+                band_add(486, 512);
+                *changed = 1;
+            }
+            if (vlc_transport(i))
+            {
+                band_vlc(0);
+                *changed = 1;
+            }
+            return 1;
+        }
+    }
+
+    if (x >= VLC_PLX && x < VLC_PLX + VLC_PLW &&
+        y >= VLC_PLY && y < VLC_PLY + VLC_PLN * VLC_PLH)
+    {
+        int k = vlc_top + (y - VLC_PLY) / VLC_PLH;
+
+        if (k < 0 || k >= vlc_n)
+            return focus_here(7, changed);
+        if (focus_p != 7)
+        {
+            focus_p = 7;
+            band_add(486, 512);
+            *changed = 1;
+        }
+        *cls = SEL_VLC;
+        *idx = k;
+        return 2;
+    }
+
+    return focus_here(7, changed);
+}
+
+/* what the keyboard does to the player: the transport, and the two
+ * cursor keys that walk a film a frame at a time.  The up and down
+ * keys belong to the playlist and are taken by the list walk below
+ * this, because a playlist is a list before it is a program. */
+static int vlc_key(int c)
+{
+    if (!vlc_open)
+        return 0;
+
+    if (c == ' ' || c == NB_KEY_RET)
+    {
+        if (!vlc_transport(0))
+            return 0;
+        band_vlc(0);
+        return 1;
+    }
+
+    if (c == NB_KEY_LEFT || c == NB_KEY_RIGHT)
+    {
+        int k;
+
+        if (vlc_kind != VK_VID || vlc_frames == 0)
+            return 0;
+        if (vlc_state == VS_PLAY)
+        {
+            vlc_state = VS_PAUSE;
+            vlc_say("paused");
+        }
+        k = (int)vlc_at + ((c == NB_KEY_RIGHT) ? 1 : -1);
+        if (k < 0)
+            k = (int)vlc_frames - 1;
+        if (k >= (int)vlc_frames)
+            k = 0;
+        if (!vlc_frame_show((unsigned)k))
+            return 0;
+        vlc_at = (unsigned)k;
+        band_vlc(0);
+        return 1;
+    }
+
+    return 0;
+}
+
+/*
+ * The field's own work: the film steps when the field counter says a
+ * frame is due, and the sound is asked whether it has run out.  Called
+ * once a field whether or not anything is happening, and it answers
+ * with nothing at all nine times in ten -- which is the whole point of
+ * asking it out here rather than from a key or a press.
+ */
+static int vlc_step(void)
+{
+    if (vlc_state != VS_PLAY)
+        return 0;
+
+    vlc_field++;
+    if (vlc_field >= 50u)
+    {
+        vlc_field = 0;
+        vlc_secs++;
+    }
+
+    if (vlc_kind == VK_VID)
+    {
+        unsigned next;
+
+        if (vlc_fpsn == 0 || vlc_frames == 0)
+            return 0;
+        vlc_acc += vlc_fpsn;
+        if (vlc_acc < 50u * vlc_fpsd)
+            return 0;
+        vlc_acc -= 50u * vlc_fpsd;
+        next = vlc_at + 1u;
+        if (next >= vlc_frames)
+            next = 0;
+        if (!vlc_frame_show(next))
+            return 0;
+        vlc_at = next;
+        return 1;
+    }
+
+    if (vlc_kind == VK_AUD)
+    {
+        if (nb_sound_busy())
+            return 0;
+        vlc_state = VS_STOP;
+        vlc_say("finished");
+        vlc_log(">vlc end\r\n");
+        return 1;
+    }
+    return 0;
+}
+
+void nb_desktop_render(void);
+
+/*
+ * The desktop's answer to a field passing: the player is the only
+ * thing here that changes without anybody touching it, so this is the
+ * one call the main loop owes it.  It paints its own rows and presents
+ * them, and it says nothing on serial -- a log line every frame would
+ * be a log nobody could read, and the two lines that matter, the open
+ * and the end, are printed where they happen.
+ */
+void nb_desktop_tick(void)
+{
+    if (!vlc_open || !vlc_step())
+        return;
+    band_vlc(0);
+    nb_desktop_render();
+    nb_pointer_after_present();
+}
+
+/* ------------------------------------------------------------------ *
+ * The menu, by the first letter of what you are looking for
+ * ------------------------------------------------------------------ *
+ *
+ * The cursor keys walk the menu one entry at a time, which is the
+ * right answer for the entry next to the one you are on and the wrong
+ * one for the entry across the list.  This is the other half: press
+ * the letter the name starts with and the light goes to the first
+ * entry that has it, past wherever it already stands; press it again
+ * and it walks to the next one that does.  Places and programs are one
+ * list here because the menu is one list to the eye, so 'v' finds VLC
+ * and 'h' finds Home whether or not the rule between them is in the
+ * way.
+ */
+/* the light's own geometry, set by the press pass further down: the
+ * keyboard names an entry exactly as a press does and has to leave the
+ * same mark behind it */
+static void sel_mark(void);
+
+static int menu_jump(int c)
+{
+    int i, low = c;
+
+    if (low >= 'A' && low <= 'Z')
+        low = low - 'A' + 'a';
+
+    for (i = 0; i < MENU_ITEMS; i++)
+    {
+        int k = ((sel_kind == SEL_MENU) ? sel_idx + 1 : 0) + i;
+        const char *nm;
+        int first;
+
+        if (k >= MENU_ITEMS)
+            k -= MENU_ITEMS;
+        nm = (k < N_PLACES) ? places[k].name : menu_name[k - N_PLACES];
+        first = nm[0];
+        if (first >= 'A' && first <= 'Z')
+            first = first - 'A' + 'a';
+        if (nm[0] == '\0' || first != low)
+            continue;
+
+        sel_clear();
+        sel_kind = SEL_MENU;
+        sel_idx = k;
+        sel_mark();
+        band_select(sel_kind, sel_idx);
+        return 1;
+    }
+    return 0;
+}
+
 /*
  * Show desktop: the narrow slab on the right-hand end of the panel.
  *
  * One press takes every program window off the wallpaper at once, the
  * next puts them back exactly where they were -- the flags are the
- * whole of what a window is, so saving six bits saves the desktop.
+ * whole of what a window is, so saving seven bits saves the desktop.
  * Like the orb and the crosses it is a control rather than an item, so
- * it answers to a single press.
+ * it answers to a single press.  A window going down is a window going
+ * down and nothing more: what the player has on the channel keeps
+ * playing behind the slab, because a player that stopped when you
+ * looked at something else would be a player that had opinions about
+ * what you were doing.
  */
 static int show_desktop(void)
 {
@@ -2555,15 +4600,18 @@ static int show_desktop(void)
         about_open   = (desk_saved & 8) != 0;
         prefs_open   = (desk_saved & 16) != 0;
         neotext_open = (desk_saved & 32) != 0;
+        vlc_open     = (desk_saved & 64) != 0;
+        shell_open   = (desk_saved & 128) != 0;
         desk_hidden = 0;
     }
     else
     {
         desk_saved = (files_open ? 1 : 0) | (clock_open ? 2 : 0) |
                      (monitor_open ? 4 : 0) | (about_open ? 8 : 0) |
-                     (prefs_open ? 16 : 0) | (neotext_open ? 32 : 0);
+                     (prefs_open ? 16 : 0) | (neotext_open ? 32 : 0) |
+                     (vlc_open ? 64 : 0) | (shell_open ? 128 : 0);
         files_open = clock_open = monitor_open = about_open = 0;
-        prefs_open = neotext_open = 0;
+        prefs_open = neotext_open = vlc_open = shell_open = 0;
         if (focus_p)
             focus_p = 0;
         desk_hidden = 1;
@@ -2604,7 +4652,7 @@ static void dbl_report(unsigned dt, int dx, int dy)
  * no longer matches what is set.
  */
 /*
- * One of the six programs, standing or put away.
+ * One of the seven programs, standing or put away.
  *
  * The start menu asks for this as a toggle -- an entry whose program is
  * already showing puts it away, which is what the lit dot on the entry
@@ -2634,7 +4682,33 @@ static int program_slot(int p, int toggle)
                  pr_lay = 0;         /* the keys start on the swatches    */
              prefs_open = on;
              break;
-    default: on = toggle ? !neotext_open : 1; neotext_open = on; break;
+    case 5:  on = toggle ? !neotext_open : 1; neotext_open = on; break;
+    case 6:
+             /*
+              * The player is the only one of the eight that has to ask
+              * the store what it has before it can show anything, so it
+              * scans on the way up -- and lets go of the channel on the
+              * way down, because nothing else is going to.
+              */
+             on = toggle ? !vlc_open : 1;
+             if (on)
+                 vlc_start();
+             else
+                 vlc_close();
+             on = vlc_open;
+             break;
+    case 7:
+             /*
+              * The shell stands up on the click alone: the window flag
+              * is the whole of its start, because what it draws is its
+              * own and asks this file for nothing.  Opening it twice
+              * means the shell twice, exactly as for the reader.
+              */
+             on = toggle ? !shell_open : 1;
+             shell_open = on;
+             break;
+    default: on = 0;
+             break;
     }
 
     switch (p)                      /* the rows it and its button cover   */
@@ -2644,7 +4718,10 @@ static int program_slot(int p, int toggle)
     case 2:  band_monitor();   break;
     case 3:  band_about();     break;
     case 4:  band_prefs(1);    break;
-    default: band_neotext(1);  break;
+    case 5:  band_neotext(1);  break;
+    case 6:  band_vlc(1);      break;
+    case 7:  band_shell(1);    break;
+    default: break;
     }
 
     if (on)
@@ -2698,6 +4775,18 @@ static int activate(int cls, int idx)
         else
             /* a menu entry toggles: the lit dot says which are up */
             program_slot(menu_slot[idx - N_PLACES], 1);
+    }
+    else if (cls == SEL_VLC)
+    {
+        /*
+         * A line of the player's playlist: the second press is the one
+         * that opens it, through the very call a double press on a
+         * menu entry makes, so the player has one way of being asked
+         * for something and nothing to keep in step with the browser.
+         * The row is spent either way, as every other choice is.
+         */
+        changed = 1;
+        vlc_load(idx);
     }
     else                                   /* a list row: it opens         */
     {
@@ -2841,8 +4930,14 @@ static int win_press(int which, int x, int y, int *cls, int *idx,
     case 5:                                     /* preferences              */
         return hit_prefs(x, y, changed);
 
-    default:                                    /* NeoText                  */
+    case 6:                                     /* NeoText                  */
         return hit_neotext(x, y, changed);
+
+    case 7:                                     /* VLC                      */
+        return hit_vlc(x, y, cls, idx, changed);
+
+    default:                                    /* NeoShell                 */
+        return hit_shell(x, y, changed);
     }
 }
 
@@ -2942,7 +5037,7 @@ int nb_desktop_click(int x, int y, int btn)
          * the show-desktop slab on the very edge */
         if (nb_prefs.taskbar && y >= 490 && y < 512)
         {
-            for (i = 1; i <= 6; i++)
+            for (i = 1; i <= N_PROGRAMS; i++)
             {
                 struct task_cell t;
 
@@ -2955,7 +5050,7 @@ int nb_desktop_click(int x, int y, int btn)
                  * puts it down, and the button of any other window
                  * raises it and takes the keyboard.  The lit button is
                  * the window on top, so this is what makes the row a row
-                 * of windows to move between rather than six more ways
+                 * of windows to move between rather than seven more ways
                  * of closing one.
                  */
                 if (focus_p != i)
@@ -2970,7 +5065,9 @@ int nb_desktop_click(int x, int y, int btn)
                 else if (i == 3) { monitor_open = 0; band_monitor(); }
                 else if (i == 4) { about_open   = 0; band_about(); }
                 else if (i == 5) { prefs_open   = 0; band_prefs(1); }
-                else             { neotext_open = 0; band_neotext(1); }
+                else if (i == 6) { neotext_open = 0; band_neotext(1); }
+                else if (i == 7) { vlc_close(); band_vlc(1); }
+                else             { shell_open = 0; band_shell(1); }
                 focus_p = 0;
                 changed |= sel_clear();
                 return 1;
@@ -2993,12 +5090,12 @@ int nb_desktop_click(int x, int y, int btn)
          * one z order from opposite ends of it.
          */
         {
-            static const int seq[6] = { 3, 2, 6, 5, 1, 4 };
-            int order[6], n = 0, r = 0, k;
+            static const int seq[N_PROGRAMS] = { 3, 2, 8, 7, 6, 5, 1, 4 };
+            int order[N_PROGRAMS], n = 0, r = 0, k;
 
-            if (focus_p >= 1 && focus_p <= 6)
+            if (focus_p >= 1 && focus_p <= N_PROGRAMS)
                 order[n++] = focus_p;
-            for (k = 0; k < 6; k++)
+            for (k = 0; k < N_PROGRAMS; k++)
                 if (seq[k] != focus_p)
                     order[n++] = seq[k];
 
@@ -3075,6 +5172,11 @@ static void sel_mark(void)
         sel_x = FILES_X + FILES_W / 2;
         sel_y = FILES_Y + FILES_ROW0 + sel_idx * FILES_ROWH +
                 FILES_ROWH / 2;
+    }
+    else if (sel_kind == SEL_VLC)
+    {
+        sel_x = VLC_PLX + VLC_PLW / 2;
+        sel_y = VLC_PLY + sel_idx * VLC_PLH + VLC_PLH / 2;
     }
     sel_t = (unsigned)nb_fields;
 }
@@ -3182,6 +5284,8 @@ int nb_desktop_key(int c)
         case 4: about_open   = 0; band_about();    break;
         case 5: prefs_open   = 0; band_prefs(1);   break;
         case 6: neotext_open = 0; band_neotext(1); break;
+        case 7: vlc_close(); band_vlc(1);          break;
+        case 8: shell_open = 0; band_shell(1);     break;
         default: return 0;           /* nothing has the keyboard          */
         }
         focus_p = 0;
@@ -3204,14 +5308,43 @@ int nb_desktop_key(int c)
             return prefs_key(c);
         if (focus_p == 6)
             return neotext_key(c);
+        if (focus_p == 7)
+            return vlc_key(c);
+        if (focus_p == 8)
+            return sh_key(c);
         return 0;
     }
 
     /*
+     * While the menu stands, a printable character is the first letter
+     * of a name rather than something typed into whatever has the
+     * keyboard: the menu is the thing on screen, and a list is what a
+     * key at this point is for.  It answers zero for a letter no entry
+     * begins with, so the reader still has every character the moment
+     * the menu goes down and loses none of them to a jump that found
+     * nothing.
+     */
+    if (menu_open && c >= 32 && c < 127)
+        return menu_jump(c);
+
+    /*
+     * And the shell keeps every key while it has the keyboard, for the
+     * same reason the reader and the pane do, plus one of its own: a
+     * line whose cursor keys had gone to a list standing behind it would
+     * be a line nobody could move the caret in.  Up and Down are the
+     * ring's own -- they bring back what has already scrolled off the
+     * top of the pane -- and are the two keys this desktop otherwise
+     * spends on lists.
+     */
+    if (focus_p == 8)
+        return sh_key(c);
+
+    /*
      * Everything else belongs to the reader while the reader has the
-     * keyboard, menu or no menu: a menu is a list, and a list has no
-     * letters in it.  Left, right, tab, backspace and the characters all
-     * go through the same call the caret does.
+     * keyboard: a menu that is not up does not take its characters, and
+     * one that is up has already had first refusal of them above.
+     * Left, right, tab, backspace and the characters all go through the
+     * same call the caret does.
      */
     if (focus_p == 6 && c != NB_KEY_UP && c != NB_KEY_DOWN)
         return neotext_key(c);
@@ -3223,6 +5356,12 @@ int nb_desktop_key(int c)
      */
     if (focus_p == 5)
         return prefs_key(c);
+
+    /* the player keeps the transport and the frame step, for the same
+     * reason again -- and the two arrows it does not take belong to the
+     * playlist below, which is a list before it is a program */
+    if (focus_p == 7 && vlc_open && c != NB_KEY_UP && c != NB_KEY_DOWN)
+        return vlc_key(c);
 
     if (c != NB_KEY_UP && c != NB_KEY_DOWN)
         return 0;
@@ -3244,6 +5383,13 @@ int nb_desktop_key(int c)
         band_neotext(0);
         return 1;
     }
+    else if (focus_p == 7 && vlc_open)
+    {
+        if (vlc_n == 0)
+            return 0;
+        count = vlc_n;
+        kind  = SEL_VLC;
+    }
     else if (files_open)
     {
         count = row_count();
@@ -3253,7 +5399,8 @@ int nb_desktop_key(int c)
         return 0;                   /* neither list is standing           */
 
     if ((kind == SEL_MENU && sel_kind == SEL_MENU) ||
-        (kind == SEL_ROW  && sel_kind == SEL_ROW))
+        (kind == SEL_ROW  && sel_kind == SEL_ROW)  ||
+        (kind == SEL_VLC  && sel_kind == SEL_VLC))
         from = sel_idx;             /* the light is already in this list  */
     else
         from = -1;                  /* nothing lit: start at the top      */
@@ -3435,14 +5582,17 @@ static void aero_btn(int x, int y, int w, int h, int on)
 }
 
 /*
- * The start orb: Workbench's launcher drawn as a bevelled disc -- a
- * hard shade under it, a white rim, the grey body and the light across
- * the top of it -- with NeoBench's mark on the pearl the artwork was
- * drawn for.  One control, so one press: the bevel describes the thing
- * rather than standing for a second state to press through.  On the
- * glass it becomes a dark pearl lit from above, and when the menu is
- * up it throws a halo of the brand teal, which is the whole of the
- * feedback the launcher gives that it has been opened.
+ * The start orb.  Off the glass it is Workbench's launcher: a
+ * bevelled disc, hard shade under it, white rim, grey body and the
+ * light across the top, with NeoBench's mark on the pearl the artwork
+ * was drawn for.  On the glass it is Vista's -- a lit blue sphere,
+ * its top turned to the sky the glass is cut for and its foot falling
+ * to a navy, so that the disc reads as a ball rather than as a
+ * washer -- and the pearl is still NeoBench's, which is the one piece
+ * of that desktop's branding that is not anybody else's.  One
+ * control, so one press: the bevel describes the thing rather than
+ * standing for a second state to press through, and the halo the menu
+ * opens with is the brand teal.
  */
 static void start_orb(void)
 {
@@ -3456,11 +5606,13 @@ static void start_orb(void)
             gfx_disc_a(cx, cy, 12, C_ACC, 96);
         }
 
-        gfx_disc(cx + 1, cy + 2, 11, C_SHADOW);          /* shade     */
-        gfx_disc(cx, cy, 11, menu_open ? C_INK : C_AERO_RIM);
-        gfx_disc(cx, cy, 10, menu_open ? C_AERO_HI : C_AERO);
-        gfx_disc_a(cx, cy - 3, 8, C_INK, menu_open ? 120 : 84);
-        gfx_disc(cx, cy, 6, menu_open ? C_ACC : LOGO_BG);
+        gfx_disc(cx + 1, cy + 2, 11, C_SHADOW);            /* shade    */
+        gfx_disc(cx, cy, 11, C_INK);                       /* the rim  */
+        gfx_disc(cx, cy, 10, C_ORB_B);                     /* body     */
+        gfx_disc_a(cx, cy - 3, 8, C_ORB_T,
+                   menu_open ? 164 : 140);                 /* lit top  */
+        gfx_disc_a(cx, cy + 4, 7, C_ORB_S, 96);            /* its foot */
+        gfx_disc(cx, cy, 6, menu_open ? C_ACC : LOGO_BG);  /* pearl    */
         logo_mark(cx - 5, cy - 5, 10);
         return;
     }
@@ -3565,12 +5717,13 @@ static void quick_launch(void)
  */
 static int task_slot(int id, struct task_cell *t)
 {
-    static const char *const nm[6] = {
-        "Files", "Clock", "Monitor", "About", "Preferences", "NeoText"
+    static const char *const nm[N_PROGRAMS] = {
+        "Files", "Clock", "Monitor", "About", "Preferences", "NeoText",
+        "VLC", "NeoShell"
     };
     int x = TASK_X0, i;
 
-    for (i = 0; i < 6; i++)
+    for (i = 0; i < N_PROGRAMS; i++)
     {
         struct task_cell c;
         int on;
@@ -3646,7 +5799,7 @@ static void task_manager(void)
 {
     int i;
 
-    for (i = 1; i <= 6; i++)
+    for (i = 1; i <= N_PROGRAMS; i++)
     {
         struct task_cell t;
 
@@ -4022,7 +6175,8 @@ static int program_running(int slot)
     case 2:  return monitor_open;
     case 3:  return about_open;
     case 4:  return prefs_open;
-    default: return neotext_open;
+    case 5:  return neotext_open;
+    default: return vlc_open;
     }
 }
 
@@ -4045,10 +6199,9 @@ static void start_menu(void)
 
     for (i = 0; i < MENU_PROGS; i++)
     {
-        static const char *nm[MENU_PROGS] = { "About", "Preferences" };
         int s = menu_slot[i];
 
-        menu_item(i, s, nm[i], program_running(s),
+        menu_item(i, s, menu_name[i], program_running(s),
                   sel_kind == SEL_MENU && sel_idx == N_PLACES + i);
     }
 }
@@ -4064,16 +6217,18 @@ static void start_menu(void)
  */
 void nb_desktop_dump(void)
 {
-    static const char key[7] = { 'm', 'f', 'c', 'o', 'a', 'r', 'n' };
-    const int val[7] = { menu_open, files_open, clock_open, monitor_open,
-                         about_open, prefs_open, neotext_open };
+    static const char key[9] = { 'm', 'f', 'c', 'o', 'a', 'r', 'n', 'v',
+                                 'h' };
+    const int val[9] = { menu_open, files_open, clock_open, monitor_open,
+                         about_open, prefs_open, neotext_open, vlc_open,
+                         shell_open };
     int i;
 
     amiga_serial_putc('>');
     amiga_serial_putc('u');
     amiga_serial_putc('i');
     amiga_serial_putc(' ');
-    for (i = 0; i < 7; i++) {
+    for (i = 0; i < 9; i++) {
         amiga_serial_putc(key[i]);
         amiga_serial_putc('=');
         amiga_serial_putc(val[i] ? '1' : '0');
@@ -4084,7 +6239,8 @@ void nb_desktop_dump(void)
      * a menu entry or a list row, and '-' for none.  The difference
      * between a select and an open is otherwise invisible in a log that
      * only carries the program flags, and the digit says which entry --
-     * the first six are places, the last one a program.  t= is whether
+     * in the menu the first six are places and the last two programs,
+     * and in the player's playlist it is the line of it.  t= is whether
      * the menu is the sticky one the right button opens, and foc= is the
      * program holding the keyboard -- 0 when none does, which is what
      * makes Escape a no-op rather than a surprise. */
@@ -4122,7 +6278,7 @@ void nb_desktop_dump(void)
         int wx, wy, ww, wh, n;
 
         d = put_str(buf, "at=");
-        if (focus_p >= 1 && focus_p <= 6) {
+        if (focus_p >= 1 && focus_p <= N_PROGRAMS) {
             win_box(focus_p, &wx, &wy, &ww, &wh);
             n = wx;
             if (n < 0) {
@@ -4166,6 +6322,949 @@ void nb_desktop_dump(void)
     amiga_serial_putc('\n');
 }
 
+/* ------------------------------------------------------------------ *
+ * NeoShell
+ * ------------------------------------------------------------------ */
+
+/*
+ * The command line: NeoBench's own shell, and the console it is before
+ * there is a desktop to put it in.  One engine with two front ends --
+ * the boot path takes the whole screen while the log is still holding,
+ * and the same engine sits behind a caption when Tools starts it --
+ * because a shell that answered a key differently depending on how it
+ * was reached would be two shells kept in step.
+ *
+ * What it holds is small on purpose: the lines it has printed, the line
+ * it is printing, and the line being typed.  The commands -- NeoCommands
+ * -- read the file store the ROM carries and what the probe found at
+ * boot, and nothing else: there is no path outside the store for one to
+ * name, which is what makes this a shell for NeoBench rather than a
+ * shell that happens to be running on it.  The list `help` prints is
+ * written out in Core/Docs/neoshell.txt for the reader to open.
+ *
+ * The field it stands on is the preferences' own wash, so the pane on
+ * the desktop and the screen before it read as one machine rather than
+ * as a window onto somebody else's.  The type is the ice that holds up
+ * over either end of that wash and the steel one shade under it; the
+ * prompt is the sky the mark is cut in.
+ */
+#define SH_ECHO   NB_RGB(25, 55, 31)   /* the type, and what is typed    */
+#define SH_OUT    NB_RGB(17, 41, 26)   /* one under it: the answers       */
+#define SH_PROMPT NB_RGB(6, 46, 30)    /* the prompt, and the pane's rule */
+#define SH_BAR    NB_RGB(1, 6, 7)      /* the band over the boot screen   */
+#define SH_UNDER  NB_RGB(0, 4, 6)      /* the letter under the caret      */
+#define SH_PW     80                   /* where the prompt leaves off     */
+
+static char  sh_ring[SH_RING][SH_WD];  /* what it has printed             */
+static char  sh_kind[SH_RING];         /* 'e' an echo, 'o' an answer      */
+static int   sh_n;                     /* lines held, up to SH_RING       */
+static int   sh_top;                   /* where the oldest one stands     */
+static int   sh_view;                  /* how far the view is held back   */
+static char  sh_line[SH_WD];           /* the line being typed            */
+static int   sh_len;
+static int   sh_cur;                   /* the caret, in characters        */
+static char  sh_acc[SH_WD];            /* an answer being composed        */
+static int   sh_accl;
+static int   sh_dirty;                 /* 0 nothing, 1 the prompt, 2 more */
+static int   sh_quit;                  /* the boot path's answer          */
+static int   sh_boot;                  /* standing where the GUI will be  */
+static unsigned sh_dir;                /* the directory the prompt names  */
+
+/* one word against another, without regard to case */
+static int sh_is(const char *a, const char *b)
+{
+    while (*a && *b)
+    {
+        unsigned char x = (unsigned char)*a++;
+        unsigned char y = (unsigned char)*b++;
+
+        if (x >= 'A' && x <= 'Z')
+            x = (unsigned char)(x - 'A' + 'a');
+        if (y >= 'A' && y <= 'Z')
+            y = (unsigned char)(y - 'A' + 'a');
+        if (x != y)
+            return 0;
+    }
+    return !*a && !*b;
+}
+
+/* Serial, one line at a time: an answer belongs on the wire as well as
+ * on the pane, for the reason the boot log does -- a screen nobody can
+ * reach is a screen nobody can read. */
+static void sh_wire(const char *s)
+{
+    while (*s)
+        amiga_serial_putc(*s++);
+    amiga_serial_putc('\r');
+    amiga_serial_putc('\n');
+}
+
+/*
+ * One finished line into the ring.  The ring is walked from sh_top and
+ * holds up to SH_RING, so the oldest line is what gives way when it is
+ * full; a view that was looking at older output is shifted by one with
+ * it, which is what keeps what was on screen on screen.
+ */
+static void sh_push(const char *s, int kind)
+{
+    int slot, i;
+
+    if (sh_n < SH_RING)
+    {
+        slot = (sh_top + sh_n) % SH_RING;
+        sh_n++;
+    }
+    else
+    {
+        slot = sh_top;
+        sh_top = (sh_top + 1) % SH_RING;
+        if (sh_view)
+            sh_view++;
+    }
+
+    sh_kind[slot] = (char)kind;
+    for (i = 0; i < SH_COLS && s[i]; i++)
+        sh_ring[slot][i] = s[i];
+    sh_ring[slot][i] = '\0';
+
+    sh_wire(sh_ring[slot]);
+    sh_dirty = 2;
+}
+
+/* An answer is composed a character at a time and ends at a newline or
+ * at the width of a line, whichever comes first. */
+static void sh_putc(char c)
+{
+    if (c == '\n')
+    {
+        sh_acc[sh_accl] = '\0';
+        sh_push(sh_acc, 'o');
+        sh_accl = 0;
+        return;
+    }
+    if (c == '\r')
+        return;
+    if (sh_accl >= SH_COLS)
+    {
+        sh_acc[sh_accl] = '\0';
+        sh_push(sh_acc, 'o');
+        sh_accl = 0;
+    }
+    sh_acc[sh_accl++] = c;
+}
+
+/*
+ * An answer's line.  Every verb here answers in whole lines, so the
+ * newline belongs to printing one rather than being something each
+ * caller remembers: a set of verbs that forget to end their lines
+ * answers in one long one, broken by the width wherever the width
+ * happens to fall, which is an answer assembled out of order rather
+ * than one that reads.  sh_put() is the other half of it -- a piece of
+ * a line, for the answers composed of several of them: a name after
+ * an error, a program under its heading.
+ */
+static void sh_put(const char *s)
+{
+    while (*s)
+        sh_putc(*s++);
+}
+
+static void sh_puts(const char *s)
+{
+    sh_put(s);
+    sh_putc('\n');
+}
+
+/* anything a command left half-written */
+static void sh_end(void)
+{
+    if (sh_accl)
+    {
+        sh_acc[sh_accl] = '\0';
+        sh_push(sh_acc, 'o');
+        sh_accl = 0;
+    }
+}
+
+/* where the prompt is standing, as the store spells it */
+static const char *sh_path(void)
+{
+    const char *p = nb_pfs_nodes[sh_dir].path;
+
+    return (p && *p) ? p : "/";
+}
+
+/*
+ * A child of that directory, by name.  `want` is 2 for anything, 1 for
+ * a directory and 0 for a file, which is the difference between `cd`
+ * and `type` and stops the two from disagreeing about the same name.
+ * Names answer without regard to case, as the verbs do: a shell that
+ * made the user remember how a file was capitalised would be a shell
+ * with an opinion about something the store does not care about.
+ */
+static int sh_find(const char *name, int want)
+{
+    unsigned c = pfs_first_child(sh_dir);
+
+    while (c != PFS_NONE)
+    {
+        if (sh_is(nb_pfs_nodes[c].name, name) &&
+            (want == 2 || (want == 1) == (nb_pfs_nodes[c].dir != 0)))
+            return (int)c;
+        c = pfs_next_child(sh_dir, c);
+    }
+    return -1;
+}
+
+/* how far the view may go back, and one step of it */
+static int sh_view_step(int dir)
+{
+    int v = sh_view + dir;
+
+    if (v > sh_n - 1)
+        v = sh_n - 1;
+    if (v < 0)
+        v = 0;
+    if (v == sh_view)
+        return 0;
+    sh_view = v;
+    return 1;
+}
+
+static void sh_help(void)
+{
+    sh_puts("NeoCommands -- NeoBench's own, and nothing else:");
+    sh_puts("  help            this list");
+    sh_puts("  ver             what is running");
+    sh_puts("  cls             clear what has been printed");
+    sh_puts("  echo <text>     say it back");
+    sh_puts("  info            the machine the probe found");
+    sh_puts("  cfg             the preferences in force");
+    sh_puts("  pwd             where the prompt is standing");
+    sh_puts("  dir [name]      the store, one name to a line");
+    sh_puts("  cd <name|..>    move the prompt through the store");
+    sh_puts("  type <name>     print a file from the store");
+    sh_puts("  progs           what the desktop can start");
+    sh_puts("  run <name>      start one of them");
+    sh_puts("  desktop         go to the desktop");
+    sh_puts("Core/Docs/neoshell.txt carries the same list.");
+}
+
+static void sh_ver(void)
+{
+    sh_puts("NeoBench 0.1.9 m68k-aga");
+    sh_puts("AGA, 640x512 interlaced, composited from the ROM");
+}
+
+/*
+ * What the probes answered, asked of them again rather than of a copy:
+ * the probes are read-only by construction and this is the one place
+ * the machine is asked what it is after it has finished saying so
+ * itself.  The boot log's own tags read the same four functions.
+ */
+static void sh_info(void)
+{
+    extern int nb_probe_cpu(void);
+    extern int nb_probe_rtg(void);
+    extern int nb_probe_mmu(void);
+    extern int nb_probe_fpu(void);
+    char buf[56];
+    char *d;
+    int cpu = nb_probe_cpu();
+    int bfg = nb_bfg9060();
+
+    d = put_str(buf, "CPU     Motorola ");
+    d = put_num(d, (unsigned)(cpu == 60 ? 60 : cpu == 40 ? 40 :
+                              cpu == 30 ? 30 : 20));
+    *d = '\0';
+    sh_puts(buf);
+
+    sh_puts(nb_probe_mmu() ? "MMU     present" : "MMU     not present");
+    sh_puts(nb_probe_fpu() ? "FPU     present" : "FPU     not present");
+    sh_puts(nb_probe_rtg() ? "RTG     hires 640x512 lace, 8 bpp"
+                           : "RTG     not present");
+    sh_puts(nb_probe_bus() ? "Bus     32-bit" : "Bus     24-bit");
+
+    d = put_str(buf, "Fast    ");
+    d = put_num(d, nb_probe_fast_mb());
+    d = put_str(d, " MB of ");
+    d = put_num(d, NB_FAST_PREFERRED);
+    d = put_str(d, " preferred");
+    *d = '\0';
+    sh_puts(buf);
+
+    if (bfg >= 0)
+    {
+        d = put_str(buf, "BFG9060 revision ");
+        d = put_num(d, (unsigned)bfg);
+        *d = '\0';
+        sh_puts(buf);
+    }
+    else
+        sh_puts("BFG9060 not present");
+}
+
+static void sh_cfg(void)
+{
+    static const char *const bd[NB_BD_COUNT] = {
+        "wash", "paper", "azure", "dusk", "slate"
+    };
+    char buf[64];
+    char *d;
+    int i = nb_prefs.backdrop;
+
+    d = put_str(buf, "Screen  ");
+    d = put_num(d, nb_prefs.w);
+    *d++ = 'x';
+    d = put_num(d, nb_prefs.h);
+    d = put_str(d, ", ");
+    d = put_num(d, nb_prefs.depth);
+    d = put_str(d, " bpp");
+    *d = '\0';
+    sh_puts(buf);
+
+    d = put_str(buf, "Backdrop ");
+    d = put_str(d, (i < 0 || i >= NB_BD_COUNT) ? bd[0] : bd[i]);
+    *d = '\0';
+    sh_puts(buf);
+
+    d = put_str(buf, "Bar     ");
+    d = put_str(d, nb_prefs.bar_style == BAR_CLASSIC ? "classic" : "aero");
+    d = put_str(d, ", glass ");
+    d = put_num(d, nb_prefs.bar_glass);
+    *d = '\0';
+    sh_puts(buf);
+
+    d = put_str(buf, "Layers  grid ");
+    d = put_str(d, nb_prefs.grid ? "on" : "off");
+    d = put_str(d, ", glow ");
+    d = put_str(d, nb_prefs.glow ? "on" : "off");
+    d = put_str(d, ", taskbar ");
+    d = put_str(d, nb_prefs.taskbar ? "on" : "off");
+    *d = '\0';
+    sh_puts(buf);
+
+    d = put_str(buf, "Font    ");
+    d = put_str(d, nb_prefs.font);
+    d = put_str(d, ", hold ");
+    d = put_num(d, nb_prefs.hold);
+    d = put_str(d, " s, failsafe ");
+    d = put_str(d, nb_prefs.failsafe ? "on" : "off");
+    *d = '\0';
+    sh_puts(buf);
+}
+
+static void sh_pwd(void)
+{
+    sh_puts(sh_path());
+}
+
+/* the store, one name to a line, from wherever the prompt is standing */
+static void sh_dir_cmd(const char *arg)
+{
+    unsigned dir = sh_dir;
+    unsigned c;
+    int n = 0;
+
+    if (*arg)
+    {
+        int i = sh_find(arg, 1);
+
+        if (i < 0)
+        {
+            sh_put("No such directory: ");
+            sh_puts(arg);
+            return;
+        }
+        dir = (unsigned)i;
+    }
+
+    c = pfs_first_child(dir);
+    if (c == PFS_NONE)
+    {
+        sh_puts("(nothing there)");
+        return;
+    }
+
+    while (c != PFS_NONE)
+    {
+        const struct pfs_node *nd = &nb_pfs_nodes[c];
+        char buf[72];
+        char tmp[16];
+        char *d = put_str(buf, nd->name);
+
+        if (nd->dir)
+        {
+            *d++ = '/';
+        }
+        else
+        {
+            while (d - buf < 26)
+                *d++ = ' ';
+            fmt_size(tmp, nd->size);
+            d = put_str(d, tmp);
+        }
+        *d = '\0';
+        sh_puts(buf);
+
+        if (++n >= 40)
+        {
+            sh_puts("... and more");
+            return;
+        }
+        c = pfs_next_child(dir, c);
+    }
+}
+
+static void sh_cd(const char *arg)
+{
+    int i;
+
+    if (!*arg)
+    {
+        sh_pwd();
+        return;
+    }
+    if (arg[0] == '/' && !arg[1])
+    {
+        sh_dir = PFS_ROOT;
+        sh_pwd();
+        return;
+    }
+    if (arg[0] == '.' && arg[1] == '.' && !arg[2])
+    {
+        if (sh_dir != PFS_ROOT)
+            sh_dir = nb_pfs_nodes[sh_dir].parent;
+        sh_pwd();
+        return;
+    }
+    if (arg[0] == '.' && !arg[1])
+        return;
+
+    i = sh_find(arg, 1);
+    if (i < 0)
+    {
+        sh_put("No such directory: ");
+        sh_puts(arg);
+        return;
+    }
+    sh_dir = (unsigned)i;
+    sh_pwd();
+}
+
+/*
+ * Print a file.  What it will not do is type a machine's own bytes onto
+ * a screen: the first 256 decide whether this is text at all, and what
+ * gets through afterwards is folded to dots where it is not printable,
+ * so a picture chosen by mistake costs the ring nothing but a line of
+ * them.  Thirty lines is what a console owes, and the rest is the
+ * reader's job.
+ */
+static void sh_type(const char *arg)
+{
+    const struct pfs_node *nd;
+    unsigned i, lines = 0, shown = 0, probe;
+    int good = 0;
+
+    if (!*arg)
+    {
+        sh_puts("type <name>");
+        return;
+    }
+    i = (unsigned)sh_find(arg, 0);
+    if (i == (unsigned)-1)
+    {
+        sh_put("No such file: ");
+        sh_puts(arg);
+        return;
+    }
+
+    nd = &nb_pfs_nodes[i];
+    if (nd->size == 0)
+    {
+        sh_puts("(nothing in it)");
+        return;
+    }
+
+    probe = (nd->size < 256u) ? nd->size : 256u;
+    for (i = 0; i < probe; i++)
+    {
+        unsigned char ch = nd->data[i];
+
+        if (ch == '\n' || ch == '\r' || ch == '\t' ||
+            (ch >= 32 && ch < 127))
+            good++;
+    }
+    if (good * 10 < (int)probe * 9)
+    {
+        sh_puts("Not text -- NeoText opens it as bytes.");
+        return;
+    }
+
+    for (i = 0; i < nd->size && lines < 30 && shown < 4096u; i++)
+    {
+        unsigned char ch = nd->data[i];
+
+        if (ch == '\r')
+            continue;
+        if (ch == '\n')
+            lines++;
+        else if (ch != '\t' && (ch < 32 || ch >= 127))
+            ch = '.';
+        sh_putc((char)ch);
+        shown++;
+    }
+    sh_end();
+    if (i < nd->size)
+        sh_puts("(first 30 lines -- NeoText reads the rest)");
+}
+
+static void sh_progs(void)
+{
+    int i;
+
+    sh_puts("The desktop can start:");
+    for (i = 0; i < N_PROGRAMS; i++)
+    {
+        sh_put("  ");
+        sh_puts(prog_name[i]);
+    }
+    sh_puts("`run <name>` starts one; `desktop` goes there.");
+}
+
+/*
+ * Start one.  Before the desktop exists there is nowhere to start it
+ * into, and saying so is the honest answer rather than starting it and
+ * losing the words on the screen that would have explained it.
+ */
+static void sh_run_cmd(const char *arg)
+{
+    int i, was;
+
+    if (!*arg)
+    {
+        sh_puts("run <name> -- `progs` lists them");
+        return;
+    }
+    for (i = 0; i < N_PROGRAMS; i++)
+        if (sh_is(arg, prog_name[i]))
+            break;
+    if (i == N_PROGRAMS)
+    {
+        sh_put("No program called: ");
+        sh_puts(arg);
+        return;
+    }
+    if (sh_boot)
+    {
+        sh_puts("The desktop is not up yet -- `desktop` starts it.");
+        return;
+    }
+
+    was = win_open(i + 1);
+    program_slot(i, 0);
+    sh_puts(was ? "That one is already up." : "Started.");
+}
+
+/*
+ * The verb, then everything after it: there is nothing to quote, split
+ * or escape in a shell with no path outside the store to spell, so the
+ * argument is simply the rest of the line.
+ */
+static void sh_run(void)
+{
+    const char *v = sh_line;
+    const char *e;
+    char verb[16];
+    const char *arg;
+    int i = 0;
+
+    sh_view = 0;                     /* a command brings the view home  */
+
+    while (*v == ' ')
+        v++;
+    e = v;
+    while (*e && *e != ' ')
+        e++;
+    arg = e;
+    while (*arg == ' ')
+        arg++;
+    while (v < e && i < (int)sizeof(verb) - 1)
+        verb[i++] = *v++;
+    verb[i] = '\0';
+
+    if (!verb[0])
+        return;
+
+    if      (sh_is(verb, "help"))    sh_help();
+    else if (sh_is(verb, "ver"))     sh_ver();
+    else if (sh_is(verb, "cls"))
+    {
+        sh_n = 0;
+        sh_top = 0;
+        sh_view = 0;
+        sh_dirty = 2;
+    }
+    else if (sh_is(verb, "echo"))
+    {
+        sh_puts(arg);
+    }
+    else if (sh_is(verb, "info"))    sh_info();
+    else if (sh_is(verb, "cfg"))     sh_cfg();
+    else if (sh_is(verb, "pwd"))     sh_pwd();
+    else if (sh_is(verb, "dir"))     sh_dir_cmd(arg);
+    else if (sh_is(verb, "cd"))      sh_cd(arg);
+    else if (sh_is(verb, "type"))    sh_type(arg);
+    else if (sh_is(verb, "progs"))   sh_progs();
+    else if (sh_is(verb, "run"))     sh_run_cmd(arg);
+    else if (sh_is(verb, "desktop") || sh_is(verb, "exit"))
+    {
+        if (sh_boot)
+        {
+            sh_puts("Starting the desktop.");
+            sh_quit = 1;
+        }
+        else
+        {
+            shell_open = 0;
+            if (focus_p == 8)
+                focus_p = 0;
+            band_shell(1);
+        }
+    }
+    else
+    {
+        sh_put("Unknown command: ");
+        sh_put(verb);
+        sh_puts("  -- `help` lists the NeoCommands");
+    }
+}
+
+/* the prompt and the line as they will stand in the ring */
+static void sh_echo(void)
+{
+    char buf[SH_WD];
+    const char *p;
+    int i = 0;
+
+    p = "neobench> ";
+    while (*p && i < SH_COLS)
+        buf[i++] = *p++;
+    p = sh_line;
+    while (*p && i < SH_COLS)
+        buf[i++] = *p++;
+    buf[i] = '\0';
+    sh_push(buf, 'e');
+}
+
+/*
+ * The ring and the prompt, into `rows` lines starting at (x, y).  The
+ * newest line sits just over the prompt and the rest stack up from it,
+ * so the pane fills from the bottom the way a console does and a line
+ * that arrives pushes the others away rather than starting again at the
+ * top.  The frame belongs to whoever owns the surface -- the whole
+ * screen before there is a desktop, the window afterwards -- so both
+ * wear their own and share this.
+ */
+static void sh_body(int x, int y, int rows)
+{
+    int pitch = gfx_font_pitch();
+    int pr = rows - 1;
+    int bot = sh_n - 1 - sh_view;
+    int top, i;
+    int cy = y + pr * pitch;
+    char g[2];
+
+    if (bot > sh_n - 1)
+        bot = sh_n - 1;
+    top = bot - (pr - 1);
+    if (top < 0)
+        top = 0;
+
+    for (i = top; i <= bot; i++)
+    {
+        int k = (sh_top + i) % SH_RING;
+        int row = pr - 1 - (bot - i);
+
+        if (row < 0)
+            break;
+        text_d(x, y + row * pitch, sh_ring[k],
+               sh_kind[k] == 'e' ? SH_ECHO : SH_OUT);
+    }
+
+    text_d(x, cy, "neobench>", SH_PROMPT);
+    text_d(x + SH_PW, cy, sh_line, SH_ECHO);
+
+    /* the caret, as a block of the prompt's own colour with the letter
+     * under it cut back out: a one-pixel caret is a caret nobody has
+     * to look for, and this is the only place on the desktop that is
+     * being written into */
+    gfx_fill(x + SH_PW + sh_cur * 8, cy, 6, gfx_font_h(), SH_PROMPT);
+    if (sh_cur < sh_len)
+    {
+        g[0] = sh_line[sh_cur];
+        g[1] = '\0';
+        gfx_text(x + SH_PW + sh_cur * 8, cy, g, SH_UNDER);
+    }
+}
+
+static void window_shell(void)
+{
+    const int x = SH_X, y = SH_Y, w = SH_W, h = SH_H;
+    char left[64];
+    char *d;
+
+    glass_window(x, y, w, h, 20, "NeoShell", 3);
+
+    /* the pane: the caption's glass carried on down the window, lit
+     * along its top edge so the two read as one sheet */
+    gfx_vgrad(x + 4, y + 24, w - 8, h - 48, nb_prefs.bg_top,
+              nb_prefs.bg_bot);
+    gfx_fill(x + 4, y + 24, w - 8, 1, SH_PROMPT);
+
+    sh_body(SH_TX, SH_TY, SH_ROWS);
+
+    gfx_fill(x + 10, y + h - 26, w - 20, 1, C_WB_SHADE);
+    d = put_str(left, "dir ");
+    d = put_str(d, sh_path());
+    *d = '\0';
+    text_d(x + 10, y + h - 16, left, C_MUTE);
+    text_right(x + w - 10, y + h - 16, "Core/Docs/neoshell.txt", C_MUTE);
+}
+
+/* the same, standing where the desktop is about to: a header band over
+ * the whole raster and the rows filling it, prompt at the foot */
+static void sh_screen(void)
+{
+    char right[40];
+    char *d;
+
+    gfx_vgrad(0, 0, 640, 512, nb_prefs.bg_top, nb_prefs.bg_bot);
+    gfx_fill(0, 0, 640, 26, SH_BAR);
+    gfx_alpha(0, 26, 640, 1, SH_PROMPT, 96);
+    text_d(10, 9, "NeoBench NeoShell", SH_PROMPT);
+    d = put_str(right, "0.1.9  NeoCommands: help");
+    *d = '\0';
+    text_right(630, 9, right, SH_OUT);
+
+    sh_body(10, SH_BTY, SH_BROWS);
+}
+
+static void sh_present(int y0, int y1)
+{
+    int a, b;
+
+    gfx_init();
+    gfx_band(y0, y1);
+    sh_screen();
+    gfx_present();
+    gfx_packed(&a, &b);
+    gfx_band_all();
+}
+
+/*
+ * Whatever the last key owes the boot screen.  A key into the line
+ * changes the prompt's own row and nothing else, so that is the band it
+ * presents; an answer changes the rows above it and takes the screen.
+ * On the desktop there is no presenter here at all -- the band claimed
+ * by sh_key() is what the compositor repaints, which is the same deal
+ * every other program has.
+ */
+static void sh_flush(void)
+{
+    if (sh_dirty == 2)
+        sh_present(0, 512);
+    else if (sh_dirty == 1)
+    {
+        int pitch = gfx_font_pitch();
+        int py = SH_BTY + (SH_BROWS - 1) * pitch;
+
+        sh_present(py - 1, py + pitch + 1);
+    }
+    sh_dirty = 0;
+}
+
+/*
+ * One key.  Left and right carry the caret, backspace takes the letter
+ * in front of it, Return runs the line, and the arrows bring back what
+ * has scrolled off the top -- which is the one thing this shell does
+ * with them, and the reason it keeps them from the lists behind it on
+ * the desktop.  Escape clears the line here; on the desktop it never
+ * reaches this file, because there it is the program's cross.
+ */
+static int sh_key(int c)
+{
+    int changed = 0;
+
+    if (c == NB_KEY_LEFT)
+    {
+        if (sh_cur > 0)
+        {
+            sh_cur--;
+            changed = 1;
+        }
+    }
+    else if (c == NB_KEY_RIGHT)
+    {
+        if (sh_cur < sh_len)
+        {
+            sh_cur++;
+            changed = 1;
+        }
+    }
+    else if (c == NB_KEY_UP || c == NB_KEY_DOWN)
+        changed = sh_view_step(c == NB_KEY_UP ? 1 : -1);
+    else if (c == NB_KEY_BACK)
+    {
+        if (sh_cur > 0)
+        {
+            int i;
+
+            for (i = sh_cur - 1; i < sh_len - 1; i++)
+                sh_line[i] = sh_line[i + 1];
+            sh_len--;
+            sh_cur--;
+            sh_line[sh_len] = '\0';
+            changed = 1;
+        }
+    }
+    else if (c == NB_KEY_ESC)
+    {
+        if (sh_len)
+        {
+            sh_len = sh_cur = 0;
+            sh_line[0] = '\0';
+            changed = 1;
+        }
+    }
+    else if (c == NB_KEY_RET)
+    {
+        if (sh_len)
+        {
+            /* the echo, then the command, then whatever it left
+             * half-written -- and only then the line is cleared, for
+             * sh_run() reads it as it stands.  The order is the whole
+             * of the round trip: a line emptied first is a line no
+             * verb ever sees, and a shell that echoes what you typed
+             * and then answers nothing is a shell with the answer
+             * missing rather than one that refused you */
+            sh_echo();
+            sh_run();
+            sh_end();
+            sh_line[0] = '\0';
+            sh_len = sh_cur = 0;
+        }
+        changed = 1;
+    }
+    else if (c >= 32 && c < 127)
+    {
+        if (sh_len < SH_COLS - 1)
+        {
+            int i;
+
+            for (i = sh_len; i > sh_cur; i--)
+                sh_line[i] = sh_line[i - 1];
+            sh_line[sh_cur] = (char)c;
+            sh_len++;
+            sh_cur++;
+            sh_line[sh_len] = '\0';
+            changed = 1;
+        }
+    }
+
+    if (changed)
+    {
+        if (sh_boot)
+        {
+            if (sh_dirty == 0)
+                sh_dirty = 1;
+        }
+        else
+        {
+            band_shell(0);
+            sh_dirty = 0;            /* the compositor is what repaints */
+        }
+    }
+    return changed;
+}
+
+/* the press inside the window: its cross, its caption, then the pane */
+static int hit_shell(int x, int y, int *changed)
+{
+    if (!shell_open ||
+        x < SH_X || x >= SH_X + SH_W || y < SH_Y || y >= SH_Y + SH_H)
+        return 0;
+    if (on_close(x, y, SH_X, SH_Y, SH_W))
+    {
+        shell_open = 0;
+        if (focus_p == 8)
+            focus_p = 0;
+        sel_clear();
+        band_shell(1);
+        *changed = 1;
+        return 1;
+    }
+    if (on_caption(x, y, SH_X, SH_Y, SH_W, 3))
+        return drag_here(8, x, y, changed);
+    return focus_here(8, changed);
+}
+
+/*
+ * The boot's own use of it: the whole screen, its own loop, and the
+ * answer the kernel waits for.  The kernel calls this instead of
+ * compositing the desktop when Escape is pressed in the hold, when
+ * Config/boot.cfg asks for failsafe, or when the store has nothing to
+ * compose a desktop with -- and it returns only when the shell is told
+ * to start the desktop, so nothing behind it ever runs on a screen the
+ * shell still owns.
+ *
+ * The loop is the desktop's own, minus the pointer: wait for the field,
+ * take the receivers, feed whatever they caught in, paint what changed.
+ * There is no pointer here because the shell is worked from the keys --
+ * the pointer is armed after this returns, with the desktop, and a
+ * cursor that appeared here would be one the compositor had not drawn.
+ */
+int nb_shell_boot(void)
+{
+    int c;
+
+    sh_boot = 1;
+    sh_quit = 0;
+    sh_dir = PFS_ROOT;
+    sh_n = 0;
+    sh_top = 0;
+    sh_view = 0;
+    sh_accl = 0;
+    sh_len = sh_cur = 0;
+    sh_line[0] = '\0';
+    sh_dirty = 2;
+
+    sh_puts("NeoBench NeoShell 0.1.9 (m68k-aga)");
+    sh_puts("`help` lists the NeoCommands; `desktop` starts the desktop.");
+    sh_puts("");
+    sh_flush();
+
+    for (;;)
+    {
+        nb_sound_poll();
+
+        while (!amiga_vbl_pending())
+            nb_kbd_poll();
+
+        while ((c = nb_kbd_get()) >= 0)
+            sh_key(c);
+
+        sh_flush();
+        if (sh_quit)
+            break;
+    }
+
+    sh_boot = 0;
+    sh_quit = 0;
+    sh_dirty = 0;
+    return 1;
+}
+
 /*
  * The scene, in full: what one band of the band list below is asked to
  * rebuild.  Every branch is a pure function of the flags, so rebuilding
@@ -4190,6 +7289,8 @@ static void scene(void)
     if (files_open   && focus_p != 1) window_files();
     if (prefs_open   && focus_p != 5) window_prefs();
     if (neotext_open && focus_p != 6) window_neotext();
+    if (vlc_open     && focus_p != 7) window_vlc();
+    if (shell_open   && focus_p != 8) window_shell();
     if (clock_open   && focus_p != 2) gadget_clock(CLOCK_X, CLOCK_Y, CLOCK_R);
     if (monitor_open && focus_p != 3) gadget_monitor(MON_X, MON_Y, MON_W, MON_H);
 
@@ -4197,6 +7298,8 @@ static void scene(void)
     else if (focus_p == 1 && files_open)   window_files();
     else if (focus_p == 5 && prefs_open)   window_prefs();
     else if (focus_p == 6 && neotext_open) window_neotext();
+    else if (focus_p == 7 && vlc_open)     window_vlc();
+    else if (focus_p == 8 && shell_open)   window_shell();
     else if (focus_p == 2 && clock_open)   gadget_clock(CLOCK_X, CLOCK_Y, CLOCK_R);
     else if (focus_p == 3 && monitor_open) gadget_monitor(MON_X, MON_Y, MON_W, MON_H);
 

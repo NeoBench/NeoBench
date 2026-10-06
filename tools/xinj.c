@@ -13,19 +13,39 @@
  *   xinj eclick <x> <y>      the same in display coordinates
  *
  * $XINJ_EMU is "origin_x,origin_y,scale" as measured from a screenshot.
+ * $XINJ_WIN is the window name to find, as a substring matched without
+ * regard to case -- "NeoBench" is what it looks for when nobody says,
+ * which is the name the emulator gives its window on the setups where
+ * this was first used and not necessarily on the one it is used on now.
  *
  * Build:  cc -o xinj xinj.c -lX11 -lXtst
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/XTest.h>
 
-#define TITLE "NeoBench"
-
+static const char *title = "NeoBench";
 static Display *dpy;
+
+/* the name of the window to find, as a substring matched without
+ * regard to case, so "fs-uae" and "FS-UAE" are the same search -- the
+ * same rule xgrab, xkey and xsync use, and for the same reason: the
+ * window is named by the emulator rather than by us. */
+static int has(const char *s, const char *sub)
+{
+    size_t n = strlen(sub);
+
+    if (*sub == '\0')
+        return 1;
+    for (; *s; s++)
+        if (strncasecmp(s, sub, n) == 0)
+            return 1;
+    return 0;
+}
 
 static Window find_window(Window root)
 {
@@ -63,7 +83,7 @@ static Window find_window(Window root)
                                            False, utf8, &t, &f, &ni, &a2,
                                            &name) == Success && name)
                     {
-                        if (strstr((char *)name, TITLE))
+                        if (has((char *)name, title))
                             found = wins[i];
                         XFree(name);
                     }
@@ -85,7 +105,7 @@ static Window find_window(Window root)
 
         if (XFetchName(dpy, kids[i], &name) && name)
         {
-            if (strstr(name, TITLE))
+            if (has(name, title))
                 found = kids[i];
             XFree(name);
         }
@@ -133,7 +153,7 @@ static void geo(void)
 
     if (!win)
     {
-        printf("xinj: no window titled %s\n", TITLE);
+        printf("xinj: no window titled %s\n", title);
         return;
     }
     if (!XGetWindowAttributes(dpy, win, &wa))
@@ -178,6 +198,7 @@ static int emu_point(const char *sx, const char *sy, int *ox, int *oy)
 int main(int argc, char **argv)
 {
     int x, y;
+    const char *win;
 
     dpy = XOpenDisplay(NULL);
     if (!dpy)
@@ -190,6 +211,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: xinj geo|move|emu|click|eclick ...\n");
         return 2;
     }
+    if ((win = getenv("XINJ_WIN")) && *win)
+        title = win;
 
     if (!strcmp(argv[1], "geo"))
         geo();
