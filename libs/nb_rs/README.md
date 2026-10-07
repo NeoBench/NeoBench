@@ -1,8 +1,8 @@
 # nb_rs — the Rust half of NeoBench
 
 Phase 0 of a move to Rust, in the terms the rest of the ROM is built in: one
-crate, one exported function, and a proof that it survives the whole way to
-a running machine.
+crate, a small set of exported functions, and a proof that every one of them
+survives the whole way to a running machine.
 
 ## What phase 0 proves
 
@@ -23,7 +23,10 @@ relocated by `LoadSeg()` before it runs.
 ```sh
 cd libs/nb_rs
 RUSTC_BOOTSTRAP=1 RUSTC=$HOME/.cargo/bin/rustc \
-    RUSTFLAGS="-C target-cpu=M68000" \
+    RUSTFLAGS="-C target-cpu=M68000 -Zunstable-options \
+        -Cpanic=immediate-abort \
+        -C llvm-args=--disable-machine-cse \
+        -C llvm-args=--disable-machine-licm" \
     cargo build --release --target m68k-unknown-none-elf \
     -Zbuild-std=core,panic_abort
 ```
@@ -41,6 +44,17 @@ What each part of that is for:
   nightly would do the same without it.
 - **`-C target-cpu=M68000`** is not optional: the target's own default is
   `M68010`, and everything else in this ROM is compiled for the 68000.
+- **`-Zunstable-options -Cpanic=immediate-abort`** makes a panic jump
+  straight to the crate's own `abort()` with no unwind machinery named —
+  on the m68k a panic must stop the machine where it stands. The host
+  test builds use `-Cpanic=abort` instead; neither is set in the cargo
+  profile, because the ROM and the tests do not want the same answer.
+- **The two `--disable` switches** turn off LLVM's machine
+  common-subexpression and machine loop-invariant passes: both are free
+  to leave a MOVE — which writes the condition codes on this machine —
+  standing between a compare and the branch that was meant to read the
+  compare's flags. With them off the Rust member scans clear of that
+  pattern end to end (see the gates below).
 - **`m68k-linux-gnu-ld`** is the linker the target names itself. There is no
   lld for m68k.
 
@@ -52,21 +66,64 @@ What each part of that is for:
   object asking for a 64-bit division would pull `compiler_builtins` in
   behind it and define the same names a second time; the link order (C
   objects first, archive last) keeps `lib32.c` answering, and staying in
-  32 bits keeps the archive unopened. Phase 1 decides what to do about the
-  64-bit case properly.
+  32 bits keeps the archive unopened. Phase 1 kept that bargain and made
+  it visible: the parser is plain byte work, the m68k has an `abort()` of
+  Rust's own so no unwind path gets named, the panic strategy is passed
+  on the rustc line (`-Cpanic=immediate-abort` for the ROM, where a panic
+  must stop the machine where it stands), `codegen-units = 1` leaves the
+  archive one object whose undefs are those seven integers and a final
+  link with none.
 - **Nothing is a constant.** Every leg of the selftest is an identity
   checked against a value the compiler did not know when it compiled the
   code, so LLVM cannot fold the test into `return 0` and hand back a
-  selftest that never ran.
-- **The budget still holds.** The archive costs 222 bytes of ROM text, BSS
-  is untouched, and `_end` stays at `$00139584` — under the `$00150000`
-  ceiling the linker asserts on, because that is where Paula's sound buffer
+  selftest that never ran. The proofs read through volatile now, and leg
+  five's six masks go through `nb_rs_opaque()` — an `#[inline(never)]`
+  identity nothing follows — so they stand in the m68k disassembly as
+  themselves.
+- **The budget still holds.** The archive costs 6,624 bytes of ROM now
+  that it parses as well as proves itself — the one member the link
+  pulls, behind `core` and `compiler_builtins` it never opens — and
+  `_end` stands at `$00139588` — under the `$00150000` ceiling the
+  linker asserts on, because that is where Paula's sound buffer
   begins.
+
+## Two faults, and the gates over them
+
+This backend commits two faults silently, and both were found by boots
+that had already gone wrong — so the archive is scanned before it can
+become a bootable image. `make -C boot/rom gates` runs both, and both
+stand in the way of the ROM and the chain image:
+
+- **`tools/hazard.py`** reads the final bytes for a branch reading
+  condition codes a MOVE has overwritten: ISel leaves a copy between a
+  compare and the branch that was meant to read the compare's flags, and
+  post-RA it materialises as `movel`, which sets the codes here — the
+  branch then tests the MOVE's operand, right for one input shape and
+  wrong for the next. Zero tolerance, and the boot is the oracle behind
+  it.
+- **`tools/framefold.py`** reads the IR for a stack slot reached through
+  a variable index, which this backend lowers to a fixed displacement
+  with the variable dropped — every access landing on the first slot.
+  That is the shape that hung the first Phase 1 boot with the IR correct
+  at every step.
+
+Between them they set the house style for anything that runs on the m68k:
+stack slots are reached with constant indices, variable indices belong to
+caller pointers (registers keep theirs), a conditional arms a call rather
+than a value the optimiser may set down between the compare and the
+branch, and `apply()` is `#[inline(never)]` because inlined it would
+hand `copy_str()` a frame slot where called it hands a pointer.
 
 ## What phase 1 is
 
-The first real module: leaf logic with no hardware under it — preference
-parsing, the store's paths, the tables `progs` and `run` read — tested on
-the host the way `tools/tests` tests the C. The compositor and the kernel
-come after that, not before, and each phase is judged by the same runs the
+Preference parsing, the first module with logic in it: `nb_rs_prefs_check()`
+takes the four files the boot has just read and parses them again beside
+the C's own `nb_prefs_load()`, answering with one bit per field where the
+two halves disagree — the same call over the same bytes as
+`tools/tests/test_prefs` runs differentially against `boot/rom/prefs.c` —
+held to the C's struct numbers by compile-time asserts on both sides and
+by `nb_rs_prefs_size()` at run time, with the crate's own fourteen unit
+tests pinning the tables underneath. The store's paths and the
+tables `progs` and `run` read come next, then the compositor and the
+kernel — not before them, and each phase is judged by the same runs the
 C is: 11 WARNs, 0 FAILED, and the desktop it draws.

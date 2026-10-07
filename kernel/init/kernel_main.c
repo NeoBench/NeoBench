@@ -30,6 +30,36 @@ extern void nb_desktop_dump(void);
 extern int  nb_shell_boot(void);
 extern unsigned nb_rs_selftest(unsigned seed);
 
+/*
+ * The Rust half's parser: the four Config files as they stand in the
+ * store, the struct prefs.c built out of them, and back a mask of the
+ * fields where the two disagreed -- one bit each, in struct order
+ * (libs/nb_rs/src/prefs.rs has the table), with bit 31 alone meaning
+ * the call itself was unusable.
+ */
+extern unsigned nb_rs_prefs_check(const unsigned char **files,
+                                  const unsigned *lens,
+                                  const struct nb_prefs *have);
+
+/*
+ * struct nb_prefs is read across this line, by repr(C) on the Rust
+ * side and by this compiler on ours, so both hold it to the numbers
+ * that line was written against: an int aligns at two bytes on
+ * m68k-linux-gnu (four on a host, where tools/tests/test_prefs.c
+ * asserts its own pair), everything after `colour` lands accordingly,
+ * and the whole struct is 150 bytes.  rustc asserts the same numbers
+ * in prefs.rs; if either side moves, a build stops here rather than a
+ * boot comparing the wrong bytes as fact.
+ */
+_Static_assert(__builtin_offsetof(struct nb_prefs, start_x) == 82,
+               "struct nb_prefs: start_x moved");
+_Static_assert(__builtin_offsetof(struct nb_prefs, snd_file) == 98,
+               "struct nb_prefs: snd_file moved");
+_Static_assert(__builtin_offsetof(struct nb_prefs, hold) == 138,
+               "struct nb_prefs: hold moved");
+_Static_assert(sizeof(struct nb_prefs) == 150,
+               "struct nb_prefs: size moved");
+
 /* ------------------------------------------------------------------ *
  * The Rust half's read-out: serial only, the line nb_prefs_dump()      *
  * already writes, and never a second of the boot log.                  *
@@ -49,6 +79,57 @@ static void rs_mask(unsigned v)
 
     for (i = 7; i >= 0; i--)
         amiga_serial_putc(dig[(v >> (i * 4)) & 15u]);
+}
+
+/*
+ * The parser held against the parser.  The kernel hands the Rust half
+ * the same four files nb_prefs_load() was given, straight out of the
+ * store, and the struct it produced, and the mask that comes back
+ * names -- bit by bit -- the fields where the two parses ended up
+ * apart.  A pass writes one serial line, the way the codegen selftest
+ * above reports, and never appears in the log; a disagreement earns
+ * both the mask on the wire and the one amber line, so the boot's own
+ * counts catch it like any other fault.
+ */
+static void rs_prefs(void)
+{
+    static const char *const cfg[4] = {
+        "Config/screen.cfg", "Config/pointer.cfg",
+        "Config/sound.cfg",  "Config/boot.cfg"
+    };
+    const unsigned char *files[4];
+    unsigned lens[4];
+    unsigned rs, i;
+
+    for (i = 0; i < 4; i++)
+    {
+        const struct pfs_node *n = pfs_find(cfg[i]);
+
+        /* A directory wearing the name is not a file to read, which
+         * is the same test nb_prefs_load() makes on this side. */
+        if (n && !n->dir)
+        {
+            files[i] = n->data;
+            lens[i]  = n->size;
+        }
+        else
+        {
+            files[i] = 0;
+            lens[i]  = 0;
+        }
+    }
+
+    rs = nb_rs_prefs_check(files, lens, &nb_prefs);
+    rs_wire(">rs prefs ");
+    if (rs)
+    {
+        rs_wire("fail mask=");
+        rs_mask(rs);
+        rs_wire("\r\n");
+        kernel_warn("Rust prefs parse");
+    }
+    else
+        rs_wire("ok\r\n");
 }
 
 void kernel_main(const nb_bootinfo_t *boot)
@@ -108,6 +189,15 @@ void kernel_main(const nb_bootinfo_t *boot)
         else
             rs_wire("ok\r\n");
     }
+
+    /*
+     * ... and then the first real module of phase 1 answers for its
+     * own work: prefs.rs parses the four files just read the way
+     * prefs.c did, and the two halves are held together here over the
+     * same bytes (rs_prefs()).  Serial alone when they agree, which is
+     * the only outcome this machine has shipped with.
+     */
+    rs_prefs();
 
     kernel_starting("NeoBench Kernel Initialisation");
     nb_sound_init();

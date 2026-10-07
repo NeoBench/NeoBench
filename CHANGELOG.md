@@ -6,6 +6,116 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Rust
 
+- **Preference parsing: the first module with logic in it, and two
+  gates over what this backend does with it** (`libs/nb_rs/src/prefs.rs`,
+  `kernel/init/kernel_main.c`, `tools/tests/test_prefs.c`). The four
+  files the boot reads are parsed by `nb_rs_prefs_check()`, which takes
+  the files the kernel found and answers with one bit per field where
+  the two halves disagree — struct order, bit 31 alone meaning the call
+  itself was unusable — reported on the wire as `>rs prefs ok` or
+  `>rs prefs fail mask=…` with the amber `Rust prefs parse` behind a
+  failure. `Prefs` is `repr(C)` and held to `struct nb_prefs`'s numbers
+  by compile-time asserts on both sides the code is built for: the
+  m68k's own (font at 44, colour at 80, start_x at 82, snd_file at 98,
+  hold at 138, failsafe at 146, 150 bytes) and the host's (start_x at
+  84, snd_file at 100, hold at 140, failsafe at 148, 152 bytes — an int
+  aligns at two bytes on m68k-linux-gnu and four there, so everything
+  after the 16-bit `colour` meets its neighbours differently and both
+  are right), with `nb_rs_prefs_size()` putting rustc's size on the
+  wire for the host test to hold against gcc's `sizeof` at run time.
+  `defaults`, `apply` and `load` restate `prefs.c`'s semantics — lines
+  to `\n`, `#` comments, `key = value` with both sides trimmed, a value
+  cut at thirty-nine characters because that is all the C hands its
+  converters, and a value ending at its first NUL because that is where
+  `set_key()` stops reading it — and `diff` counts the fields where the
+  two halves disagree over that same layout. The differential
+  in `tools/tests/test_prefs` runs both parsers over the same files —
+  present and absent, since a missing file has to cost nothing — and
+  compares the masks field by field, and the crate's own fourteen unit
+  tests pin the tables underneath.
+- **The archive pulls everything it names, so it names almost nothing**
+  (`libs/nb_rs`, `boot/rom/Makefile`). Naming any member of `core`
+  that lowers to a helper dragged `core` and `compiler_builtins` in
+  behind it, and `compiler_builtins` defines `__mulsi3`, `__divsi3`
+  and `memcpy` a second time — names `lib32.c` and the C half already
+  answer. The parser is plain byte work for it: the helper that wanted
+  `copy_from_slice` is a hand-written loop, the m68k has an `abort()`
+  of its own so no unwind path gets named, the panic strategy is
+  passed on the rustc line rather than in the profile —
+  `-Zunstable-options -Cpanic=immediate-abort` for the ROM, where a
+  panic must stop the machine where it stands, `-Cpanic=abort` for the
+  host tests — and `codegen-units = 1` leaves the archive one object
+  whose undefs can be read at a glance: the seven integers `lib32.c`
+  owns, `__divsi3 memcmp memcpy memset __mulsi3 __udivsi3 __umodsi3`,
+  and none at all in the final link.
+- **The selftest can no longer be forwarded into uselessness**
+  (`libs/nb_rs/src/lib.rs`). What proved the codegen runs through
+  volatile reads now — a read the compiler cannot discard is a read
+  that happened — and leg five, six masks only a real answer can
+  produce, goes through `nb_rs_opaque()`, an `#[inline(never)]`
+  identity through which nothing follows: the six masks stand in the
+  m68k disassembly as themselves. A check that cannot fail is not a
+  check.
+- **A branch that reads condition codes a MOVE has already
+  overwritten** (`tools/hazard.py`). ISel leaves a copy between a
+  compare and the branch that was meant to read the compare's flags;
+  post-RA that copy materialises as `movel`, which sets the codes on
+  this machine, so the branch reads the MOVE's operand instead — right
+  for one input shape, wrong for the next, and wrong without a word
+  said. The scanner walks the archive's own bytes: branch, back over
+  what is flag-neutral, out to the first flag-setter behind it, and
+  out again when what stands in front is a compare rather than a value
+  movement. It found its own blind spot while being written — the
+  compare family was absent from the rule, so the classic
+  `cmp; movel; beq` was precisely what it did not report — and what
+  it then reported was a join: three ways of building the four files'
+  slices and joining them (a returned pair, two early returns, locals
+  meeting after the test) all collapsed back into one `select`,
+  because SimplifyCFG re-forms a select from any diamond whose arms
+  are cheap and m68k has no conditional move to lower it with, so the
+  taken arm's value lands between the compare and the branch every
+  time. The two it called out were latent — harmless on the inputs
+  the boot happens to pass — which is exactly what a gate must not
+  allow, so the join came out of the code instead of being won from
+  the optimiser: `nb_rs_prefs_check` guards each `apply()` call
+  itself, and a call cannot be sunk into a diamond, so nothing
+  speculatable can stand in the gap. That is the shape a conditional
+  store always had and the shape C's own guard has. The build passes
+  `--disable-machine-cse` and `--disable-machine-licm` as well, the
+  two passes free to carry a flags-setting instruction across the
+  gap, and `make -C boot/rom gates` runs the scanner before any
+  bootable image is produced. The boot is the oracle behind it.
+- **A stack slot reached through a variable index loses the index**
+  (`tools/framefold.py`). This backend lowers `alloca + constant +
+  variable` to a fixed displacement and drops the variable, so every
+  access lands on the first slot; `register + variable` keeps it. It
+  hung a real boot: the four config files were all written into
+  `part[0]`, the other three elements read whatever the stack beneath
+  held, `apply()` walked slices made of that, and the log stopped
+  after `>rs ok` with the parser never returning — the IR correct at
+  every step, the miscompile happening below it. The gate reads the
+  IR the archive was built from and fails on any address that reaches
+  an alloca with a variable index; the source keeps the rule —
+  constant indices for stack slots, caller pointers for variable ones
+  — and `apply()` is `#[inline(never)]` for the same reason, because
+  inlined it would hand `copy_str()` the caller's own struct to walk
+  as a frame slot, where called it hands over the caller's pointer.
+- **The store outgrew the code region** (`boot/rom/rom.ld`). Packing
+  phase 1's changelog into `system/` put `.rodata` 2,413 bytes past the
+  256 KiB `rom` region and the link refused it — while the region ahead
+  of it, `romvec`, held 1,024 bytes of vectors in 256 KiB and left the
+  rest a dark stretch of image. `.rodata` now fills in behind the
+  vectors at `$F80400` (the reset copy loop reads exactly the table's
+  1,024 bytes and stops at the section's door), `.text` stays first at
+  `$FC0000` where `boot.S` points the initial PC, and the code region
+  carries only what executes there. Text 266,581 bytes, `_end` at
+  `$00139588` under the `$00150000` ceiling, and both gates clean over
+  the image that boots: 11 WARNs / 0 FAILED with `>rs ok` and
+  `>rs prefs ok` on the wire and the desktop drawn, while the
+  chainload from a genuine AmigaOS 3.2.3 `S:Startup-Sequence` answers
+  `NBCHAIN mode=U` and `NBCHAIN cacr=00000000` before the same two
+  lines.
+
 - **The first Rust object in the ROM, held to a selftest** (`libs/nb_rs`,
   `boot/rom/Makefile`, `kernel/init/kernel_main.c`). `nb_rs` is a static
   library cargo builds for `m68k-unknown-none-elf`, the tier-3 bare-metal

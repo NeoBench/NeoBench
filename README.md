@@ -322,7 +322,14 @@ bebbo toolchain on `PATH`) and a Rust toolchain for the ROM's Rust half
 `-Zbuild-std`; `rust-src` and an LLVM with the M68k backend are the two
 things it cannot do without, both explained in `libs/nb_rs/README.md`).
 Output: `boot/rom/neobench.rom`, a 512 KB image with vectors at 0, runnable
-as a Kickstart ROM replacement in an emulator.
+as a Kickstart ROM replacement in an emulator. The build runs two gates
+over the Rust half before any bootable image exists — `tools/hazard.py`
+reads the archive's own bytes for a branch reading condition codes a MOVE
+has overwritten, `tools/framefold.py` reads the IR it was built from for
+a stack slot reached through a variable index — and either failing stops
+the ROM and the chain image from being produced. `make -C boot/rom gates`
+runs them alone; both faults and the house style that avoids them are
+written up in `libs/nb_rs/README.md`.
 
 To press the install disc:
 

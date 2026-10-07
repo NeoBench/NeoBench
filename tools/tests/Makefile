@@ -6,7 +6,18 @@
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra -std=c99
 
-TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi test_bfg
+TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi test_bfg test_prefs
+
+# The Rust half of the ROM, built for this host rather than for the
+# m68k: libs/nb_rs parses the four Config files exactly the way
+# boot/rom/prefs.c does, and test_prefs holds the two halves together
+# over the same bytes -- the same call kernel_init makes at boot.
+# cargo and rustc are the ones libs/nb_rs/README pins down, and
+# neither sits on a bare PATH by default.
+CARGO  := $(HOME)/.cargo/bin/cargo
+RUSTC  := $(HOME)/.cargo/bin/rustc
+RS_DIR := ../../libs/nb_rs
+RS_LIB := $(RS_DIR)/target/release/libnb_rs.a
 
 # The install disc the last test reads is built by the tools that build
 # the real one: mknbfs.py packs fixtures/nbfs-tree into a volume, that
@@ -79,8 +90,28 @@ test_bfg: test_bfg.c ../../boot/rom/probe.c ../../boot/rom/probe.h \
           ../../boot/rom/amiga.h
 	$(CC) $(CFLAGS) -Wno-int-to-pointer-cast -o $@ test_bfg.c
 
+# Preference parsing, both halves at once: prefs.c and prefs.rs parse
+# the same four files -- from the real system/Config ones down to the
+# quirks a malformed line falls into -- and the test fails on any
+# field where they disagree, then pins the values themselves and ends
+# with a mask that has to name the one field it moved.  The archive is
+# cargo's host staticlib; it goes on the link line after the C, the
+# way the ROM's archive does.
+$(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock \
+           $(RS_DIR)/src/lib.rs $(RS_DIR)/src/prefs.rs
+	@command -v $(CARGO) >/dev/null 2>&1 || \
+	    { echo "rust: cargo is required and was not found at $(CARGO)"; exit 1; }
+	cd $(RS_DIR) && RUSTC=$(RUSTC) RUSTFLAGS="-Cpanic=abort" \
+	    $(CARGO) build --release
+
+test_prefs: test_prefs.c ../../boot/rom/prefs.c ../../boot/rom/prefs.h \
+            ../../boot/rom/pfs.h $(RS_LIB)
+	$(CC) $(CFLAGS) -o $@ test_prefs.c ../../boot/rom/prefs.c \
+	    $(RS_LIB) -lpthread -ldl -lm
+
 run: $(TESTS) $(FIXTURE)
 	@for t in $(TESTS); do ./$$t || exit 1; done
+	@cd $(RS_DIR) && RUSTC=$(RUSTC) $(CARGO) test --quiet
 
 clean:
 	rm -f $(TESTS)

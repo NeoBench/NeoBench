@@ -10,6 +10,15 @@ crate-type = ["staticlib"]
 
 [profile.release]
 opt-level = "s"
-panic = "abort"
+# No panic strategy here on purpose: it is pinned by whichever side
+# builds the crate, because the two want different ones.  The ROM's
+# cargo (boot/rom/Makefile) passes -Cpanic=immediate-abort, so a
+# bounds check in prefs.rs lands in this crate's own abort() in one
+# call instead of reaching for core::panicking -- which would pull one
+# core member, and, because core's members reference each other, all
+# of core and then compiler_builtins (the better part of 400 KiB, and
+# the ROM's whole .text region is 256).  The host archive's cargo
+# (tools/tests/Makefile) passes -Cpanic=abort, and the handler in
+# lib.rs sits between it and the test.
 codegen-units = 1
 lto = false

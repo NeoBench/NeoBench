@@ -5,7 +5,14 @@ ENTRY(_start)
 MEMORY
 {
     /* 512 KiB kickstart region, A500/A1200-style. The processor reads its
-     * reset vector table from the start of this image; code runs from $FC0000. */
+     * reset vector table from the start of this image; code runs from
+     * $FC0000, which is where boot.S points the initial PC and where
+     * .text still begins.  The vectors used to keep the whole first
+     * quarter of the image to themselves while .text, .rodata and .data
+     * filled the second quarter to the brim -- the store packed 2,413
+     * bytes over when phase 1's changelog went in -- so read-only data
+     * now takes the hole behind the vectors and the code region carries
+     * only what executes there. */
     romvec (rx) : ORIGIN = 0x00F80000, LENGTH = 0x00040000
     rom    (rx) : ORIGIN = 0x00FC0000, LENGTH = 0x00040000
 
@@ -34,17 +41,25 @@ SECTIONS
         KEEP(*(.bootvec))
     } > romvec
 
+    /*
+     * Read-only data behind the vectors, not behind the code: the store
+     * is the bulk of it, and _start's copy loop reads exactly the 1,024
+     * bytes of table, stopping at this section's door.  .text must stay
+     * the first thing at $FC0000 because boot.S hardwires the initial
+     * PC there, and nothing walks the image in address order -- every
+     * pointer is relocated like any other.
+     */
+    .rodata :
+    {
+        *(.rodata .rodata.*)
+    } > romvec
+
     .text :
     {
         KEEP(*(.text._start))
         *(.text*)
         *(.init*)
         *(.fini*)
-    } > rom
-
-    .rodata :
-    {
-        *(.rodata .rodata.*)
     } > rom
 
     .data :

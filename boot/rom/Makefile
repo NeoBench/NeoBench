@@ -1,6 +1,7 @@
 CROSS   := m68k-linux-gnu-
 CC      := $(CROSS)gcc
 LD      := $(CROSS)ld
+AR      := $(CROSS)ar
 OBJCOPY := $(CROSS)objcopy
 
 export PATH            := $(HOME)/.local/m68k/bin:$(PATH)
@@ -35,11 +36,23 @@ USER_DIR   := ../../user/gui/desktop
 # target and the link then takes beside the C like any other object.
 # RUSTC_BOOTSTRAP lets the stable toolchain drive -Zbuild-std, which is
 # what builds `core' for a tier-3 target that ships no prebuilt one, and
-# RUSTFLAGS pins LLVM's CPU back from the target's own default (M68010)
-# to the 68000 everything else in this ROM is compiled for.
+# RS_FLAGS pins LLVM's CPU back from the target's own default (M68010)
+# to the 68000 everything else in this ROM is compiled for.  The two
+# --disable switches turn off LLVM's machine common-subexpression and
+# machine loop-invariant passes: both are free to leave a MOVE -- which
+# writes the condition codes on this machine -- standing between a
+# compare and the branch that was meant to read the compare's flags,
+# and with them off the Rust member scans clear of that pattern
+# end to end (tools/hazard.py's gate; the boot is the oracle behind
+# it).  The same flags build the gate's IR so that what is scanned is
+# what is linked.
 RS_DIR  := ../../libs/nb_rs
 RS_LIB  := $(RS_DIR)/target/m68k-unknown-none-elf/release/libnb_rs.a
 CARGO   := $(HOME)/.cargo/bin/cargo
+RS_FLAGS := -C target-cpu=M68000 -Zunstable-options \
+            -Cpanic=immediate-abort \
+            -C llvm-args=--disable-machine-cse \
+            -C llvm-args=--disable-machine-licm
 
 OBJS := \
     boot.o \
@@ -112,19 +125,49 @@ $(USER_DIR)/%.o: $(USER_DIR)/%.c
 # Header dependencies (font8x8.h, amiga.h, ...); generated next to the objects.
 -include $(OBJS:.o=.d)
 
-$(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock $(RS_DIR)/src/lib.rs
+$(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock \
+           $(RS_DIR)/src/lib.rs $(RS_DIR)/src/prefs.rs
 	@command -v $(CARGO) >/dev/null 2>&1 || \
 	    { echo "rust: cargo is required and was not found at $(CARGO)"; exit 1; }
 	cd $(RS_DIR) && RUSTC_BOOTSTRAP=1 RUSTC=$(HOME)/.cargo/bin/rustc \
-	    RUSTFLAGS="-C target-cpu=M68000" \
+	    RUSTFLAGS="$(RS_FLAGS)" \
 	    $(CARGO) build --release --target m68k-unknown-none-elf \
 	    -Zbuild-std=core,panic_abort
+
+# The two gates over that archive, both raised over boots that had
+# already hung or lied.  tools/hazard.py reads the final bytes: a
+# compare, then a value movement, then a branch that will read the
+# MOVE's condition codes instead of the compare's -- the shape this
+# backend leaves between a select's arms.  tools/framefold.py reads
+# the IR: a stack slot reached through a variable index, which this
+# backend lowers as a fixed displacement with the variable dropped --
+# every write landing in the same slot, which is what the four config
+# files did while the boot waited on a parser reading stack garbage.
+# Neither may fail before a bootable image is produced; the boot is
+# the oracle behind them.
+.PHONY: gates
+gates: $(RS_LIB)
+	@G=$$(mktemp -d); (cd $$G && $(AR) x "$(abspath $(RS_LIB))"); \
+	    n=0; rc=0; \
+	    for f in $$G/nb_rs-*.o; do \
+	        [ -f "$$f" ] || continue; \
+	        n=$$((n + 1)); python3 ../../tools/hazard.py "$$f" || rc=$$?; \
+	    done; \
+	    rm -rf $$G; \
+	    [ $$n -gt 0 ] || { echo "gates: no Rust member in $(RS_LIB)"; exit 1; }; \
+	    exit $$rc
+	cd $(RS_DIR) && RUSTC_BOOTSTRAP=1 RUSTC=$(HOME)/.cargo/bin/rustc \
+	    RUSTFLAGS="$(RS_FLAGS)" \
+	    $(CARGO) rustc --release --target m68k-unknown-none-elf \
+	    -Zbuild-std=core,panic_abort --target-dir target/gate \
+	    -- --emit=llvm-ir
+	python3 ../../tools/framefold.py "$$(ls -t $$(find $(RS_DIR)/target/gate -name '*.ll') | head -1)"
 
 $(ELFS): $(OBJS) rom.ld $(RS_LIB)
 	$(LD) -T rom.ld -nostdlib -o $@ $(OBJS) $(RS_LIB)
 	$(CROSS)size $@
 
-$(TARGET): $(ELFS)
+$(TARGET): $(ELFS) gates
 	$(OBJCOPY) -O binary -j .bootvec -j .text -j .rodata -j .data $(ELFS) $@
 	truncate -s 524288 $@
 
@@ -134,7 +177,7 @@ $(TARGET): $(ELFS)
 # KEEP in ram.ld pinning chain_entry to offset 0 instead.
 CHAIN_OBJS := $(OBJS) chain.o
 
-$(CHAIN_ELF): $(CHAIN_OBJS) ram.ld $(RS_LIB)
+$(CHAIN_ELF): $(CHAIN_OBJS) ram.ld $(RS_LIB) gates
 	$(LD) -T ram.ld -nostdlib --emit-relocs -o $@ $(CHAIN_OBJS) $(RS_LIB)
 	$(CROSS)size $@
 
