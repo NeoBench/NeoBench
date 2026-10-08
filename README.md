@@ -389,21 +389,26 @@ to the person installing, step by step.
 
 ## Testing with FS-UAE
 
-Point a config at the built ROM:
+Two scripts in the repository do all of this: `tools/boot/grabtest.sh
+<rom>` for a bare-ROM boot and `tools/boot/grabchain.sh` for the
+chainload under genuine AmigaOS 3.2.3, each capturing the serial line
+and summarising the WARN / FAILED tallies and the `>rs` answers. The
+config they stand on, if you are writing one yourself:
 
 ```ini
-amiga_model = A1200
-chipset = aga
+amiga_model = A4000            # not A1200 -- see the memory floor below
+cpu = 68060                    # FS-UAE's option is "cpu" — "cpu_type" is WinUAE-internal and silently ignored
+chip_memory = 2048
+motherboard_ram = 8192         # with the zorro_iii below: the 136 MB
+zorro_iii_memory = 131072      # the probe wants to see
 kickstart_file = /path/to/NeoBench/boot/rom/neobench.rom
 floppy_drive_0 = 0
 fullscreen = 1
-
-cpu = 68060                    # FS-UAE's option is "cpu" — "cpu_type" is WinUAE-internal and silently ignored
 fast_memory = 8
 uae_fastmem_autoconfig = false # fast RAM for a bare ROM: no OS runs Zorro autoconfig to map it
 ```
 
-Three gotchas, each of which cost a debugging session:
+Four gotchas, each of which cost a debugging session:
 
 1. `cpu = 68060` — the FS-UAE frontend reads `cpu`; `cpu_type` never reaches
    the core and the A1200 preset quietly stays at a 68020.
@@ -421,6 +426,16 @@ Three gotchas, each of which cost a debugging session:
    keyboard_key_left = action_key_cursor_left
    keyboard_key_right = action_key_cursor_right
    ```
+
+4. The memory floor: `nb_probe_fast_mb()` must find 128 MB of fast RAM
+   or the boot log says `[FAILED] Memory detected (… MB fast, 128 MB
+   required)` — a harness failure, never the code under test, and 136 MB
+   is where the line goes green. An A1200 could not be brought to that
+   number in FS-UAE: non-autoconfig `fast_memory` stops at 8 MB,
+   `motherboard_ram` at 256 MB came back `Unsupported Mainboard RAM
+   size`, and `accelerator_memory` was ignored. That is why the model
+   above is an A4000 — its `motherboard_ram` and `zorro_iii_memory`
+   reach the floor between them, and the probe counts 144.
 
 To put something on the IDE bus for the device layer to find:
 

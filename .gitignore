@@ -20,3 +20,10 @@ __pycache__/
 
 # The Rust half's build tree; cargo builds inside the crate
 libs/nb_rs/target/
+
+# Boot harness runtime: the generated config, the serial capture and
+# the emulator's own output (tools/boot/grabtest.sh, grabchain.sh)
+tools/boot/*.fs-uae
+tools/boot/serial.log
+tools/boot/chain.log
+tools/boot/fs-uae.out
