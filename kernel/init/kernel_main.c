@@ -29,6 +29,7 @@ extern int  nb_pointer_x(void);
 extern int  nb_pointer_y(void);
 extern void nb_pointer_dump(void);
 extern void nb_desktop_dump(void);
+extern int  nb_desktop_exit(void);
 extern int  nb_shell_boot(void);
 extern unsigned nb_rs_selftest(unsigned seed);
 
@@ -568,6 +569,102 @@ static void rs_gfx(void)
         rs_wire("ok\r\n");
 }
 
+/*
+ * The interactive phase: the receivers polled every field, and the
+ * scene recomposited only when an event actually changed something.
+ *
+ * A press that stays down is a different case and is asked for
+ * separately, because it lasts longer than the field it arrived on.
+ * It picks a window up by its caption and carries it for as long as
+ * the button is held; the answer is the same one a press gives --
+ * only when the rows on screen would change -- so it takes the same
+ * three calls behind it, and a pointer that has not moved between
+ * two fields costs the two reads that took to find out.
+ *
+ * The phase ends the one way it can end from the inside: the start
+ * menu's Exit to shell sets the flag this reads at the top of each
+ * field, and the return hands the machine back to whoever started
+ * the phase -- which is the shell, as it was at boot.  Reboot and
+ * Shut down never get here: they take the screen over on their way
+ * out and do not come back.
+ */
+static void desktop_loop(void)
+{
+    for (;;)
+    {
+        int pressed;
+        int c;
+
+        if (nb_desktop_exit())  /* Exit to shell: walk back       */
+            return;
+
+        nb_sound_poll();
+
+        /*
+         * The wait for the next field is where the receivers are read.
+         * Paula carries one received byte and the next arrival overwrites
+         * it, so a character typed between two fields has to be taken
+         * here rather than 20 ms later, and the keyboard is read in the
+         * same loop because the queue is what the two have in common.
+         *
+         * The one stretch nothing reads is a present, which lasts as long
+         * as the repaint behind it: the keyboard's code waits for the
+         * handshake either way, and the byte on the wire is the one that
+         * can be lost there.
+         */
+        while (!amiga_vbl_pending())
+            nb_kbd_poll();
+
+        /*
+         * What was typed, from whichever receiver it came from, handed to
+         * the scene as a key.  The scene takes it the way it takes a
+         * press and says whether anything changed, so a key that lands
+         * where nothing is lit costs no present.
+         */
+        while ((c = nb_kbd_get()) >= 0)
+        {
+            if (nb_desktop_key(c))
+            {
+                nb_desktop_render();
+                nb_pointer_after_present();
+                nb_desktop_dump();      /* which programs are on screen     */
+            }
+        }
+
+        pressed = nb_pointer_frame();
+
+        if (pressed &&
+            nb_desktop_click(nb_pointer_x(), nb_pointer_y(), pressed))
+        {
+            nb_desktop_render();
+            nb_pointer_after_present();
+            nb_desktop_dump();          /* which programs are on screen */
+        }
+
+        /*
+         * And the press that was still down when this field came
+         * round: the window it came down on is carried wherever the
+         * pointer has got to, and let go when the button is.
+         */
+        if (nb_desktop_drag())
+        {
+            nb_desktop_render();
+            nb_pointer_after_present();
+            nb_desktop_dump();          /* where the window has got to  */
+        }
+
+        /*
+         * And the one thing that moves without anybody touching it: the
+         * player's film steps on the field counter rather than on a key,
+         * so it is asked here, once a field, whether anything is due.  It
+         * answers with nothing at all nine fields in ten and paints for
+         * itself the tenth, so it owes the loop no decision -- only the
+         * knowledge that a field happened.
+         */
+        nb_desktop_tick();
+    }
+}
+
 void kernel_main(const nb_bootinfo_t *boot)
 {
     /* Boot information will be used later */
@@ -790,104 +887,34 @@ void kernel_main(const nb_bootinfo_t *boot)
                 shell = 1;
         }
 
-        if (shell)
-        {
-            kernel_target("NeoShell");
-            nb_shell_boot();
-        }
-    }
-
-    /* Desktop scene replaces the boot log on screen. */
-    kernel_target("Graphical Interface");
-    amiga_serial_putc('G');
-    nb_desktop_render();
-    nb_pointer_enable();
-    nb_pointer_dump();
-    amiga_serial_putc('P');
-
-    /*
-     * Interactive phase.  The pointer is polled every field; a press --
-     * left or right, 1 or 2 -- is handed to the scene, which recomposites
-     * only when the press actually changed something: a full present
-     * costs a median cut over the whole back buffer, and even a band
-     * wants its rows redrawn and repacked, so it is worth being sure.
-     *
-     * A press that stays down is a different case and is asked for
-     * separately, because it lasts longer than the field it arrived on.
-     * It picks a window up by its caption and carries it for as long as
-     * the button is held; the answer is the same one a press gives --
-     * only when the rows on screen would change -- so it takes the same
-     * three calls behind it, and a pointer that has not moved between
-     * two fields costs the two reads that took to find out.
-     */
-    for (;;)
-    {
-        int pressed;
-        int c;
-
-        nb_sound_poll();
-
         /*
-         * The wait for the next field is where the receivers are read.
-         * Paula carries one received byte and the next arrival overwrites
-         * it, so a character typed between two fields has to be taken
-         * here rather than 20 ms later, and the keyboard is read in the
-         * same loop because the queue is what the two have in common.
-         *
-         * The one stretch nothing reads is a present, which lasts as long
-         * as the repaint behind it: the keyboard's code waits for the
-         * handshake either way, and the byte on the wire is the one that
-         * can be lost there.
+         * The desktop and NeoShell are two ends of one road rather
+         * than two stages passed through once: failsafe, a store with
+         * no screen to draw on, or Escape during the hold all start
+         * on the shell side and `desktop` walks across, and the start
+         * menu's Exit to shell walks back -- so the pair is a loop,
+         * and every visit prints the same G and P a chain boot counts
+         * on the first.
          */
-        while (!amiga_vbl_pending())
-            nb_kbd_poll();
-
-        /*
-         * What was typed, from whichever receiver it came from, handed to
-         * the scene as a key.  The scene takes it the way it takes a
-         * press and says whether anything changed, so a key that lands
-         * where nothing is lit costs no present.
-         */
-        while ((c = nb_kbd_get()) >= 0)
+        for (;;)
         {
-            if (nb_desktop_key(c))
+            if (shell)
             {
-                nb_desktop_render();
-                nb_pointer_after_present();
-                nb_desktop_dump();      /* which programs are on screen     */
+                kernel_target("NeoShell");
+                nb_shell_boot();
+                shell = 0;
             }
-        }
 
-        pressed = nb_pointer_frame();
-
-        if (pressed &&
-            nb_desktop_click(nb_pointer_x(), nb_pointer_y(), pressed))
-        {
+            /* Desktop scene replaces the boot log on screen. */
+            kernel_target("Graphical Interface");
+            amiga_serial_putc('G');
             nb_desktop_render();
-            nb_pointer_after_present();
-            nb_desktop_dump();          /* which programs are on screen */
-        }
+            nb_pointer_enable();
+            nb_pointer_dump();
+            amiga_serial_putc('P');
 
-        /*
-         * And the press that was still down when this field came
-         * round: the window it came down on is carried wherever the
-         * pointer has got to, and let go when the button is.
-         */
-        if (nb_desktop_drag())
-        {
-            nb_desktop_render();
-            nb_pointer_after_present();
-            nb_desktop_dump();          /* where the window has got to  */
+            desktop_loop();         /* returns to NeoShell, or runs for ever */
+            shell = 1;
         }
-
-        /*
-         * And the one thing that moves without anybody touching it: the
-         * player's film steps on the field counter rather than on a key,
-         * so it is asked here, once a field, whether anything is due.  It
-         * answers with nothing at all nine fields in ten and paints for
-         * itself the tenth, so it owes the loop no decision -- only the
-         * knowledge that a field happened.
-         */
-        nb_desktop_tick();
     }
 }

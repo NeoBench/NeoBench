@@ -400,6 +400,50 @@ void amiga_display_clear(void)
 }
 
 /*
+ * Shut the machine down: interrupts off, then the processor stopped.
+ *
+ * There is no ACPI to ask and no power key to send for, so shutdown
+ * means the CPU goes and stays gone -- the stop instruction does not
+ * resume because nothing above the mask can arrive -- while the
+ * copper keeps scanning the frame the shutdown screen last packed.
+ * The picture therefore stands where the ceremony left it, which is
+ * the whole point of the screen: the machine is dead with the list of
+ * what was switched off still on the raster.
+ */
+void amiga_halt(void)
+{
+    for (;;)
+        __asm__ volatile ("move.w #0x2700, %sr\n\t"
+                          "stop   #0x2700");
+}
+
+/*
+ * Take the machine back through its own reset.
+ *
+ * The first two longwords of the ROM at $F80000 are the initial stack
+ * pointer and the initial program counter -- what the CPU itself read
+ * when it came up, ours when this image is the ROM and Kickstart's
+ * when Kickstart chainloaded us -- so loading them back with a reset
+ * pulse in between is the same road the machine came in on, from
+ * whichever end it came in.  The reset line takes the CIAs with it,
+ * the ROM's entry re-programs the chipset, and nothing of ours is
+ * left running: the loops below are already finished with.
+ */
+void amiga_reset(void)
+{
+    const uint32_t sp = *(const volatile uint32_t *)0x00F80000UL;
+    const uint32_t pc = *(const volatile uint32_t *)0x00F80004UL;
+
+    __asm__ volatile ("move.w #0x2700, %%sr\n\t"
+                      "reset\n\t"
+                      "move.l %0, %%sp\n\t"
+                      "jmp (%1)"
+                      :
+                      : "r" (sp), "a" (pc)
+                      : "memory");
+}
+
+/*
  * Has a field gone by since this was last asked?
  *
  * Not the request bit: BPLxPT's rewind belongs to the level-3 handler

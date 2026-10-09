@@ -427,6 +427,52 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Desktop
 
+- **The whole palette AGA has: 256 colours** (`boot/rom/gfx.c`,
+  `boot/rom/gfx.h`). The quantiser was aiming at 128 because it had
+  always aimed at 128 — eight bitplanes were wired through the pack
+  all along, and the eighth bit of every index was simply never set.
+  `NPAL` is 256 now, which doubles the boxes the median cut grows to
+  and the shadow palette beside them, and `map15()`'s 15-bit cache
+  stores index+1 in sixteen bits rather than eight: 256 is the one
+  answer a byte cannot hold, so the last colour in the palette would
+  otherwise have cached as uncomputed on every frame it appeared in.
+  The map costs 32 KiB of BSS more for it, and a frame whose colours
+  number in the thousands now gets twice as many boxes to be right
+  in: a screenshot of the running desktop names 140 distinct colours
+  where the 128 build's own came back with 88, and a steady present
+  still costs two fields.
+- **Preferences across the top, and the three ways out below the rule**
+  (`user/gui/desktop/main.c`, `kernel/init/kernel_main.c`,
+  `boot/rom/amiga.c`, `boot/rom/amiga.h`,
+  `system/Core/Docs/readme.txt`, `system/Core/Docs/neoshell.txt`,
+  `README.md`). The start menu stands in three sections now: the bar
+  across its head carrying Preferences, where a caption carries the
+  name of the thing being looked at; the six places under its rule;
+  and — where Preferences used to stand alone — Reboot, Shut down and
+  Exit to shell. One list names all of them in the order they stand
+  in, and `menu_row_of()` is the only place an index turns into a
+  rectangle, so the draw, the hit area, the band and the cursor keys
+  cannot come apart. The three at the foot keep the two-press rule
+  every other entry keeps, and then bring up a screen of their own:
+  the desktop still standing under a veil, with a window on it
+  listing what is being switched off — the sound, the programs, the
+  pointer — each item ticked on the frame the work behind it happens
+  on, the last tick sharing a frame with the closing line. After that
+  `amiga_halt()` stops the processor with that picture left on the
+  raster, and `amiga_reset()` goes back in through the ROM's own
+  reset vectors — the two longwords the CPU read when it came up,
+  ours when this image is the ROM and Kickstart's when it chainloaded
+  us — with the reset line taken on the way. Exit to shell has no
+  ceremony: the programs go down, the pointer goes with them, and
+  `nb_desktop_exit()` hands the machine back to the loop in
+  `kernel_main`, which is a loop now rather than a one-way step, so
+  `desktop` at the prompt and the menu's exit walk the same road in
+  both directions. Both gates read zero over the image that boots:
+  the rows sit in runs rather than values picked per row, the clamps
+  stay in frames of their own, and no stack slot is reached through
+  a loop counter — text 287,194 bytes, `_end` at `$00142CD4` under
+  the `$00150000` ceiling, and bare ROM and chainload each answering
+  11 WARNs / 0 FAILED with all four `>rs` answers green.
 - **Wallpaper, bar, button and orb: handles over `gfx.rs`**
   (`user/gui/desktop/main.c`). What this file keeps of the scene is
   the handle, called the way the C called it over the prefs this file
@@ -847,7 +893,7 @@ Notable changes to NeoBench, newest first. British English throughout.
   constants in `boot/rom/probe.h`.
 - The desktop keeps the NeoBench backdrop under Workbench-3.2-style chrome,
   with the startbar at half height, icons at a 24 px half-size tile, a palette
-  of 128 colours, and an Aero-style bar.
+  of 256 colours, and an Aero-style bar.
 - Play-once boot chime and the NeoBench store.
 
 ### Devices

@@ -221,6 +221,17 @@ so it reads down the strip with a divider beside it, and the chosen row lights
 as the glass lights everything else in Aero. With `bar = classic` the same
 menu is the flat Workbench field it was: grey panel, blue row, hard edge.
 
+The three entries below the second rule are asked for the way every other
+entry is — a press names one, the second press runs it — and then they run a
+screen of their own: the desktop still standing under a veil, with a window
+on it listing what is being switched off and each item ticked on the frame
+its work happens on. **Shut down** halts the processor with that picture left
+standing on the raster, and **Reboot** takes the machine back through the
+ROM's own reset vectors instead. **Exit to shell** has no ceremony at all:
+the programs go down, the pointer goes with them, and NeoShell gets the
+machine back, where `desktop` starts the desktop again from where it
+started.
+
 Every window can be picked up and carried: press the caption — anywhere in
 the strip that is not one of its three buttons — and it goes where the
 pointer goes until the button comes back up, taking the keyboard with it on
@@ -231,17 +242,18 @@ by again. All six move: the four program windows by their captions, the dial
 and the monitor by their own bodies.
 
 Eight programs, and the start menu names one of them: **Preferences**, the
-row below the rule. Both sections are set in alphabetical order, because a
-menu is a list the eye runs down looking for one name — the drawers run
-Bench, Core, Docs, Files, Home, Media, and below the rule runs
-**Preferences**, which changes how the desktop sits. Files opens the
-browser on the root of the store rather than sitting below the rule, because
-it is the drawer every other one is looked for in. The rest are filed where
-they belong rather than listed: Clock, Monitor, **NeoText** and **NeoShell**
-in `Tools/`, **About** in `Core/Docs`, and **VLC** in `Core/Media` beside the
-files it plays — chosen from the Media drawer, which opens that directory —
-while **Preferences** also stands in `Config/` beside the files it
-changes. Clock is an analogue dial; Monitor
+bar across the top of the panel. The places are set in alphabetical order,
+because a menu is a list the eye runs down looking for one name — Bench,
+Core, Docs, Files, Home, Media — and below the second rule stand the three
+entries that leave the machine: **Reboot**, **Shut down** and **Exit to
+shell**, asked for in that order because that is the order they leave it in.
+Files opens the browser on the root of the store rather than standing as a
+program, because it is the drawer every other one is looked for in. The rest
+are filed where they belong rather than listed: Clock, Monitor, **NeoText**
+and **NeoShell** in `Tools/`, **About** in `Core/Docs`, and **VLC** in
+`Core/Media` beside the files it plays — chosen from the Media drawer, which
+opens that directory — while **Preferences** also stands in `Config/` beside
+the files it changes. Clock is an analogue dial; Monitor
 shows fast memory in use; and NeoText opens any file in the store — plain
 text as written, a PDF with its text lifted out of the page, anything else
 as a hex view of the bytes it is, eight to a line.
@@ -290,8 +302,9 @@ and `Tools/Monitor` read `program = clock` and `program = monitor`, and
 files they belong with — the toolbox for the two that read the machine, the
 documentation for the panel that says what this is. Clock, Monitor and
 NeoText are not on the start menu, so the drawer is how they are started;
-Preferences keeps the row below the rule as the one program the list
-carries. `Tools/`
+Preferences keeps the bar across the top of the panel as the one program the
+list carries, and the three below the second rule are the machine's own
+affairs rather than programs at all. `Tools/`
 carries a note saying what is in it, and takes NeoShell and the calculator as
 they arrive. A document chosen in Files still opens in NeoText whatever else
 is filed here. Seven rows fit in Files, because the root carries six

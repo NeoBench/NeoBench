@@ -485,6 +485,32 @@ static void menu_glyph(int i, int x, int y)
         gfx_line(x + 6, y + 8, x + 4, y + 10, MUI_CUT);
         gfx_fill(x + 7, y + 10, 4, 1, MUI_CUT);
         break;
+    case 8:                                          /* Reboot    */
+        /* the ring with the arrow off its right-hand side: the
+         * machine's own round trip, in Bench's green because the
+         * entry starts the machine again rather than stops it */
+        mui_plate(x, y, 14, 4, MUI_GRN_T, MUI_GRN_B);
+        gfx_disc(x + 7, y + 7, 5, C_INK);
+        gfx_disc(x + 7, y + 7, 3, MUI_CUT);
+        gfx_tri(x + 8, y + 2, x + 8, y + 8, x + 13, y + 5, C_INK);
+        break;
+    case 9:                                          /* Shut down */
+        /* the power mark: the ring with the bar through its top,
+         * which is the one sign for this that needs no caption */
+        mui_plate(x, y, 14, 4, MUI_ROS_T, MUI_ROS_B);
+        gfx_disc(x + 7, y + 8, 5, C_INK);
+        gfx_disc(x + 7, y + 8, 3, MUI_CUT);
+        gfx_fill(x + 6, y + 1, 2, 6, C_INK);
+        break;
+    case 10:                                         /* the shell */
+        /* NeoShell's own terminal: the entry hands the machine
+         * straight back to it, so it wears the shell's tile */
+        mui_plate(x, y, 14, 4, MUI_CYA_T, MUI_CYA_B);
+        gfx_fill_r(x + 2, y + 4, 10, 8, 1, C_INK);
+        gfx_line(x + 4, y + 6, x + 6, y + 8, MUI_CUT);
+        gfx_line(x + 6, y + 8, x + 4, y + 10, MUI_CUT);
+        gfx_fill(x + 7, y + 10, 4, 1, MUI_CUT);
+        break;
     default:                                         /* NeoText */
         mui_plate(x, y, 14, 4, MUI_GRY_T, MUI_GRY_B);
         gfx_fill_r(x + 3, y + 4, 8, 8, 1, C_INK);    /* the sheet */
@@ -995,22 +1021,25 @@ static int vlc_dx, vlc_dy;
  * The panel stands in the bar that opens it: its foot is the bar's own
  * top edge at y=490, so it rises out of the furniture the orb sits in
  * rather than floating over the middle of the screen, and it throws no
- * shadow down there -- nothing comes between the two.  It carries two
- * sections: the places,
- * which are the directory entries the desktop used to show as a column
- * of icons down its left edge and which take a full 24 pixel plate
- * each, and the programs, which are gadgets with a running dot on
- * them.  Both are addressed as one list, places first, because that is
- * how the selection, the click pass and the band all name an entry;
- * where the split falls is a matter of two constants, so the draw and
- * the hit area cannot drift apart.
+ * shadow down there -- nothing comes between the two.  It carries
+ * three sections: the bar across its head, which carries Preferences
+ * where a caption bar carries the name of the thing being looked at;
+ * the places, which are the directory entries the desktop used to show
+ * as a column of icons down its left edge and which take a full 24
+ * pixel plate each; and -- below the second rule, where Preferences
+ * used to stand alone -- the three entries that leave the machine,
+ * Reboot, Shut down and Exit to shell.  All of them are addressed as
+ * one list in that head-to-foot order, because that is how the
+ * selection, the click pass, the band and the cursor keys name an
+ * entry, and menu_row_of() is the only place an index turns into a
+ * rectangle, so the draw and the hit area cannot drift apart.
  *
  * The flags below are the whole of what is running; they are file scope
  * without an initialiser because .data lands in write-only ROM.
  */
 #define MENU_X      0            /* flush with the screen's left edge   */
 #define MENU_W      196
-#define MENU_H      258          /* the foot lands on the bar's top edge */
+#define MENU_H      320          /* the foot lands on the bar's top edge */
 #define MENU_Y      (490 - MENU_H)   /* it stands in the bar at y=490    */
 #define MENU_HEAD   8            /* entries start below the lip          */
 #define MENU_STRIP  16           /* the band the caption is set down     */
@@ -1018,41 +1047,60 @@ static int vlc_dx, vlc_dy;
 #define MENU_CX     (MENU_SX + MENU_STRIP)    /* entries start here      */
 #define MENU_ITEMW  (MENU_W - 12 - MENU_STRIP)
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
-#define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
-#define MENU_PROGS  1            /* of which the menu shows this many    */
-#define MENU_ITEMS  (N_PLACES + MENU_PROGS)
-
-#define MENU_P0     (MENU_Y + MENU_HEAD + 4)             /* first place */
-#define MENU_SEP    (MENU_P0 + N_PLACES * MENU_PH + 4)   /* section rule */
-#define MENU_G0     (MENU_SEP + 4)                       /* first program */
+#define MENU_ITEMH  34           /* row pitch: 30 px box, 4 gap          */
+#define MENU_POWER  3            /* reboot, shut down, exit to shell     */
+#define MENU_ITEMS  (1 + N_PLACES + MENU_POWER)   /* bar, places, power  */
 
 /*
- * Which program each row of the menu's program section shows.  The
- * number is the slot the whole desktop counts in -- the panel, the
- * task row and the keyboard's focus all go by the same slots -- while
- * the menu lists one of the eight, in the order the names sort in.
- * Files leads the drawers above the rule rather than sitting in this
- * list, because it is the root of the store, the drawer every other
- * one is looked for in, and being a place rather than a program it
- * opens instead of toggling.  Clock, Monitor, NeoText and NeoShell are
- * filed in Tools/ beside the note that says what the drawer holds,
- * while About stands in Core/Docs, where it has always stood, and VLC
- * in Core/Media beside the files it plays -- About and VLC both came
- * off the menu: they are still programs, they still open from their
- * entries, and they are one press away either way -- but the menu is a
- * list of what the machine is set up with, and the single line it
- * keeps below the rule is the pane that sets it up.  All eight are
- * still programs, and all eight still take their buttons on the bar
- * when they are running.
+ * The rows, head to foot: the lip, the bar across the top, the rule
+ * under it, the places, the second rule, and the three that leave the
+ * machine with eight pixels of pane below them.  Every position is a
+ * sum from the top, so MENU_H is that stack added up and the foot
+ * still lands on the bar's top edge at y=490 -- neither rule can move
+ * without the whole stack moving with it.
  */
-static const unsigned char menu_slot[MENU_PROGS] = { 4 };
+#define MENU_TOP0   (MENU_Y + MENU_HEAD + 4)             /* the bar */
+#define MENU_RULE1  (MENU_TOP0 + MENU_ITEMH)             /* under it  */
+#define MENU_P0     (MENU_RULE1 + 4)                     /* first place */
+#define MENU_SEP    (MENU_P0 + N_PLACES * MENU_PH + 4)   /* section rule */
+#define MENU_G0     (MENU_SEP + 4)                       /* first power  */
 
-/* What that row says.  File scope rather than a local of the draw
- * pass, because the keyboard's first-letter jump asks the same name
- * and two lists that could disagree would be two menus. */
-static const char *const menu_name[MENU_PROGS] = {
-    "Preferences"
+/*
+ * What each of the three entries below the second rule says.  They are
+ * not programs -- no window, no button on the bar -- but they are menu
+ * entries all the same and keep the same two-press rule as every other
+ * one, because a machine being asked to go down should be asked
+ * twice rather than once by a pass of the pointer.
+ */
+static const char *const power_name[MENU_POWER] = {
+    "Reboot", "Shut down", "Exit to shell"
 };
+
+/*
+ * Where a menu entry stands, by its index in the one list: the bar
+ * across the top is 0, the places follow it, the three below the
+ * second rule come last.  The draw, the hit pass, the band and the
+ * cursor keys' idea of where the light is all go through here, so a
+ * row standing in one of them stands in all of them.
+ */
+static void menu_row_of(int idx, int *y, int *h)
+{
+    if (idx == 0)
+    {
+        *y = MENU_TOP0;
+        *h = 30;
+    }
+    else if (idx <= N_PLACES)
+    {
+        *y = MENU_P0 + (idx - 1) * MENU_PH;
+        *h = MENU_PH;
+    }
+    else
+    {
+        *y = MENU_G0 + (idx - 1 - N_PLACES) * MENU_ITEMH;
+        *h = 30;
+    }
+}
 
 /* the show-desktop sliver: the last eight columns of the panel, which
  * is the width Aero gives it -- a strip you can find without looking,
@@ -1065,6 +1113,11 @@ static const char *const menu_name[MENU_PROGS] = {
 
 static int menu_open;           /* the start menu is showing           */
 static int menu_sticky;         /* right-clicked open: it stays up     */
+static int power_on;            /* the shutdown screen holds the scene */
+static int power_kind;          /* 1 restarting, 0 switching off        */
+static int power_tick;          /* entries switched off so far         */
+static int power_last;          /* the closing line is down            */
+static int desk_out;            /* the desktop is going back to shell  */
 static int files_open;          /* the directory browser window        */
 static int clock_open;          /* the analog dial gadget              */
 static int monitor_open;        /* the two-bar system monitor          */
@@ -1258,25 +1311,17 @@ static void band_programs(void)
         band_menu();
 }
 
-/* The rows an item's light of selection covers: a menu entry -- a place
- * or a program, which are two different pitches -- or the one line of
- * the browser's list. */
+/* The rows an item's light of selection covers: a menu entry, which
+ * stands where menu_row_of() says it does, or the one line of the
+ * browser's list. */
 static void band_select(int kind, int idx)
 {
     if (kind == SEL_MENU)
     {
-        if (idx < N_PLACES)
-        {
-            int y = MENU_P0 + idx * MENU_PH;
+        int y, h;
 
-            band_add(y - 3, y + MENU_PH + 3);
-        }
-        else
-        {
-            int y = MENU_G0 + (idx - N_PLACES) * MENU_ITEMH;
-
-            band_add(y - 3, y + 33);
-        }
+        menu_row_of(idx, &y, &h);
+        band_add(y - 3, y + h + 3);
     }
     else if (kind == SEL_ROW)
     {
@@ -4366,15 +4411,27 @@ void nb_desktop_tick(void)
  * one for the entry across the list.  This is the other half: press
  * the letter the name starts with and the light goes to the first
  * entry that has it, past wherever it already stands; press it again
- * and it walks to the next one that does.  Places and programs are one
- * list here because the menu is one list to the eye, so 'v' finds VLC
- * and 'h' finds Home whether or not the rule between them is in the
- * way.
+ * and it walks to the next one that does.  The bar, the places and
+ * the three at the foot are one list here because the menu is one
+ * list to the eye, so 'e' finds Exit to shell and 'h' finds Home
+ * whether or not the rules between them are in the way.
  */
 /* the light's own geometry, set by the press pass further down: the
  * keyboard names an entry exactly as a press does and has to leave the
  * same mark behind it */
 static void sel_mark(void);
+
+/* The name any entry answers the first-letter jump with, in the order
+ * the menu stands: one list, so the jump and the draw cannot name
+ * different things for the same index. */
+static const char *menu_name_of(int k)
+{
+    if (k == 0)
+        return "Preferences";       /* the bar across the top          */
+    if (k <= N_PLACES)
+        return places[k - 1].name;
+    return power_name[k - 1 - N_PLACES];
+}
 
 static int menu_jump(int c)
 {
@@ -4391,7 +4448,7 @@ static int menu_jump(int c)
 
         if (k >= MENU_ITEMS)
             k -= MENU_ITEMS;
-        nm = (k < N_PLACES) ? places[k].name : menu_name[k - N_PLACES];
+        nm = menu_name_of(k);
         first = nm[0];
         if (first >= 'A' && first <= 'Z')
             first = first - 'A' + 'a';
@@ -4473,15 +4530,6 @@ static void dbl_report(unsigned dt, int dx, int dy)
         amiga_serial_putc(*d);
 }
 
-/*
- * The second press: run the item that was named by the first.
- *
- * Every arm here takes the rows it is about to change with it, and
- * gives the selection back whether or not it went anywhere -- which is
- * the only way a double click on the row you are already standing on
- * leaves the highlight honestly dark instead of painting a scene that
- * no longer matches what is set.
- */
 /*
  * One of the seven programs, standing or put away.
  *
@@ -4571,6 +4619,211 @@ static int program_slot(int p, int toggle)
     return on;
 }
 
+/* ------------------------------------------------------------------ *
+ * Power: the three entries that leave the machine
+ * ------------------------------------------------------------------ *
+ *
+ * Reboot, Shut down and Exit to shell are asked for the way every
+ * other menu entry is -- named by a press, run by the second -- and
+ * then they run their own pass over the scene, because a machine
+ * going down needs the screen to say what is being switched off while
+ * it happens rather than to go dark behind somebody's click.  The
+ * screen is the desktop under a veil with a window standing on it;
+ * every item on its list is one this file really performs, and the
+ * last item is the action itself.  Nothing on the list is a promise;
+ * it is the work, in the order it happens.
+ */
+
+/* Everything the machine is still doing, put down at once -- the way
+ * the desktop leaves it for NeoShell.  The two ways out of the machine
+ * itself take the same work a step at a time below, so the screen can
+ * name each step as it goes. */
+static void power_quiet(void)
+{
+    if (vlc_open)
+        vlc_close();
+    nb_sound_stop();
+    files_open = clock_open = monitor_open = about_open = 0;
+    prefs_open = neotext_open = vlc_open = shell_open = 0;
+    focus_p = 0;
+    desk_hidden = 0;
+    desk_saved = 0;
+    menu_open = 0;
+    menu_sticky = 0;
+    nb_pointer_show(0);
+}
+
+static void power_say(const char *s)
+{
+    while (*s)
+        amiga_serial_putc(*s++);
+    amiga_serial_putc('\r');
+    amiga_serial_putc('\n');
+}
+
+/* Wait on the field counter with the sound polled through it, the
+ * way the boot's hold and the shell's own loop both wait. */
+static void power_wait(unsigned fields)
+{
+    uint32_t t0 = nb_fields;
+
+    while (nb_fields - t0 < fields)
+        while (!amiga_vbl_pending())
+            nb_sound_poll();
+}
+
+/*
+ * The screen the ceremony paints: the desktop still there under a
+ * veil, and a window standing on it carrying the list.  A tick goes
+ * down on the frame the work behind it has happened on; the closing
+ * line shares the frame with the last tick, because after that frame
+ * the only thing left is the halt or the reset itself.
+ */
+static void power_scene(void)
+{
+    static const char *const what[3] = {
+        "Stopping the sound", "Closing the programs", "Hiding the pointer"
+    };
+    const char *title = power_kind ? "Restarting NeoBench"
+                                   : "Shutting down NeoBench";
+    const char *last  = power_kind ? "Restarting the machine"
+                                   : "Halting the processor";
+    const char *fin   = power_kind ? "The machine is restarting."
+                                   : "It is now safe to switch off your "
+                                     "computer.";
+    const int x = 110, y = 170, w = 420, h = 170;
+    int i;
+
+    wallpaper();
+    gfx_alpha(0, 0, 640, 512, NB_RGB(0, 0, 0), 210);
+    glass_window(x, y, w, h, 20, title, 0);
+
+    for (i = 0; i < 4; i++)
+    {
+        int iy = y + 30 + i * 22;
+        int done = i < power_tick;
+        const char *label = (i == 3) ? last : what[i];
+
+        if (done)
+        {
+            gfx_disc(x + 16, iy + 4, 6, C_ACC);
+            gfx_line(x + 13, iy + 4, x + 15, iy + 6, C_INK);
+            gfx_line(x + 15, iy + 6, x + 19, iy + 2, C_INK);
+        }
+        else
+        {
+            gfx_disc(x + 16, iy + 4, 6, C_WB_LINE);
+            gfx_disc(x + 16, iy + 4, 5, C_INK);
+        }
+        text_d(x + 40, iy, label, done ? C_SHADOW : C_WB_LINE);
+    }
+
+    if (power_last)
+        text_d(x + (w - strw(fin)) / 2, y + 130, fin, C_SHADOW);
+}
+
+/*
+ * Exit to shell: the desktop puts itself away -- every program down,
+ * the pointer with them -- and hands the machine back to the loop in
+ * kernel_main that runs NeoShell, where `desktop` asks for it again.
+ * The desktop never comes back with anything still open: what the
+ * shell returns to is the desktop as it started.
+ */
+static void power_shell(void)
+{
+    power_say(">power shell");
+    power_quiet();
+    desk_out = 1;
+}
+
+/*
+ * Reboot or shut down, with the screen that says what is happening
+ * to what on the way.  Five frames of it: the list standing whole and
+ * unlit, the sound stopped, the programs put down, the pointer gone,
+ * and the closing line with the last tick -- then one breath on that
+ * and the machine itself, halting with the picture where it stands
+ * or going back in through the ROM's own reset vectors.
+ */
+static void power_run(int which)
+{
+    int i;
+    const unsigned pace[5] = { 25, 20, 20, 20, 75 };
+
+    if (which == 2)
+    {
+        power_shell();
+        return;
+    }
+
+    power_kind = (which == 0);          /* 0 is Reboot                   */
+    power_on = 1;
+    power_tick = 0;
+    power_last = 0;
+    menu_open = 0;
+    menu_sticky = 0;
+    power_say(which ? ">power shutdown" : ">power reboot");
+
+    for (i = 0; i < 5; i++)
+    {
+        if      (i == 1)
+        {
+            if (vlc_open)
+                vlc_close();
+            nb_sound_stop();
+        }
+        else if (i == 2)
+        {
+            files_open = clock_open = monitor_open = about_open = 0;
+            prefs_open = neotext_open = vlc_open = shell_open = 0;
+            focus_p = 0;
+            desk_hidden = 0;
+            desk_saved = 0;
+        }
+        else if (i == 3)
+            nb_pointer_show(0);
+        else if (i == 4)
+            power_last = 1;
+
+        if (i)
+            power_tick = i;
+
+        band_n = 0;                     /* the whole scene has changed    */
+        nb_desktop_render();
+        nb_pointer_after_present();
+        power_wait(pace[i]);
+    }
+
+    if (which)
+        amiga_halt();                   /* the picture stands where it is */
+    else
+        amiga_reset();                  /* back in through the vectors    */
+}
+
+/*
+ * Whether the desktop has been asked to hand the machine back to
+ * NeoShell.  The loop in kernel_main reads this once a field and the
+ * reading clears it, so it is one event rather than a second copy of
+ * the state to keep in step from both sides.
+ */
+int nb_desktop_exit(void)
+{
+    int out = desk_out;
+
+    desk_out = 0;
+    return out;
+}
+
+/*
+ * The second press: run the item that was named by the first.
+ *
+ * Every arm here takes the rows it is about to change with it, and
+ * gives the selection back whether or not it went anywhere -- which is
+ * the only way a double click on the row you are already standing on
+ * leaves the highlight honestly dark instead of painting a scene that
+ * no longer matches what is set.  The two arms that switch the machine
+ * off are the ones that do not come back to give anything: they take
+ * the screen over on their way out.
+ */
 static int activate(int cls, int idx)
 {
     int changed = sel_clear();
@@ -4584,7 +4837,14 @@ static int activate(int cls, int idx)
             band_menu();
         }
 
-        if (idx < N_PLACES)
+        if (idx == 0)
+            /*
+             * The bar across the top carries Preferences and nothing
+             * else: the pane that sets the desktop up, toggling
+             * exactly as it did when it stood below the rule.
+             */
+            program_slot(4, 1);
+        else if (idx <= N_PLACES)
         {
             /*
              * A place brings the browser up on that directory.  Unlike a
@@ -4593,7 +4853,7 @@ static int activate(int cls, int idx)
              * is for -- but it does take the task manager's active
              * button, because the browser is what it started.
              */
-            unsigned d = dir_of(places[idx].dir);
+            unsigned d = dir_of(places[idx - 1].dir);
 
             if (!files_open || d != cur_dir || focus_p != 1)
             {
@@ -4604,8 +4864,12 @@ static int activate(int cls, int idx)
             }
         }
         else
-            /* a menu entry toggles: the lit dot says which are up */
-            program_slot(menu_slot[idx - N_PLACES], 1);
+            /*
+             * The three below the second rule: Reboot and Shut down
+             * run the ceremony and never come back from their answer,
+             * and Exit to shell hands the machine to NeoShell.
+             */
+            power_run(idx - 1 - N_PLACES);
     }
     else if (cls == SEL_VLC)
     {
@@ -4831,16 +5095,7 @@ int nb_desktop_click(int x, int y, int btn)
             int ix = MENU_CX;
             int iy, ih;
 
-            if (i < N_PLACES)
-            {
-                iy = MENU_P0 + i * MENU_PH;
-                ih = MENU_PH;
-            }
-            else
-            {
-                iy = MENU_G0 + (i - N_PLACES) * MENU_ITEMH;
-                ih = 30;
-            }
+            menu_row_of(i, &iy, &ih);
 
             if (x >= ix && x < ix + MENU_ITEMW &&
                 y >= iy && y < iy + ih)
@@ -4985,16 +5240,7 @@ static void sel_mark(void)
     {
         int iy, ih;
 
-        if (sel_idx < N_PLACES)
-        {
-            iy = MENU_P0 + sel_idx * MENU_PH;
-            ih = MENU_PH;
-        }
-        else
-        {
-            iy = MENU_G0 + (sel_idx - N_PLACES) * MENU_ITEMH;
-            ih = MENU_ITEMH;        /* the row's own pitch, as band_select */
-        }
+        menu_row_of(sel_idx, &iy, &ih);
         sel_x = MENU_CX + MENU_ITEMW / 2;
         sel_y = iy + ih / 2;
     }
@@ -5812,24 +6058,29 @@ static void menu_place(int i, int sel)
 }
 
 /*
- * One entry of the start menu's program section: type on the field, and
- * the chosen entry reversed -- blue field, white type -- across the
- * whole width of the entry, which is what says this is the entry the
- * next press runs.
+ * One row of the menu that is not a place: type on the field, and the
+ * chosen entry reversed -- blue field, white type -- across the whole
+ * width of the entry, which is what says this is the entry the next
+ * press takes.  The bar across the head and the three at the foot are
+ * both drawn this way; y is handed in rather than worked out here
+ * because menu_row_of() is the only thing that knows where a row
+ * stands, and this is the draw half of that answer.
  *
  * An entry whose program is already showing carries a lit dot at its
  * right-hand end, which is what makes the menu a list of what is
  * running as well as a list of what can be started: pressing an entry
- * toggles it, so the dot is also the way a gadget gets dismissed again.
- * The glyph is the tile the set draws everywhere -- here at 14 pixels --
- * and keeps its own hue whether the entry is chosen or not, because the
+ * toggles it, so the dot is also the way a gadget gets dismissed
+ * again.  The three that leave the machine never carry the dot --
+ * there is no machine to come back and show them running in -- and
+ * the glyph is the tile the set draws everywhere, here at 14 pixels,
+ * keeping its own hue whether the entry is chosen or not, because the
  * blue field behind it is what says that, not a second recolouring.
  * Nothing here is drawn until the orb asks for it.
  */
-static void menu_item(int i, int slot, const char *label, int open, int sel)
+static void menu_row(int y, int slot, const char *label, int open,
+                     int sel)
 {
     const int x = MENU_CX;
-    const int y = MENU_G0 + i * MENU_ITEMH;
     uint16_t ring = aero_on() ? C_AERO_RIM : C_WB_LINE;
 
     if (sel)
@@ -5923,11 +6174,14 @@ static void menu_shade(void)
 }
 
 /*
- * The whole menu: its pane with the name down the band at its left, the
- * places first, one rule, the programs.  The rule is the only thing
- * that says where one section ends and the other begins -- there are no
- * headings, because a heading over five entries the desktop used to
- * carry as icons says only that they are icons that moved.
+ * The whole menu: its pane with the name down the band at its left,
+ * the bar across the head carrying Preferences, the rule under that,
+ * the places, the second rule, and the three that leave the machine.
+ * The rules are the only thing that says where one section ends and
+ * the next begins -- there are no headings, because a heading over
+ * entries the desktop used to carry as icons says only that they are
+ * icons that moved, and the three at the foot say what they are for
+ * in their own names.
  */
 /*
  * Whether a program in the menu's section is running, by the slot it
@@ -5958,19 +6212,21 @@ static void start_menu(void)
         panel(MENU_X, MENU_Y, MENU_W, MENU_H, 0);
     menu_edge();
 
+    menu_row(MENU_TOP0, 4, menu_name_of(0), program_running(4),
+             sel_kind == SEL_MENU && sel_idx == 0);
+
+    gfx_fill(MENU_CX, MENU_RULE1, MENU_ITEMW, 1,
+             aero_on() ? C_AERO_RIM : C_WB_LINE);
+
     for (i = 0; i < N_PLACES; i++)
-        menu_place(i, sel_kind == SEL_MENU && sel_idx == i);
+        menu_place(i, sel_kind == SEL_MENU && sel_idx == i + 1);
 
     gfx_fill(MENU_CX, MENU_SEP, MENU_ITEMW, 1,
              aero_on() ? C_AERO_RIM : C_WB_LINE);
 
-    for (i = 0; i < MENU_PROGS; i++)
-    {
-        int s = menu_slot[i];
-
-        menu_item(i, s, menu_name[i], program_running(s),
-                  sel_kind == SEL_MENU && sel_idx == N_PLACES + i);
-    }
+    for (i = 0; i < MENU_POWER; i++)
+        menu_row(MENU_G0 + i * MENU_ITEMH, 8 + i, power_name[i], 0,
+                 sel_kind == SEL_MENU && sel_idx == 1 + N_PLACES + i);
 }
 
 /* ------------------------------------------------------------------ *
@@ -7040,6 +7296,12 @@ int nb_shell_boot(void)
  */
 static void scene(void)
 {
+    if (power_on)                   /* the ceremony owns every row      */
+    {
+        power_scene();
+        return;
+    }
+
     wallpaper();
 
     /*

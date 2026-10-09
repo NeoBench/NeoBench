@@ -65,6 +65,11 @@ void amiga_serial_putc(char c);
 /* One received byte, or -1 when the receiver holds nothing. */
 int amiga_serial_poll(void);
 void amiga_display_clear(void);
+
+/* Power: stop the processor with the last frame still on the raster,
+ * or take the machine back through the ROM's own reset vectors. */
+void amiga_halt(void);
+void amiga_reset(void);
 /*
  * Has a field gone by since this was last asked?  The wait for the next
  * field is a loop over this rather than a spin on the request bit,

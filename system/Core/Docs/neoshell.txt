@@ -84,6 +84,9 @@ Getting out
 `desktop` is the way back.  At boot it is what lets the compositor up,
 and the desktop takes the screen from there; in the window it closes
 the shell and leaves the desktop as it was.  `exit` says the same
-thing.  There is no way out of the shell that does not come from the
-shell, which is the point of it: a place to fall back to, rather than
-one to be stuck in.
+thing.  The desktop comes back the other way through its own Exit to
+shell entry, below the second rule of the start menu: the programs it
+had showing go down first, and `desktop` brings the desktop up again
+from where it started.  There is no way out of the shell that does not
+come from the shell, which is the point of it: a place to fall back to,
+rather than one to be stuck in.

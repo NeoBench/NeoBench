@@ -2,6 +2,46 @@ NeoBench changelog
 ==================
 
 0.1.9
+  Preferences across the top, and the three ways out below the rule
+  (user/gui/desktop/main.c, kernel/init/kernel_main.c,
+  boot/rom/amiga.c, boot/rom/amiga.h, README.md).
+    The start menu stands in three sections now: the bar across its
+    head carrying Preferences, where a caption carries the name of
+    the thing being looked at; the six places under its rule; and --
+    where Preferences used to stand on its own -- Reboot, Shut down
+    and Exit to shell.  One list still names all of them in the
+    order they stand in, and one function turns an index into the
+    row's rectangle, so the draw, the hit area, the band and the
+    cursor keys cannot come apart.  The three at the foot are asked
+    for the same way every other entry is -- named by a press, run
+    by the second -- and then bring up a screen of their own: the
+    desktop still there under a veil, with a window on it listing
+    what is being switched off -- the sound, the programs, the
+    pointer -- each item ticked on the frame the work behind it
+    happens on, and the last tick sharing a frame with the closing
+    line.  After that Shut down stops the processor with the
+    picture still standing on the raster, and Reboot goes back in
+    through the ROM's own reset vectors -- the two longwords the
+    CPU read when it came up, ours when this image is the ROM and
+    Kickstart's when it chainloaded us -- with the reset line taken
+    on the way.  Exit to shell has no ceremony: the programs go
+    down, the pointer goes with them, and the loop in kernel_main
+    that runs NeoShell gets the machine back, where `desktop`
+    starts the desktop again from where it started.
+  The whole palette AGA has: 256 colours (boot/rom/gfx.c,
+  boot/rom/gfx.h).
+    The quantiser was aiming at 128 because it had always aimed at
+    128 -- eight bitplanes were wired through the pack all along,
+    and the eighth bit of every index was simply never set.  NPAL
+    is 256 now, which doubles the boxes the median cut grows to and
+    the shadow palette beside them, and the 15-bit map that
+    answers for a colour as the frame goes up stores its answer in
+    sixteen bits rather than eight: index+1 was written back into
+    a byte, and 256 is the one answer a byte cannot hold, so the
+    last colour in the palette would have cached as uncomputed on
+    every frame it appeared in.  The map costs 32 KiB of BSS more
+    for it, and a frame whose colours number in the thousands now
+    gets twice as many boxes to be right in.
   The scene itself in Rust: the wash, the bar and the orb
   (libs/nb_rs/src/gfx.rs, user/gui/desktop/main.c, kernel_main.c,
   tools/tests/test_gfx.c).

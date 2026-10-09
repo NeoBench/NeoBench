@@ -2,7 +2,7 @@
  * gfx.c - software compositor for the NeoBench desktop.
  *
  * Drawing happens in an RGB565 back buffer; gfx_present() quantises the
- * finished scene with median cut, uploads a 128-colour AGA palette and
+ * finished scene with median cut, uploads a 256-colour AGA palette and
  * bitplanes the result into the hardware frame buffer.
  *
  * No runtime library: no division (hand-rolled shift/subtract udiv and
@@ -805,7 +805,7 @@ void gfx_text_v(int x, int y, const char *s, uint16_t c)
  * from 256 to 512 rows, and a fixed stride would only ever reach the
  * top half of the image (the palette would then ignore the taskbar). */
 #define SAMP_STRIDE (((GW * GH) / (int)NSAMP) + 1)
-#define NPAL    128u                    /* indices 0..127; LUT stores idx+1 */
+#define NPAL    256u                    /* indices 0..255; LUT stores idx+1 */
 
 /*
  * A box carries the extent it was born with.
@@ -920,7 +920,7 @@ static void sort_range(uint16_t *a, uint32_t lo, uint32_t hi, int ch)
  * changed -- which is what lets a present measure only its own new
  * colours. */
 static uint8_t map15(uint16_t px, const uint16_t *pal, unsigned npal,
-                     uint8_t *lut, unsigned *pd)
+                     uint16_t *lut, unsigned *pd)
 {
     unsigned key = (((unsigned)(px >> 11) & 31u) << 10) |
                    (((unsigned)(px >> 6) & 31u) << 5) |
@@ -955,7 +955,7 @@ static uint8_t map15(uint16_t px, const uint16_t *pal, unsigned npal,
     if (pd)
         *pd = bestd;
     if (lut)
-        lut[key] = (uint8_t)(best + 1);
+        lut[key] = (uint16_t)(best + 1);
     return (uint8_t)best;
 }
 
@@ -967,7 +967,7 @@ static uint8_t map15(uint16_t px, const uint16_t *pal, unsigned npal,
  * time -- opening a window adds a few blends of teal over wallpaper, not
  * a new colour family -- so a cut taken over one frame is still a good
  * cut over the next.  And the 15-bit map is worth far more warm than the
- * cut it saves: every colour it has not seen costs a 255-entry search,
+ * cut it saves: every colour it has not seen costs a 256-entry search,
  * and a scene has thousands of distinct colours in it.
  *
  * PAL_FAR is how far a colour may land from that palette before the
@@ -981,7 +981,7 @@ static uint16_t pal_keep16[NPAL];
 static uint8_t  pal_keep8[NPAL * 3u];
 static unsigned npal_keep;              /* 0 until the first cut        */
 static unsigned pal_serial;             /* bumped by every cut          */
-static uint8_t  lut[32768u];            /* key -> palette index + 1     */
+static uint16_t lut[32768u];            /* key -> palette index + 1     */
 static unsigned lut_serial;             /* the cut the map belongs to   */
 static int      pack0, pack1;           /* rows the last pack rewrote   */
 

@@ -110,10 +110,13 @@ down.  So the row chooses between the windows that are standing as
 well as closing them, which is what the lit button claims to be
 showing.
 
-There are no icons on the wallpaper at all.  The five places the
-desktop used to carry down its left edge -- Home, Core, Bench, Docs
-and Media -- are entries at the top of the start menu the orb opens,
-and the programs are entries under a rule beneath them.
+There are no icons on the wallpaper at all.  The places the desktop
+used to carry down its left edge -- Bench, Core, Docs, Home and
+Media -- plus Files, the root the others are looked for in, are
+entries in the start menu the orb opens: under the bar across the
+top of the panel that carries Preferences, and under a rule beneath
+them the three entries that leave the machine -- Reboot, Shut down
+and Exit to shell.
 
 The menu stands in the bar it is opened from: its foot is the bar's
 top edge, so it rises out of the furniture the orb sits in instead of
@@ -123,9 +126,10 @@ band at its left edge, turned a quarter so it reads down the strip
 with a divider between the band and the entries; the chosen row is
 the flat Workbench blue under the classic field "bar" asks for in
 screen.cfg, and under the default glass it lights the way every other
-surface here lights.  Both sections list in alphabetical order --
-Bench to Media above the rule, Preferences then VLC below it --
-because a menu is a list the eye runs down looking for one name.
+surface here lights.  The places list in alphabetical order -- Bench to Media -- because
+a menu is a list the eye runs down looking for one name, and the
+three entries below the second rule run Reboot, Shut down and Exit
+to shell, in the order they leave the machine.
 
 The icons themselves are drawn the way MUI drew its own: a rounded
 tile whose body ramps from a saturated tint to a deep one, a white rim
@@ -145,15 +149,26 @@ buttons and the sliver are controls and answer to one press, and the
 right button opens the menu in the sticky form that stays up across
 several choices.
 
+The three entries below the second rule are asked for the same way,
+and then they run their own screen: Reboot and Shut down bring up a
+list of what is being switched off -- the sound, the programs, the
+pointer -- with each item ticked on the frame the work behind it
+happens on.  At the foot of the list Shut down halts the processor
+with the picture still standing on the raster, and Reboot takes the
+machine back through the ROM's own reset vectors instead.  Exit to
+shell puts the desktop away without a ceremony and returns to
+NeoShell, where `desktop` asks for it again.
+
 The programs
 ------------
 
-The start menu names three of them: Files, which is one of the
-drawers above the rule, and Preferences and VLC, the two rows under
-it.  The other five are filed where they belong instead -- Clock,
-Monitor, NeoText and NeoShell in Tools/, About in Core/Docs with the
-guide it explains, and Preferences also in Config/ beside the files
-it changes -- so each is started from the drawer it stands in.  Tools/
+The start menu names two of them: Files, which is one of the places
+under the top bar, and Preferences, the bar across the top of the
+panel itself.  The other six are filed where they belong instead --
+Clock, Monitor, NeoText and NeoShell in Tools/, About in Core/Docs
+with the guide it explains, VLC in Core/Media, and Preferences also
+in Config/ beside the files it changes -- so each is started from
+the drawer it stands in.  Tools/
 is where the calculator will stand when it is written.
 
   Files        the directory browser, reading the store the image was
