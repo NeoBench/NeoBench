@@ -7,7 +7,7 @@ CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra -std=c99
 
 TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi test_bfg test_prefs \
-         test_store
+         test_store test_gfx
 
 # The Rust half of the ROM, built for this host rather than for the
 # m68k: libs/nb_rs parses the four Config files exactly the way
@@ -100,7 +100,7 @@ test_bfg: test_bfg.c ../../boot/rom/probe.c ../../boot/rom/probe.h \
 # way the ROM's archive does.
 $(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock \
            $(RS_DIR)/src/lib.rs $(RS_DIR)/src/prefs.rs \
-           $(RS_DIR)/src/store.rs
+           $(RS_DIR)/src/store.rs $(RS_DIR)/src/gfx.rs
 	@command -v $(CARGO) >/dev/null 2>&1 || \
 	    { echo "rust: cargo is required and was not found at $(CARGO)"; exit 1; }
 	cd $(RS_DIR) && RUSTC=$(RUSTC) RUSTFLAGS="-Cpanic=abort" \
@@ -124,6 +124,18 @@ test_store: test_store.c ../../user/gui/desktop/progs.c \
             ../../boot/rom/pfs.h ../../boot/rom/pfs_data.c $(RS_LIB)
 	$(CC) $(CFLAGS) -o $@ test_store.c ../../user/gui/desktop/progs.c \
 	    ../../boot/rom/pfs.c ../../boot/rom/pfs_data.c \
+	    $(RS_LIB) -lpthread -ldl -lm
+
+# The Vista chrome's paint, held against the C standing over it the
+# way test_prefs holds the parser: rs_gfx()'s battery in
+# kernel_init carries the same two formulas and the same three
+# tables, and this runs them over every Config glass and a set of
+# backdrops, then corrupts each family one word at a time and
+# requires the mask to be exactly that family's bit with `at` the
+# word that moved -- the boot only ever tries one pair, so the host
+# sweeps what the boot cannot.
+test_gfx: test_gfx.c ../../boot/rom/gfx.h $(RS_LIB)
+	$(CC) $(CFLAGS) -o $@ test_gfx.c \
 	    $(RS_LIB) -lpthread -ldl -lm
 
 run: $(TESTS) $(FIXTURE)

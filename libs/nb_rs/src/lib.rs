@@ -48,6 +48,7 @@
  * brings std along for the assertions. */
 #![cfg_attr(not(test), no_std)]
 
+pub mod gfx;
 pub mod prefs;
 pub mod store;
 

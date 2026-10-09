@@ -5,6 +5,7 @@
 #include "../../boot/rom/kbd.h"
 #include "../../boot/rom/prefs.h"
 #include "../../boot/rom/pfs.h"
+#include "../../boot/rom/gfx.h"
 #include "../../user/gui/desktop/progs.h"
 
 extern void kernel_banner(void);
@@ -66,6 +67,30 @@ extern unsigned nb_rs_store_check(const struct pfs_node *nodes,
                                   const unsigned *nxt,
                                   const unsigned *nxt_hit, unsigned nnxt,
                                   unsigned *at);
+
+/*
+ * The Rust half's Vista chrome: the formulas the glass and the aurora
+ * are computed from, and the three tables the scene is drawn out of
+ * -- the paint (aurora, glows, the bloom behind the mark, the
+ * branding), the palette, and the orb in its states.  This side
+ * passes its own reference for every one of them, written out here
+ * from the numbers main.c draws the rest of the chrome with, plus the
+ * Config's own glass and the backdrop's two colours -- values no
+ * compiler has seen before this boot -- and back comes a mask naming
+ * the family where the two halves came apart (libs/nb_rs/src/gfx.rs
+ * has the table of bits), with `at` saying where inside it.  Same
+ * contract as the store: everything handed over is one of our own
+ * static arrays.
+ */
+extern unsigned nb_rs_gfx_check(unsigned glass,
+                                unsigned top, unsigned bot,
+                                unsigned dark_top, unsigned dark_bot,
+                                const unsigned *aero, unsigned naero,
+                                const unsigned *bloom, unsigned nbloom,
+                                const unsigned *pal, unsigned npal,
+                                const unsigned *layer, unsigned nlayer,
+                                const unsigned *orb, unsigned norb,
+                                unsigned *at);
 
 /*
  * struct nb_prefs is read across this line, by repr(C) on the Rust
@@ -372,6 +397,177 @@ static void rs_store(void)
         rs_wire("ok\r\n");
 }
 
+/*
+ * The formulas the chrome is computed from, kept here as the C they
+ * were lifted from -- bd_dark() and aero_field() in main.c, and the
+ * ladder glow() used to climb.  Two copies on purpose: only a second
+ * copy catches a retyping, and this one is what the Rust half is
+ * held against.
+ */
+static int gfx_bd_dark(uint16_t c)
+{
+    unsigned r = (unsigned)((c >> 11) & 31);
+    unsigned g = (unsigned)((c >> 5) & 63);
+    unsigned b = (unsigned)(c & 31);
+
+    return (r * 10u + g * 10u + b * 4u) < 600u;
+}
+
+static unsigned gfx_aero_alpha(int i, int h, unsigned glass)
+{
+    int op = 255 - (int)glass * 2;
+    int a;
+
+    if (op < 40)
+        op = 40;
+    if (op > 255)
+        op = 255;
+
+    a = op - (i < 4 ? (4 - i) * 7 : 0) + (i >= h - 4 ? 14 : 0);
+    if (a < 16)
+        a = 16;
+    if (a > 255)
+        a = 255;
+    return (unsigned)a;
+}
+
+/*
+ * The paint held against the paint.  Phase 3 moved the scene the boot
+ * leaves on screen -- the wash and its aurora, the glass bar, the
+ * orb -- into libs/nb_rs/src/gfx.rs, and this is the C standing over
+ * it: every formula above and every table below, written out from the
+ * numbers wallpaper(), aero_field() and start_orb() carried, with the
+ * Config's own glass and backdrop resolving to colours nothing knew
+ * when this compiled, so each leg stands on an unknown value.  One
+ * bit a family, `at` inside it; serial alone when they agree, like
+ * the batteries before it.
+ */
+static void rs_gfx(void)
+{
+    /*
+     * The scene's paint in the word forms gfx.rs packs: kind<<30 |
+     * x<<20 | y<<10 | r, then slot<<8 | alpha.  Kind 0 is the aurora,
+     * 1 the older three glows, 2 the bloom that lights the mark, 3
+     * the branding (mark, wordmark shadow, wordmark -- the mark's own
+     * colours are its artwork's, so its second word is zero).
+     */
+    static const unsigned bloom[] = {
+        (40u << 20) | (58u << 10) | 150u,          (0u << 8) | 104u,
+        (192u << 20) | (138u << 10) | 150u,        (1u << 8) | 112u,
+        (342u << 20) | (240u << 10) | 150u,        (2u << 8) | 118u,
+        (472u << 20) | (356u << 10) | 150u,        (1u << 8) | 112u,
+        (604u << 20) | (482u << 10) | 150u,        (0u << 8) | 104u,
+        (340u << 20) | (238u << 10) | 74u,         (3u << 8) | 76u,
+        (470u << 20) | (354u << 10) | 62u,         (3u << 8) | 64u,
+        (1u << 30) | (300u << 20) | (452u << 10) | 250u,  (0u << 8) | 165u,
+        (1u << 30) | (556u << 20) | (476u << 10) | 210u,  (1u << 8) | 175u,
+        (1u << 30) | (596u << 20) | (58u << 10) | 170u,   (2u << 8) | 185u,
+        (2u << 30) | (215u << 20) | (315u << 10) | 165u,  (1u << 8) | 96u,
+        (3u << 30) | (110u << 20) | (210u << 10) | 210u,  0u,
+        (3u << 30) | (111u << 20) | (429u << 10) | 3u,    (5u << 8) | 0u,
+        (3u << 30) | (110u << 20) | (428u << 10) | 3u,    (4u << 8) | 0u,
+    };
+
+    /* The palette, in gfx.rs's order: glass, rim, button, act, ink,
+     * shadow, teal, the orb's three blues, the three glows, the grid,
+     * the aurora's three, the lit grid, Workbench's shade and grey,
+     * the pearl, the teal and the navy of the wordmark. */
+    static const unsigned pal[] = {
+        NB_RGB(1, 3, 6),      NB_RGB(11, 26, 15),  NB_RGB(7, 16, 12),
+        NB_RGB(11, 25, 17),   NB_RGB(31, 63, 31),  NB_RGB(0, 1, 1),
+        NB_RGB(6, 41, 22),    NB_RGB(9, 44, 31),   NB_RGB(1, 20, 30),
+        NB_RGB(0, 8, 16),     NB_RGB(19, 53, 25),  NB_RGB(20, 53, 28),
+        NB_RGB(19, 56, 25),   NB_RGB(21, 58, 28),  NB_RGB(8, 44, 30),
+        NB_RGB(20, 58, 31),   NB_RGB(14, 52, 31),  NB_RGB(16, 44, 30),
+        NB_RGB(11, 21, 11),   NB_RGB(21, 42, 21),  NB_RGB(30, 61, 30),
+        NB_RGB(6, 41, 22),    NB_RGB(2, 15, 10),
+    };
+
+    /*
+     * The orb, in the word forms gfx.rs packs: op<<30 | when<<27 |
+     * x<<17 | y<<7 | r, then colour<<8 | alpha.  when is 0 always,
+     * 1 menu open, 2 menu closed, 3 classic bar only -- the aero
+     * sphere first (halo, shade, rim, body, lit top, foot, pearl,
+     * mark), then the Workbench bevel.
+     */
+    static const unsigned orb[] = {
+        (1u << 30) | (1u << 27) | (28u << 17) | (501u << 7) | 15u,
+        ((unsigned)NB_RGB(6, 41, 22) << 8) | 70u,
+        (1u << 30) | (1u << 27) | (28u << 17) | (501u << 7) | 12u,
+        ((unsigned)NB_RGB(6, 41, 22) << 8) | 96u,
+        (29u << 17) | (503u << 7) | 11u,
+        ((unsigned)NB_RGB(0, 1, 1) << 8),
+        (28u << 17) | (501u << 7) | 11u,
+        ((unsigned)NB_RGB(31, 63, 31) << 8),
+        (28u << 17) | (501u << 7) | 10u,
+        ((unsigned)NB_RGB(1, 20, 30) << 8),
+        (1u << 30) | (2u << 27) | (28u << 17) | (498u << 7) | 8u,
+        ((unsigned)NB_RGB(9, 44, 31) << 8) | 140u,
+        (1u << 30) | (1u << 27) | (28u << 17) | (498u << 7) | 8u,
+        ((unsigned)NB_RGB(9, 44, 31) << 8) | 164u,
+        (1u << 30) | (28u << 17) | (505u << 7) | 7u,
+        ((unsigned)NB_RGB(0, 8, 16) << 8) | 96u,
+        (2u << 27) | (28u << 17) | (501u << 7) | 6u,
+        ((unsigned)NB_RGB(30, 61, 30) << 8),
+        (1u << 27) | (28u << 17) | (501u << 7) | 6u,
+        ((unsigned)NB_RGB(6, 41, 22) << 8),
+        (2u << 30) | (23u << 17) | (496u << 7) | 10u,  0u,
+        (3u << 27) | (29u << 17) | (503u << 7) | 11u,
+        ((unsigned)NB_RGB(11, 21, 11) << 8),
+        (3u << 27) | (28u << 17) | (501u << 7) | 11u,
+        ((unsigned)NB_RGB(31, 63, 31) << 8),
+        (3u << 27) | (28u << 17) | (501u << 7) | 10u,
+        ((unsigned)NB_RGB(21, 42, 21) << 8),
+        (1u << 30) | (3u << 27) | (28u << 17) | (498u << 7) | 8u,
+        ((unsigned)NB_RGB(31, 63, 31) << 8) | 70u,
+        (3u << 27) | (28u << 17) | (501u << 7) | 6u,
+        ((unsigned)NB_RGB(30, 61, 30) << 8),
+        (2u << 30) | (3u << 27) | (22u << 17) | (495u << 7) | 12u,  0u,
+    };
+
+    unsigned aero[22];
+    unsigned layer[5];
+    unsigned dark_top, dark_bot, r0, a0, mask, at = 0;
+    uint16_t top, bot;
+    int i;
+
+    nb_bd_colours(nb_prefs.backdrop, &top, &bot);
+    dark_top = gfx_bd_dark(top) ? 1u : 0u;
+    dark_bot = gfx_bd_dark(bot) ? 1u : 0u;
+
+    for (i = 0; i < 22; i++)
+        aero[i] = gfx_aero_alpha(i, 22, nb_prefs.bar_glass);
+
+    /* The glow ladder's samples turn with the two colours, exactly as
+     * gfx.rs derives them: five passes of one radius. */
+    r0 = 3u + ((unsigned)top % 251u);
+    a0 = 5u + ((unsigned)bot & 0xffu);
+    for (i = 1; i <= 5; i++)
+        layer[i - 1] = ((r0 * (unsigned)i) / 5u) << 8 | (a0 / 5u);
+
+    mask = nb_rs_gfx_check(nb_prefs.bar_glass,
+                           (unsigned)top, (unsigned)bot,
+                           dark_top, dark_bot,
+                           aero, (unsigned)(sizeof aero / sizeof aero[0]),
+                           bloom, (unsigned)(sizeof bloom / sizeof bloom[0]),
+                           pal, (unsigned)(sizeof pal / sizeof pal[0]),
+                           layer, (unsigned)(sizeof layer / sizeof layer[0]),
+                           orb, (unsigned)(sizeof orb / sizeof orb[0]),
+                           &at);
+    rs_wire(">rs gfx ");
+    if (mask)
+    {
+        rs_wire("fail mask=");
+        rs_mask(mask);
+        rs_wire(" at=");
+        rs_mask(at);
+        rs_wire("\r\n");
+        kernel_warn("Rust gfx check");
+    }
+    else
+        rs_wire("ok\r\n");
+}
+
 void kernel_main(const nb_bootinfo_t *boot)
 {
     /* Boot information will be used later */
@@ -447,6 +643,15 @@ void kernel_main(const nb_bootinfo_t *boot)
      * serial alone when they agree.
      */
     rs_store();
+
+    /*
+     * And phase 3 answers last, over what it paints: the scene this
+     * boot leaves on screen -- the wash and its aurora, the glass bar
+     * and the orb -- is drawn by gfx.rs, and the C's own copy of
+     * every formula and table stands over it here (rs_gfx()).  Same
+     * wire, same rule.
+     */
+    rs_gfx();
 
     kernel_starting("NeoBench Kernel Initialisation");
     nb_sound_init();

@@ -6,6 +6,52 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Rust
 
+- **The scene itself in Rust: the wash, the bar and the orb**
+  (`libs/nb_rs/src/gfx.rs`, `user/gui/desktop/main.c`,
+  `kernel/init/kernel_main.c`, `tools/tests/test_gfx.c`). The paint
+  came next: `gfx.rs` holds the Vista scene the boot leaves on
+  screen — `wallpaper()`'s gradient, glow, grid, bloom and mark; the
+  bar's twenty-two rows of glass; the button's field; the orb's two
+  states — and draws it through the C compositor's primitives
+  (`gfx_vgrad`, `gfx_alpha`, `gfx_alpha_r`, `gfx_disc`, `gfx_disc_a`,
+  `gfx_text_s`, `logo_mark`), which stay where they were. The tables
+  the scene is made of sit in the same file as the code that reads
+  them — twenty-three palette entries, fourteen blooms in their word
+  forms, seventeen orb entries with the state filter that picks them
+  — beside the three formulas the night field's dark test, the bar's
+  row alpha and the glow ladder's rung, compiled for host and m68k
+  alike, with `kernel_init`'s battery and `test_gfx` carrying the C's
+  own copy beside them: two copies on purpose, because only a second
+  copy catches a retyping. `nb_rs_gfx_check()` holds the two halves
+  together the way prefs and store do — sixteen arguments, six
+  families in one mask: the night field's two seeds, the bar's rows,
+  the ladder's rungs, the bloom's words, the palette, and the orb
+  counted in all three states it draws in, bit 31 a call the
+  parameters could not support — reported on the wire as `>rs gfx ok`
+  or `>rs gfx fail mask=… at=…` straight after the store answer, with
+  the amber `Rust gfx check` behind a failure. The boot stands it on
+  its own Config: the glass, the two backdrop colours and the seeds
+  derived from them are the machine's own, so every leg of the
+  battery runs on values this build never knew. `tools/tests/test_gfx`
+  brings the same C reference to the host, where it can sweep what a
+  boot only ever tries once — ten glasses over four backdrops,
+  including the exact pair the dark test turns on between, weight 598
+  dark and 600 not — and then falsifies each family one word at a
+  time, a flipped seed and a corrupted row, rung, word, colour and
+  orb entry in turn, requiring the mask to be exactly that family's
+  bit with `at` naming the word that moved, and the bad calls to say
+  which they were; eleven crate tests pin the tables underneath,
+  thirty-three in the crate in all. Both gates read zero over the
+  image that boots: the bar's per-row arithmetic sits in runs of rows
+  rather than as a value selected per row, the clamps sit in frames
+  of their own so the compare runs on a scratch register with the
+  branch straight over the arm the way prefs' clamp has always
+  lowered, and no stack slot is reached through a loop counter. The
+  member the link pulls costs 14,371 bytes, text 281,784, `_end`
+  still at `$0013AA40` under the `$00150000` ceiling, and a
+  screenshot of the running desktop against the C build's own comes
+  back pixel-identical bar the uptime readout: bare ROM and
+  chainload each 11 WARNs / 0 FAILED with `>rs gfx ok` on the wire.
 - **The store checked against itself: paths, the walk and the tables the
   shell reads** (`libs/nb_rs/src/store.rs`, `user/gui/desktop/progs.c`,
   `user/gui/desktop/progs.h`, `kernel/init/kernel_main.c`,
@@ -381,6 +427,22 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Desktop
 
+- **Wallpaper, bar, button and orb: handles over `gfx.rs`**
+  (`user/gui/desktop/main.c`). What this file keeps of the scene is
+  the handle, called the way the C called it over the prefs this file
+  loads: `wallpaper()` asks `nb_bd_colours` for the two colours and
+  passes them with the three flags the Config set, `aero_field()`
+  passes y, h and the glass, `aero_btn()` its rectangle and state,
+  `start_orb()` the two answers the desktop already holds — the
+  bar's style and whether the menu is open. `bd_dark()` and `glow()`
+  came out of this file with the rest — the ramp's dark test and the
+  five-pass ladder are `gfx.rs`'s now — and what stayed behind is the
+  #define colours of the chrome that did not move (the menu, the
+  window captions, the taskbar's own fills), this file's own copy
+  under the same battery's eye. The menu's glass and the windows'
+  captions are the C that stays for a later slice. Nothing about the
+  drawing changed with the move: a screenshot against the C build's
+  own desktop comes back pixel-identical bar the uptime readout.
 - **VLC comes off the start menu** (`user/gui/desktop/main.c`,
   `system/Core/Media/VLC`, `system/Tools/Clock`,
   `system/Apps/applications.txt`, `README.md`). `MENU_PROGS` is one

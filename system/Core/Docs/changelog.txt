@@ -2,6 +2,49 @@ NeoBench changelog
 ==================
 
 0.1.9
+  The scene itself in Rust: the wash, the bar and the orb
+  (libs/nb_rs/src/gfx.rs, user/gui/desktop/main.c, kernel_main.c,
+  tools/tests/test_gfx.c).
+    The paint came next.  gfx.rs holds the Vista scene the boot
+    leaves on screen -- wallpaper()'s gradient, glow, grid, bloom and
+    mark; the bar's twenty-two rows of glass; the button's field; the
+    orb's two states -- and draws it through the C compositor's
+    primitives, which stay where they were.  The tables the scene is
+    made of sit in the same file as the code that reads them:
+    twenty-three palette entries, fourteen blooms in their word
+    forms, seventeen orb entries with the state filter that picks
+    them, and the three formulas the night field's dark test, the
+    bar's row alpha and the glow ladder's rung.  The four handles in
+    main.c -- wallpaper(), aero_field(), aero_btn() and start_orb()
+    -- now call nb_rs_wallpaper, nb_rs_aero_field, nb_rs_aero_btn
+    and nb_rs_start_orb, called the way the C called them over the
+    prefs that file loads; bd_dark() and glow() came out of main.c
+    with the rest, the menu's glass and the windows' captions are
+    the C that stays for the next slice.  nb_rs_gfx_check() holds
+    the halves together the way prefs and store do: sixteen
+    arguments, six families in one mask -- the night field's two
+    seeds, the bar's rows, the ladder's rungs, the bloom's words,
+    the palette, and the orb counted in all three states it draws
+    in -- bit 31 a call the parameters could not support, reported
+    as ">rs gfx ok" or ">rs gfx fail mask=... at=..." straight
+    after the store answer with the amber "Rust gfx check" behind a
+    failure.  The boot stands it on its own Config: the glass, the
+    two backdrop colours and the seeds derived from them are the
+    machine's, so every leg runs on values this build never knew.
+    tools/tests/test_gfx brings the same C reference to the host,
+    where it sweeps ten glasses over four backdrops -- including the
+    exact pair the dark test turns on between, weight 598 dark and
+    600 not -- and then falsifies each family one word at a time,
+    requiring the mask to be exactly that family's bit with at
+    naming the word that moved; eleven crate tests pin the tables
+    underneath, thirty-three in the crate in all.  Both gates read
+    zero over the image that boots: the bar's per-row arithmetic
+    sits in runs of rows, the clamps sit in frames of their own so
+    the compare runs on a scratch register with the branch straight
+    over the arm, and no stack slot is reached through a loop
+    counter.  A screenshot against the C's own desktop comes back
+    pixel-identical bar the uptime readout: 11 WARNs, 0 FAILED,
+    ">rs gfx ok", bare ROM and chainload both.
   The store checked against itself: paths, the walk and the tables the
   shell reads (libs/nb_rs/src/store.rs, user/gui/desktop/progs.c and
   progs.h, kernel_main.c, tools/tests/test_store.c).

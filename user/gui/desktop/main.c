@@ -290,141 +290,36 @@ static void text_right(int right, int y, const char *s, uint16_t c)
  * ------------------------------------------------------------------ */
 
 /*
- * The backdrop, and this one is NeoBench's own: the wash -- white
- * falling to mint by default -- with three soft discs laid over it,
- * then the hairline grid, and the mark and the wordmark on top of all
- * of it.  Nothing is sunk into anything: against a light field the
- * artwork carries itself, so it goes down last and at full strength.
- * The wordmark is navy where it used to be teal, because navy is what
- * still reads as type on white -- the teal behind it is only its
- * shadow now.
+ * The scene, and where it lives now.
  *
- * Which wash it is, is one of the five the Preferences pane offers and
- * Config/screen.cfg names: wash is this white-to-mint one, and the
- * other four are a cream, a sky, a peach falling to lilac and a cool
- * grey-blue.  They all carry the same glows, the same grid and the
- * same artwork, which is why they are five hues of one field rather
- * than five different desktops.
+ * The backdrop, the glows, the grid, the mark and the wordmark -- and
+ * further down, the bar's glass, its buttons and the orb -- are
+ * painted by the Rust half: libs/nb_rs/src/gfx.rs is phase 3 of the
+ * move.  Every number it draws with is held to a C reference twice
+ * over, at each boot (rs_gfx() in kernel/init/kernel_main.c, which
+ * writes ">rs gfx ok") and on the host (tools/tests/test_gfx.c);
+ * what stayed in this file is the handle, called the way the C called
+ * it, over the prefs this file loaded.
  *
- * The Workbench this desktop takes its chrome from lays a plain blue
- * ramp behind everything; that is the one part of it that is not
- * borrowed, deliberately.  The wash, the glows and the grid all sit
- * behind the two preference flags below.
- *
- * A glow, when it is asked for, is five stacked passes of a fifth of
- * the strength, smallest last: the middle of the disc picks up all five
- * and the rim only the first, so it falls away in soft steps instead of
- * ending on an edge.
+ * The #define colours above are this file's own copy of the chrome
+ * that did not move -- the menu, the window captions, the taskbar's
+ * own fills -- and gfx.rs keeps the same numbers under that same
+ * battery's eye, so the two lists are meant to read alike.
  */
-static void glow(int cx, int cy, int r, uint16_t c, uint8_t a)
-{
-    int i;
 
-    for (i = 5; i >= 1; i--)
-        gfx_disc_a(cx, cy, (r * i) / 5, c, (uint8_t)(a / 5));
-}
-
-/*
- * Is the field this artwork stands on a night one?
- *
- * Asked of the gradient's top colour rather than of the backdrop's
- * index, because wash is not a fixed pair: Config/screen.cfg carries
- * its two colours, and a file is free to set them to anything.  The
- * weights are the eye's, in the five-six-five the palette is packed
- * in, and the answer only has to separate the five fields this
- * desktop can be showing -- a night blue and a cream are an order of
- * magnitude apart, so the threshold sits well clear of both.
- */
-static int bd_dark(uint16_t c)
-{
-    unsigned r = (unsigned)((c >> 11) & 31);
-    unsigned g = (unsigned)((c >> 5) & 63);
-    unsigned b = (unsigned)(c & 31);
-
-    return (r * 10u + g * 10u + b * 4u) < 600u;
-}
+extern void nb_rs_wallpaper(unsigned top, unsigned bot, int vista,
+                            int glow, int grid);
+extern void nb_rs_aero_field(int y, int h, unsigned glass);
+extern void nb_rs_aero_btn(int x, int y, int w, int h, int on);
+extern void nb_rs_start_orb(int aero, int menu_open);
 
 static void wallpaper(void)
 {
-    int i, dark, vista;
-    uint16_t top, bot, gl_a, gl_b, gl_c, grid;
+    uint16_t top, bot;
 
     nb_bd_colours(nb_prefs.backdrop, &top, &bot);
-    gfx_vgrad(0, 0, 640, 512, top, bot);
-
-    dark = bd_dark(top);
-    vista = (nb_prefs.backdrop == NB_BD_WASH);
-
-    if (dark)
-    {
-        gl_a = C_AUR_A;
-        gl_b = C_AUR_B;
-        gl_c = C_AUR_C;
-        grid = C_GRID_L;
-    }
-    else
-    {
-        gl_a = C_GLOW_A;
-        gl_b = C_GLOW_B;
-        gl_c = C_GLOW_C;
-        grid = C_GRID;
-    }
-
-    if (nb_prefs.glow)
-    {
-        if (vista)
-        {
-            /*
-             * The aurora: five blooms laid end to end down the screen
-             * from the upper left to the lower right, overlapping by
-             * more than half their own radius so that the run reads as
-             * one ribbon of light rather than as five lamps, and two of
-             * them white where the ribbon's own core shows.  It is the
-             * one shape that desktop is remembered by, and it is laid
-             * to miss the wordmark: it crosses the mark's top edge on
-             * its way, which is what lights the branding rather than
-             * inked it has to be read against, and it has fallen clear
-             * of the name by the time it reaches it.
-             */
-            glow(40, 58, 150, gl_a, 104);
-            glow(192, 138, 150, gl_b, 112);
-            glow(342, 240, 150, gl_c, 118);
-            glow(472, 356, 150, gl_b, 112);
-            glow(604, 482, 150, gl_a, 104);
-            glow(340, 238, 74, C_INK, 76);
-            glow(470, 354, 62, C_INK, 64);
-        }
-        else
-        {
-            glow(300, 452, 250, gl_a, 165);
-            glow(556, 476, 210, gl_b, 175);
-            glow(596, 58, 170, gl_c, 185);
-        }
-    }
-
-    if (nb_prefs.grid)
-    {
-        for (i = 0; i < 512; i += 32)
-            gfx_alpha(0, i, 640, 1, grid, 26);
-        for (i = 16; i < 640; i += 32)
-            gfx_alpha(i, 0, 1, 512, grid, 15);
-    }
-
-    /*
-     * On a night field the mark cannot be inked -- the navy it is cut
-     * in is the colour of the field itself -- so it is lit instead:
-     * a bloom behind it, the same ice the aurora carries, which puts
-     * light where the mark has to be read against and leaves the navy
-     * standing as the silhouette on it.  Over a pale field there is
-     * nothing to light and the ink does the work on its own.
-     */
-    if (dark)
-        glow(215, 315, 165, gl_b, 96);
-
-    logo_mark(110, 210, 210);
-    gfx_text_s(111, 429, "NEOBENCH", LOGO_TEAL, 3);   /* shadow, down-right */
-    gfx_text_s(110, 428, "NEOBENCH",
-               dark ? C_INK : LOGO_NAVY, 3);          /* the wordmark       */
+    nb_rs_wallpaper(top, bot, nb_prefs.backdrop == NB_BD_WASH,
+                    nb_prefs.glow, nb_prefs.grid);
 }
 
 /* ------------------------------------------------------------------ *
@@ -5463,102 +5358,38 @@ static int aero_on(void)
 }
 
 /*
- * The bar's field, in Aero's own terms: not a colour painted across the
- * bottom of the screen but the backdrop itself darkened by an alpha
- * that runs the whole width and eases down the twenty-two rows, so the
- * wash the wallpaper is carrying still shows through the bar and the
- * bar reads as a pane of tinted glass rather than as a grey plank.
- * "glass" in Config/screen.cfg is how much of that wash is let through:
- * zero paints the field solid, one hundred leaves almost nothing of it
- * hidden.  A lit hairline runs along the very top -- the edge every
- * glass panel has -- and the bottom two rows close the pane off against
- * the desktop below it.
+ * The bar's field, in Aero's own terms -- and now through gfx.rs,
+ * which has the row-by-row write-up: the Config's glass turned to an
+ * opacity that eases down the twenty-two rows over the wash so the
+ * bar reads as a pane of tinted glass, the lit hairline along its
+ * very top, the bead that closes it against the desktop below.  This
+ * side passes the glass the file asked for and nothing else.
  */
 static void aero_field(int y, int h)
 {
-    int i;
-    int op = 255 - (int)nb_prefs.bar_glass * 2;
-
-    if (op < 40)
-        op = 40;
-    if (op > 255)
-        op = 255;
-
-    for (i = 0; i < h; i++)
-    {
-        /* the pane is glassiest along its top edge and most solid just
-         * before the bottom, which is what puts the light where it is */
-        int a = op - (i < 4 ? (4 - i) * 7 : 0) +
-                     (i >= h - 4 ? 14 : 0);
-
-        if (a < 16) a = 16;
-        if (a > 255) a = 255;
-        gfx_alpha(0, y + i, 640, 1, C_AERO, (uint8_t)a);
-    }
-
-    gfx_alpha(0, y,     640, 1, C_INK,     165);      /* the lit rim   */
-    gfx_alpha(0, y + 1, 640, 1, C_INK,      74);
-    gfx_alpha(0, y + 2, 640, 1, C_INK,      34);
-    gfx_alpha(0, y + h - 2, 640, 1, C_AERO_RIM, 78);   /* its closing bead */
-    gfx_alpha(0, y + h - 1, 640, 1, C_SHADOW, 205);
+    nb_rs_aero_field(y, h, nb_prefs.bar_glass);
 }
 
 /*
- * A button on the glass: a rounded field of a slightly lighter blue
- * grey, a hairline rim round it and a line of light along its own top
- * edge.  The pressed state is the brighter one -- Aero lights the thing
- * it is showing as running rather than sinking it into the bar.
+ * A button on the glass: rounded field, hairline rim, a line of
+ * light along its own top edge, the pressed state the brighter one.
  */
 static void aero_btn(int x, int y, int w, int h, int on)
 {
-    gfx_alpha_r(x, y, w, h, 4, on ? C_INK : C_AERO_RIM, on ? 150 : 120);
-    gfx_alpha_r(x + 1, y + 1, w - 2, h - 2, 3, on ? C_AERO_ACT : C_AERO_BTN,
-                on ? 238 : 195);
-    gfx_alpha(x + 2, y + 1, w - 4, 1, C_INK, on ? 130 : 78);
+    nb_rs_aero_btn(x, y, w, h, on);
 }
 
 /*
- * The start orb.  Off the glass it is Workbench's launcher: a
- * bevelled disc, hard shade under it, white rim, grey body and the
- * light across the top, with NeoBench's mark on the pearl the artwork
- * was drawn for.  On the glass it is Vista's -- a lit blue sphere,
- * its top turned to the sky the glass is cut for and its foot falling
- * to a navy, so that the disc reads as a ball rather than as a
- * washer -- and the pearl is still NeoBench's, which is the one piece
- * of that desktop's branding that is not anybody else's.  One
- * control, so one press: the bevel describes the thing rather than
- * standing for a second state to press through, and the halo the menu
- * opens with is the brand teal.
+ * The start orb.  Off the glass it is Workbench's bevelled disc; on
+ * the glass it is Vista's lit blue sphere -- NeoBench's pearl and
+ * mark either way, and the halo when the menu opens is the brand
+ * teal.  One table in gfx.rs holds both states and the filtering
+ * that picks them; this side passes the two answers the desktop
+ * already holds.
  */
 static void start_orb(void)
 {
-    const int cx = 28, cy = 501;
-
-    if (aero_on())
-    {
-        if (menu_open)
-        {
-            gfx_disc_a(cx, cy, 15, C_ACC, 70);
-            gfx_disc_a(cx, cy, 12, C_ACC, 96);
-        }
-
-        gfx_disc(cx + 1, cy + 2, 11, C_SHADOW);            /* shade    */
-        gfx_disc(cx, cy, 11, C_INK);                       /* the rim  */
-        gfx_disc(cx, cy, 10, C_ORB_B);                     /* body     */
-        gfx_disc_a(cx, cy - 3, 8, C_ORB_T,
-                   menu_open ? 164 : 140);                 /* lit top  */
-        gfx_disc_a(cx, cy + 4, 7, C_ORB_S, 96);            /* its foot */
-        gfx_disc(cx, cy, 6, menu_open ? C_ACC : LOGO_BG);  /* pearl    */
-        logo_mark(cx - 5, cy - 5, 10);
-        return;
-    }
-
-    gfx_disc(cx + 1, cy + 2, 11, C_WB_SHADE);            /* shade     */
-    gfx_disc(cx, cy, 11, C_INK);                         /* rim       */
-    gfx_disc(cx, cy, 10, C_WB_GREY);                     /* body      */
-    gfx_disc_a(cx, cy - 3, 8, C_INK, 70);                /* light     */
-    gfx_disc(cx, cy, 6, LOGO_BG);                        /* pearl     */
-    logo_mark(cx - 6, cy - 6, 12);                       /* the mark  */
+    nb_rs_start_orb(aero_on(), menu_open);
 }
 
 /*

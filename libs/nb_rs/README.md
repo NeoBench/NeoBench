@@ -80,12 +80,12 @@ What each part of that is for:
   five's six masks go through `nb_rs_opaque()` — an `#[inline(never)]`
   identity nothing follows — so they stand in the m68k disassembly as
   themselves.
-- **The budget still holds.** The archive costs 9,308 bytes of ROM now
-  that it parses, proves itself and checks the store — the one member
-  the link pulls, behind `core` and `compiler_builtins` it never opens
-  — and `_end` stands at `$0013AA40` — under the `$00150000` ceiling
-  the linker asserts on, because that is where Paula's sound buffer
-  begins.
+- **The budget still holds.** The archive costs 14,371 bytes of ROM now
+  that it parses, proves itself, checks the store and draws the scene —
+  the one member the link pulls, behind `core` and `compiler_builtins`
+  it never opens — and `_end` stands at `$0013AA40` — under the
+  `$00150000` ceiling the linker asserts on, because that is where
+  Paula's sound buffer begins.
 
 ## Two faults, and the gates over them
 
@@ -118,7 +118,16 @@ stack slots are reached with constant indices, variable indices belong to
 caller pointers (registers keep theirs), a conditional arms a call rather
 than a value the optimiser may set down between the compare and the
 branch, and `apply()` is `#[inline(never)]` because inlined it would
-hand `copy_str()` a frame slot where called it hands a pointer.
+hand `copy_str()` a frame slot where called it hands a pointer. Phase 3
+added three more, all learned by reading what the gate refused: a run of
+rows with one condition per run beats a condition per row — the
+optimiser merges `i < h && i < 4` back into `i < min(h, 4)`, which is a
+value selected; a clamp belongs in a frame of its own, so the value is
+computed into the return register and the compare runs on a scratch
+register with the branch straight over the arm, which is how prefs'
+clamp has always lowered; and a table indexed by a loop counter is a
+stack slot reached through a variable index, so the battery's states are
+two tests of the counter rather than an array of them.
 
 ## What phase 1 is
 
@@ -156,3 +165,31 @@ stopped the plain boot after `>rs prefs ok` among them — and each was
 reshaped out of the source. The compositor and the kernel come next —
 not before them, and each phase is judged by the same runs the C is:
 11 WARNs, 0 FAILED, and the desktop it draws.
+
+## What phase 3 is
+
+The scene's own paint: `wallpaper()`, the bar's field, the button and
+the orb are `gfx.rs`'s now — the gradient, glow, grid, bloom and mark,
+the twenty-two rows of glass, the button's field, the orb's two states
+— drawn through the C compositor's primitives, which stayed C, with the
+tables the scene is made of (the palette, the blooms, the orb and its
+state filter) and the three formulas beside them in the same file, and
+`main.c` keeping the handle, called the way the C called it over the
+prefs it loads. `nb_rs_gfx_check()` answers for them the way prefs and
+store answer for their halves: sixteen arguments, six families in one
+mask — the night field's two seeds, the bar's rows, the ladder's
+rungs, the bloom's words, the palette, and the orb counted in all three
+states it draws in — `>rs gfx ok` straight after `>rs store ok`, amber
+`Rust gfx check` behind a failure, and every leg standing on the
+machine's own glass and backdrop so the boot runs it over values this
+build never knew. `tools/tests/test_gfx` holds the same C reference on
+the host: ten glasses over four backdrops swept, every family
+falsified one word at a time with the mask and `at` pinned to the word
+that moved, and the bad calls asked for by name — eleven crate tests
+pin the tables underneath, thirty-three tests in the crate in all. The
+two gates read 0 over the image that boots, a screenshot against the
+C build's own desktop comes back pixel-identical bar the uptime
+readout, and both boots answer 11 WARNs, 0 FAILED with `>rs gfx ok` on
+the wire. What is left of the chrome in C — the menu's glass and the
+windows' captions — is the slice after this one, and the kernel is
+still to come.
