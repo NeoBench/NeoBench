@@ -12,8 +12,8 @@
 # The clock is filed in the tools drawer because that is where the
 # programs that read the machine are kept: the dial is a tool, and a
 # drawer should be able to start it the way the start menu starts what
-# it lists.  The menu does not list it -- the two rows under the rule
-# are Preferences and VLC -- so this drawer is the way to the dial
-# rather than a second way to it.
+# it lists.  The menu does not list it -- the one row under the rule
+# is Preferences -- so this drawer is the way to the dial rather than
+# a second way to it.
 
 program = clock

@@ -16,7 +16,7 @@ nothing else.
 
   Clock, Monitor, NeoText, NeoShell    filed in Tools/, opened from there
   About                      filed in Core/Docs, off the start menu
-  Preferences                filed in Config, first row below the rule
-  VLC                        filed in Core/Media, the row after it
+  Preferences                filed in Config, the row below the rule
+  VLC                        filed in Core/Media, opened from there
   Files                      the drawer that leads the start menu
   the rest                   not written yet

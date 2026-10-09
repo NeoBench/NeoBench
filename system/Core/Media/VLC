@@ -17,9 +17,9 @@
 # finds -- the still pictures in Pictures, the films in Videos, the
 # sounds in Music, and whatever of the three is filed here with it.
 #
-# The start menu lists it as well, under the rule beside Preferences:
-# the menu keeps the programs the machine is for, and a player for the
-# media drawer is one of them.  This file is the way to it from where
-# the media itself is.
+# The start menu does not list it: the one row below its rule is
+# Preferences, the pane the machine is set up with, and a player is
+# opened from the drawer that holds what it plays.  This file is that
+# way -- choose it here, in Media, beside the files it reads.
 
 program = vlc

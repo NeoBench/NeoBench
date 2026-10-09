@@ -6,6 +6,60 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Rust
 
+- **The store checked against itself: paths, the walk and the tables the
+  shell reads** (`libs/nb_rs/src/store.rs`, `user/gui/desktop/progs.c`,
+  `user/gui/desktop/progs.h`, `kernel/init/kernel_main.c`,
+  `tools/tests/test_store.c`). `nb_rs_store_check()` takes the store the
+  kernel has just walked and answers it from this half's side: every
+  node's path through its own `find`, the walk rebuilt from
+  `first_child`/`next_child` as header, children, NONE once for every
+  node in order, the `progs` name table against `PROG_NAME`, the `run`
+  table's matching against `tok_is`, and four `next_child` corner
+  samples for every directory — six families packed into one mask,
+  bit 31 naming a call the parameters could not support — reported on
+  the wire as `>rs store ok` or `>rs store fail mask=… at=…` straight
+  after the prefs answer, with the amber `Rust store check` behind a
+  failure the way prefs has its own. The quirks are pinned rather than
+  smoothed: `find` answers the root for any leading slash, a NULL query
+  answers NONE, `first_child` skips the directory's own index where
+  `next_child` does not, and `program_slot_of` lets the first
+  non-blank, non-comment line decide. `N_PROGRAMS`, `prog_name`,
+  `tok_is` and `program_slot_of` came out of `main.c` into
+  `user/gui/desktop/progs.c` behind `progs.h`, so the C the boot runs
+  and the Rust that checks it read one table rather than two that
+  could drift. `tools/tests/test_store` runs both halves over the same
+  nodes differentially — `Config/Preferences` at slot 4, `Tools/Clock`
+  at 1, `Core/Media/VLC` at 6, `desktop.txt` with no answer — and the
+  crate's own eight unit tests pin the store's shape underneath, 22 in
+  the crate in all.
+- **The scanner's blind spot, and the three sites it had been hiding**
+  (`tools/hazard.py`). The branch rule matched the short and long
+  forms only, and objdump spells a back-edge wider than 127 bytes
+  with a `w` on the end — `bnew`, `beqw`, `bhiw` — so every long
+  back-edge in the archive was invisible to the gate, which is how the
+  hang that stopped the plain boot after `>rs prefs ok` shipped as
+  "0 hazards", with two more sites latent behind it. The rule reads
+  the word forms now and widens the benign tuple with them; a fresh
+  scan found three true sites, all one shape — a compare sets the
+  codes, a `movel` lands between it and the branch, and the branch
+  reads the MOVE's codes instead: prefs `apply`'s NUL-found arm, the
+  store's name-table latch, and the walk's outer latch. All three were
+  latent on the inputs the boot happens to pass — which is exactly
+  what a gate must not allow — so each came out of the source rather
+  than being argued harmless: `apply` cuts the range first so the
+  bound is the loop's own exit and the slice below has nothing left to
+  prove, the name loop makes the table's length a value the body
+  answers rather than an exit it breaks on — the two bounds can no
+  longer fold into a single limit compared on the old index — and the
+  walk takes its step as a statement at the foot of the body instead
+  of from the range's `next` at the head, so the next index is never
+  alive across the body, never spilled, and never reloaded between
+  the latch's compare and its branch. Both gates read zero over the
+  image that boots — hazards 0, frame-fold 0 — with the crate's 22,
+  `test_prefs` and `test_store` green behind it: text 274,473 bytes,
+  `_end` at `$0013AA40` under the `$00150000` ceiling, and bare ROM
+  and chainload each answering 11 WARNs / 0 FAILED with `>rs store ok`
+  on the wire.
 - **Preference parsing: the first module with logic in it, and two
   gates over what this backend does with it** (`libs/nb_rs/src/prefs.rs`,
   `kernel/init/kernel_main.c`, `tools/tests/test_prefs.c`). The four
@@ -327,6 +381,20 @@ Notable changes to NeoBench, newest first. British English throughout.
 
 ### Desktop
 
+- **VLC comes off the start menu** (`user/gui/desktop/main.c`,
+  `system/Core/Media/VLC`, `system/Tools/Clock`,
+  `system/Apps/applications.txt`, `README.md`). `MENU_PROGS` is one
+  now: the menu is the six drawers over the rule and a single row
+  below it, **Preferences** — the pane the machine is set up with —
+  with the drawers sorted among themselves as they were. VLC stays a
+  program and keeps opening where it is filed, `Core/Media`, chosen
+  from the Media drawer, whose directory is `Core/Media`; About, Clock,
+  Monitor, NeoText and NeoShell stand where they stood. The draw pass,
+  the hit area, the first-letter jump and the panel all count
+  `MENU_ITEMS`, so one list serves all four and the rows above the
+  rule cannot drift from the one below it. The docs that named the old
+  rows — the README's menu section, the notes in `Core/Media/VLC` and
+  `Tools/Clock`, `applications.txt` — name the one that is there now.
 - **The panel clock ticks** (`user/gui/desktop/main.c`). The uptime readout
   had no paint of its own: the panel is drawn only when something marks its
   rows, and nothing marked them as the seconds went, so an idle desktop sat

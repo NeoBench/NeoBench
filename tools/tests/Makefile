@@ -6,7 +6,8 @@
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra -std=c99
 
-TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi test_bfg test_prefs
+TESTS := test_zorro test_hid test_pdf test_iso9660 test_scsi test_bfg test_prefs \
+         test_store
 
 # The Rust half of the ROM, built for this host rather than for the
 # m68k: libs/nb_rs parses the four Config files exactly the way
@@ -98,7 +99,8 @@ test_bfg: test_bfg.c ../../boot/rom/probe.c ../../boot/rom/probe.h \
 # cargo's host staticlib; it goes on the link line after the C, the
 # way the ROM's archive does.
 $(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock \
-           $(RS_DIR)/src/lib.rs $(RS_DIR)/src/prefs.rs
+           $(RS_DIR)/src/lib.rs $(RS_DIR)/src/prefs.rs \
+           $(RS_DIR)/src/store.rs
 	@command -v $(CARGO) >/dev/null 2>&1 || \
 	    { echo "rust: cargo is required and was not found at $(CARGO)"; exit 1; }
 	cd $(RS_DIR) && RUSTC=$(RUSTC) RUSTFLAGS="-Cpanic=abort" \
@@ -107,6 +109,21 @@ $(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock \
 test_prefs: test_prefs.c ../../boot/rom/prefs.c ../../boot/rom/prefs.h \
             ../../boot/rom/pfs.h $(RS_LIB)
 	$(CC) $(CFLAGS) -o $@ test_prefs.c ../../boot/rom/prefs.c \
+	    $(RS_LIB) -lpthread -ldl -lm
+
+# The store's paths and the program table, held against their Rust
+# twins the way test_prefs holds the parser: pfs.c and pfs_data.c are
+# the real table the ROM links, progs.c is what main.c used to carry
+# on its own (program_slot_of moved out of the desktop so this could
+# link it rather than a copy), and the batteries are the ones
+# rs_store() builds at boot, with the (directory, after) sweep made
+# exhaustive because the host can afford it.  Negative controls
+# falsify the C's answers one family at a time.
+test_store: test_store.c ../../user/gui/desktop/progs.c \
+            ../../user/gui/desktop/progs.h ../../boot/rom/pfs.c \
+            ../../boot/rom/pfs.h ../../boot/rom/pfs_data.c $(RS_LIB)
+	$(CC) $(CFLAGS) -o $@ test_store.c ../../user/gui/desktop/progs.c \
+	    ../../boot/rom/pfs.c ../../boot/rom/pfs_data.c \
 	    $(RS_LIB) -lpthread -ldl -lm
 
 run: $(TESTS) $(FIXTURE)

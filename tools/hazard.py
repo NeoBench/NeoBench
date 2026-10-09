@@ -44,10 +44,15 @@ NEUTRAL = re.compile(
 MOVE_LIKE = re.compile(r"^(move|moveq|moveb|movew|movel|clr|clrb|clrw|clrl)$")
 # a dead-compare lookalike behind the provider
 CMP_LIKE = re.compile(r"^(cmp|cmpb|cmpw|cmpl|cmpi|cmpib|cmpiw|cmpil|tst|tstb|tstw|tstl)$")
+# [wsl]: objdump spells the displacement width, so a branch past short
+# reach comes out as `bnew`/`beqw`, not `bne`/`beq`.  Without the `w`
+# this class read 0 over a store check whose walk and names loops both
+# ended in a word branch -- every back-edge wider than 127 bytes was
+# invisible to the scan.
 BRANCH = re.compile(
-    r"^b(eq|ne|cs|cc|hs|lo|mi|pl|ge|gt|le|ls|hi|lt|vc|vs)[sl]?$"
+    r"^b(eq|ne|cs|cc|hs|lo|mi|pl|ge|gt|le|ls|hi|lt|vc|vs)[wsl]?$"
 )
-DBRANCH = re.compile(r"^db(eq|ne|cs|cc|hs|lo|mi|pl|ge|gt|le|ls|hi|lt|vc|vs)[sl]?$")
+DBRANCH = re.compile(r"^db(eq|ne|cs|cc|hs|lo|mi|pl|ge|gt|le|ls|hi|lt|vc|vs)[wsl]?$")
 SETCC = re.compile(r"^s(eq|ne|cs|cc|hs|lo|mi|pl|ge|gt|le|ls|hi|lt|vc|vs)$")
 # everything else that touches CCR
 SETS = re.compile(
@@ -130,7 +135,7 @@ def scan(text, only_fn=None, quiet=False):
             # benign: Z-only branch, S2 a pure value test of the register
             # the provider is copying -- MOVE preserves that Z.
             benign = False
-            if mn in ("beq", "bne", "beqs", "bnes") and is_zero_test(smn, sops):
+            if mn in ("beq", "bne", "beqs", "bnes", "beqw", "bnew") and is_zero_test(smn, sops):
                 src = norm_reg(pops.split(",")[0]) if pops else None
                 tested = norm_reg(sops.split(",")[-1]) if sops else None
                 if src and tested and src == tested:

@@ -84,6 +84,7 @@ OBJS := \
     $(KERNEL_DIR)/init/banner.o \
     $(KERNEL_DIR)/init/console.o \
     $(USER_DIR)/main.o \
+    $(USER_DIR)/progs.o \
     $(USER_DIR)/logo.o
 
 # The preference store the kernel loads at boot, packed out of system/.
@@ -126,7 +127,8 @@ $(USER_DIR)/%.o: $(USER_DIR)/%.c
 -include $(OBJS:.o=.d)
 
 $(RS_LIB): $(RS_DIR)/Cargo.toml $(RS_DIR)/Cargo.lock \
-           $(RS_DIR)/src/lib.rs $(RS_DIR)/src/prefs.rs
+           $(RS_DIR)/src/lib.rs $(RS_DIR)/src/prefs.rs \
+           $(RS_DIR)/src/store.rs
 	@command -v $(CARGO) >/dev/null 2>&1 || \
 	    { echo "rust: cargo is required and was not found at $(CARGO)"; exit 1; }
 	cd $(RS_DIR) && RUSTC_BOOTSTRAP=1 RUSTC=$(HOME)/.cargo/bin/rustc \

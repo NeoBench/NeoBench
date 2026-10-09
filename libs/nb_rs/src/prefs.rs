@@ -562,13 +562,28 @@ pub fn apply(p: &mut Prefs, file: &[u8]) {
                      * then compiler_builtins in behind it -- the
                      * better part of 400 KiB, in a region with
                      * 256.  A slice copies nothing.) */
-                    let mut n = val.len().min(39);
-
-                    if let Some(z) = val[..n].iter().position(|&b| b == 0) {
-                        n = z;
+                    /* The same search as `position(|&b| b == 0)`,
+                     * written as the walk it is: the bound is in the
+                     * condition, so `z` arrives at the end of the range
+                     * either way -- the first NUL, or the range's own
+                     * length when there is none -- and `range[..z]` is
+                     * the slice the `Some` arm cut.  Two things fall
+                     * out of cutting the range first.  The arm
+                     * compiled to a bounds check on the found index
+                     * with the `n = z` copy riding between the compare
+                     * and the branch (the gate's read at 0x035a);
+                     * `z <= range.len` is now the loop's own exit
+                     * rather than a fact about `min(len, 39)`, so
+                     * there is no second path to check and no copy
+                     * left to fall in between. */
+                    let n = val.len().min(39);
+                    let range = &val[..n];
+                    let mut z = 0usize;
+                    while z < range.len() && range[z] != 0 {
+                        z += 1;
                     }
 
-                    set_key(key, &val[..n], p);
+                    set_key(key, &range[..z], p);
                 }
             }
         }

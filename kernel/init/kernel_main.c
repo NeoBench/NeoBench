@@ -5,6 +5,7 @@
 #include "../../boot/rom/kbd.h"
 #include "../../boot/rom/prefs.h"
 #include "../../boot/rom/pfs.h"
+#include "../../user/gui/desktop/progs.h"
 
 extern void kernel_banner(void);
 extern void kernel_detect(void);
@@ -42,6 +43,31 @@ extern unsigned nb_rs_prefs_check(const unsigned char **files,
                                   const struct nb_prefs *have);
 
 /*
+ * The Rust half's store: the table itself, then six batteries of
+ * questions -- the paths to try, the per-directory children walk, the
+ * program table, program_slot_of for every node, a `run` battery of
+ * arguments, and sampled pfs_next_child answers -- each with the C
+ * half's own answers beside them, and back a mask naming the family
+ * where the two came apart (libs/nb_rs/src/store.rs has the table),
+ * with `at` saying where inside it.  The safety of the reads is this
+ * side's contract: everything handed over is one of our own static
+ * arrays or the ROM's own table.
+ */
+extern unsigned nb_rs_store_check(const struct pfs_node *nodes,
+                                  unsigned ncount,
+                                  const char *const *queries, unsigned nq,
+                                  const unsigned *hits,
+                                  const unsigned *seq, unsigned nseq,
+                                  const char *const *names, unsigned nnames,
+                                  const unsigned *slots, unsigned nslots,
+                                  const char *const *args,
+                                  const unsigned *alens, unsigned nargs,
+                                  const unsigned *want,
+                                  const unsigned *nxt,
+                                  const unsigned *nxt_hit, unsigned nnxt,
+                                  unsigned *at);
+
+/*
  * struct nb_prefs is read across this line, by repr(C) on the Rust
  * side and by this compiler on ours, so both hold it to the numbers
  * that line was written against: an int aligns at two bytes on
@@ -59,6 +85,29 @@ _Static_assert(__builtin_offsetof(struct nb_prefs, hold) == 138,
                "struct nb_prefs: hold moved");
 _Static_assert(sizeof(struct nb_prefs) == 150,
                "struct nb_prefs: size moved");
+
+/*
+ * struct pfs_node is read across the phase-2 line the same way: this
+ * compiler lays it out at four bytes a field with no padding -- an
+ * int aligns at two bytes on m68k-linux-gnu and every member is
+ * either a pointer or an unsigned, so nothing shows through -- and
+ * rustc asserts the same six numbers in store.rs.  The host test
+ * holds the third pair (tools/tests/test_store.c).  If a member
+ * moves, a build stops here rather than a boot walking a table at
+ * the wrong offsets.
+ */
+_Static_assert(__builtin_offsetof(struct pfs_node, path) == 4,
+               "struct pfs_node: path moved");
+_Static_assert(__builtin_offsetof(struct pfs_node, parent) == 8,
+               "struct pfs_node: parent moved");
+_Static_assert(__builtin_offsetof(struct pfs_node, data) == 12,
+               "struct pfs_node: data moved");
+_Static_assert(__builtin_offsetof(struct pfs_node, size) == 16,
+               "struct pfs_node: size moved");
+_Static_assert(__builtin_offsetof(struct pfs_node, dir) == 20,
+               "struct pfs_node: dir moved");
+_Static_assert(sizeof(struct pfs_node) == 24,
+               "struct pfs_node: size moved");
 
 /* ------------------------------------------------------------------ *
  * The Rust half's read-out: serial only, the line nb_prefs_dump()      *
@@ -132,6 +181,197 @@ static void rs_prefs(void)
         rs_wire("ok\r\n");
 }
 
+/*
+ * What the phase-2 batteries are sized for: a store up to RS_N nodes
+ * (the ROM ships with a fraction of that), RS_E edge paths beside the
+ * table's own paths, RS_AR arguments for the `run` battery, and
+ * RS_NX next-child samples for each of up to RS_DIRS directories.
+ */
+#define RS_N     128
+#define RS_E      15
+#define RS_Q      (RS_N + RS_E)
+#define RS_AR     48
+#define RS_DIRS   32
+#define RS_NX      4
+
+/*
+ * The store held against the store -- phase 2.  The kernel hands the
+ * Rust half the same table pfs_find() walks and the same files
+ * program_slot_of() reads, and with every battery the C's own answers
+ * beside it: the paths (the table's own first, then the edges that
+ * pin the first-byte rule), one children segment per node, the
+ * program table, a slot per node, a `run` battery of arguments, and
+ * four pfs_next_child samples per directory over `after' values the
+ * walk never stands on -- the wrap, the directory's own index, the
+ * top and the tail.  The mask that comes back names the family where
+ * the two halves came apart and `at` says where inside it; a pass
+ * writes one serial line, like rs_prefs() above, and never appears in
+ * the log.  The batteries are static because the kernel has no heap
+ * to borrow, and sized for a store four times the one the ROM ships
+ * with -- a table that outgrew them says so as an unusable call
+ * rather than checking half of one.
+ */
+static void rs_store(void)
+{
+    /* The edge paths: "" and "/" are the root, "/Config" is the root
+     * too -- pfs_find's first byte says so, whatever its comment
+     * says -- and everything else is a miss spelled carefully. */
+    static const char *const edge[] = {
+        0, "", "/", "/Config", "/Core/Docs/About", "Config/",
+        "config/screen.cfg", "Config/screen.cfg/", "No/such/file",
+        "Tools/Clock/", "Core/Docs/About.txt", "Core/Docs/About ",
+        "Temp/../Temp", "\tConfig", "Core"
+    };
+
+    /* What `run <arg>` is asked, beside the eight from the table. */
+    static const char *const rv[] = {
+        "Files", "FILES", "file", "files2", "clock", "Clock",
+        " clock", "clock ", "", "prefer", "PREFERENCES", "about.txt",
+        "0clock", "neotext", "NeoText", "NEOSHELL", "vlc", "VLC",
+        "monitor", "MONITOR", "Monitor", "NeoShell", "preference",
+        "preferencesx", "pro gram", "cloc k"
+    };
+
+    static const char *queries[RS_Q];
+    static const char *av[RS_AR];
+    static unsigned hits[RS_Q];
+    static unsigned seq[3 * RS_N];
+    static unsigned slots[RS_N];
+    static unsigned alens[RS_AR];
+    static unsigned want[RS_AR];
+    static unsigned nxt[RS_DIRS * RS_NX * 2];
+    static unsigned nxt_hit[RS_DIRS * RS_NX];
+
+    const unsigned ncount = nb_pfs_count;
+    unsigned nq = 0, nseq = 0, nargs = 0, nnxt = 0, nd = 0;
+    unsigned i, d, c, mask, at;
+
+    if (ncount == 0 || ncount > RS_N ||
+        RS_E > RS_Q || ncount + RS_E > RS_Q)
+    {
+        rs_wire(">rs store fail mask=");
+        rs_mask(0x80000000u);
+        rs_wire(" at=");
+        rs_mask(0);
+        rs_wire("\r\n");
+        kernel_warn("Rust store check");
+        return;
+    }
+
+    /* The paths battery: the table's own paths first -- the check
+     * takes that as the contract behind nq >= ncount -- then the
+     * edges, with this half's pfs_find answers either way. */
+    for (i = 0; i < ncount; i++)
+    {
+        const struct pfs_node *n;
+
+        queries[nq] = nb_pfs_nodes[i].path;
+        n = pfs_find(queries[nq]);
+        hits[nq] = n ? (unsigned)(n - nb_pfs_nodes) : PFS_NONE;
+        nq++;
+    }
+    for (i = 0; i < RS_E; i++)
+    {
+        const struct pfs_node *n;
+
+        queries[nq] = edge[i];
+        n = pfs_find(edge[i]);
+        hits[nq] = n ? (unsigned)(n - nb_pfs_nodes) : PFS_NONE;
+        nq++;
+    }
+
+    /* The walk, in the shape the check walks from its side: header,
+     * children, NONE, once for every node in order.  Worst case is
+     * three entries a node -- header, one child each, one NONE. */
+    for (d = 0; d < ncount; d++)
+    {
+        seq[nseq++] = d;
+        c = pfs_first_child(d);
+        while (c != PFS_NONE)
+        {
+            seq[nseq++] = c;
+            c = pfs_next_child(d, c);
+        }
+        seq[nseq++] = PFS_NONE;
+    }
+
+    for (i = 0; i < ncount; i++)
+        slots[i] = (unsigned)program_slot_of(i);
+
+    /* The run battery: the eight table names as themselves, then the
+     * cases -- case, prefix, trailing space, the empty argument --
+     * with this half's first-match answer for each, made with the
+     * same tok_is sh_run_cmd() asks sh_is(). */
+    for (i = 0; i < N_PROGRAMS; i++)
+        av[nargs++] = prog_name[i];
+    for (i = 0; i < (unsigned)(sizeof rv / sizeof rv[0]) &&
+                nargs < RS_AR; i++)
+        av[nargs++] = rv[i];
+    for (i = 0; i < nargs; i++)
+    {
+        const unsigned char *a = (const unsigned char *)av[i];
+        const unsigned char *e = a;
+
+        while (*e)
+            e++;
+        alens[i] = (unsigned)(e - a);
+        want[i] = PFS_NONE;
+        for (d = 0; d < N_PROGRAMS; d++)
+            if (tok_is(a, e, prog_name[d]))
+            {
+                want[i] = d;
+                break;
+            }
+    }
+
+    /* The next-child samples: four `after' values a walk would never
+     * actually stand on, for every directory that fits. */
+    for (d = 0; d < ncount && nd < RS_DIRS; d++)
+    {
+        unsigned k;
+
+        if (!nb_pfs_nodes[d].dir)
+            continue;
+        for (k = 0; k < RS_NX; k++)
+        {
+            unsigned after;
+
+            switch (k)
+            {
+            case 0:  after = PFS_NONE;   break;    /* the wrap        */
+            case 1:  after = d;          break;    /* its own index   */
+            case 2:  after = 0;          break;    /* the top         */
+            default: after = ncount - 1; break;    /* the tail        */
+            }
+            nxt[nnxt * 2]     = d;
+            nxt[nnxt * 2 + 1] = after;
+            nxt_hit[nnxt]     = pfs_next_child(d, after);
+            nnxt++;
+        }
+        nd++;
+    }
+
+    mask = nb_rs_store_check(nb_pfs_nodes, ncount,
+                             queries, nq, hits,
+                             seq, nseq,
+                             prog_name, N_PROGRAMS,
+                             slots, ncount,
+                             av, alens, nargs, want,
+                             nxt, nxt_hit, nnxt, &at);
+    rs_wire(">rs store ");
+    if (mask)
+    {
+        rs_wire("fail mask=");
+        rs_mask(mask);
+        rs_wire(" at=");
+        rs_mask(at);
+        rs_wire("\r\n");
+        kernel_warn("Rust store check");
+    }
+    else
+        rs_wire("ok\r\n");
+}
+
 void kernel_main(const nb_bootinfo_t *boot)
 {
     /* Boot information will be used later */
@@ -198,6 +438,15 @@ void kernel_main(const nb_bootinfo_t *boot)
      * the only outcome this machine has shipped with.
      */
     rs_prefs();
+
+    /*
+     * Phase 2 answers after it, over the ground phase 1 stood on: the
+     * store's paths, the walk that fills a directory, and the table
+     * `progs` and `run` read are each answered by this half and by
+     * the C over the same nodes (rs_store()).  Same wire, same rule:
+     * serial alone when they agree.
+     */
+    rs_store();
 
     kernel_starting("NeoBench Kernel Initialisation");
     nb_sound_init();

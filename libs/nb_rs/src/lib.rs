@@ -49,6 +49,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod prefs;
+pub mod store;
 
 /* What the seed is stirred with, so no leg ever sees a bare input. */
 const STIR: u32 = 0xA5A5_5A5A;

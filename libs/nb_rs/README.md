@@ -80,11 +80,11 @@ What each part of that is for:
   five's six masks go through `nb_rs_opaque()` — an `#[inline(never)]`
   identity nothing follows — so they stand in the m68k disassembly as
   themselves.
-- **The budget still holds.** The archive costs 6,624 bytes of ROM now
-  that it parses as well as proves itself — the one member the link
-  pulls, behind `core` and `compiler_builtins` it never opens — and
-  `_end` stands at `$00139588` — under the `$00150000` ceiling the
-  linker asserts on, because that is where Paula's sound buffer
+- **The budget still holds.** The archive costs 9,308 bytes of ROM now
+  that it parses, proves itself and checks the store — the one member
+  the link pulls, behind `core` and `compiler_builtins` it never opens
+  — and `_end` stands at `$0013AA40` — under the `$00150000` ceiling
+  the linker asserts on, because that is where Paula's sound buffer
   begins.
 
 ## Two faults, and the gates over them
@@ -100,7 +100,13 @@ stand in the way of the ROM and the chain image:
   post-RA it materialises as `movel`, which sets the codes here — the
   branch then tests the MOVE's operand, right for one input shape and
   wrong for the next. Zero tolerance, and the boot is the oracle behind
-  it.
+  it. The rule had a blind spot of its own: it matched the short and
+  long forms only, and objdump spells a back-edge wider than 127 bytes
+  with a `w` on the end — `bnew`, `beqw` — so every long back-edge was
+  invisible to it. The word forms are in the rule now, and with them it
+  read three sites the store check had hidden behind its own earlier
+  zero; all three were reshaped out of the source rather than argued
+  harmless, and the gate reads 0 over the image that boots.
 - **`tools/framefold.py`** reads the IR for a stack slot reached through
   a variable index, which this backend lowers to a fixed displacement
   with the variable dropped — every access landing on the first slot.
@@ -123,7 +129,30 @@ two halves disagree — the same call over the same bytes as
 `tools/tests/test_prefs` runs differentially against `boot/rom/prefs.c` —
 held to the C's struct numbers by compile-time asserts on both sides and
 by `nb_rs_prefs_size()` at run time, with the crate's own fourteen unit
-tests pinning the tables underneath. The store's paths and the
-tables `progs` and `run` read come next, then the compositor and the
-kernel — not before them, and each phase is judged by the same runs the
-C is: 11 WARNs, 0 FAILED, and the desktop it draws.
+tests pinning the tables underneath.
+
+## What phase 2 is
+
+The store's own paths and the tables the shell reads, checked the same
+way: `nb_rs_store_check()` takes the store the kernel has just walked —
+every path through its `find`, the walk rebuilt from
+`first_child`/`next_child` as header, children, NONE once for every node
+in order, the `progs` name table against `PROG_NAME`, the `run` matching
+against `tok_is`, and four corner samples of `next_child` per directory
+— and answers with a six-family mask, `>rs store ok` or
+`>rs store fail mask=… at=…` on the wire straight after the prefs
+answer, amber `Rust store check` behind a failure. The lift that makes
+the check mean something came with it: `N_PROGRAMS`, `prog_name`,
+`tok_is` and `program_slot_of` moved out of `main.c` into
+`user/gui/desktop/progs.c` behind `progs.h`, so the C the boot runs and
+the Rust that checks it read one table rather than two that could
+drift, and `tools/tests/test_store` runs both halves over the same
+nodes differentially — `Config/Preferences` at slot 4, `Tools/Clock` at
+1, `Core/Media/VLC` at 6 — with eight crate tests pinning the store's
+shape and twenty-two tests in the crate in all. The phase also paid off
+the scanner's blind spot above: with the word forms in the rule it
+found three sites its own earlier zero had hidden — the hang that
+stopped the plain boot after `>rs prefs ok` among them — and each was
+reshaped out of the source. The compositor and the kernel come next —
+not before them, and each phase is judged by the same runs the C is:
+11 WARNs, 0 FAILED, and the desktop it draws.

@@ -55,6 +55,7 @@
 #include "../../../boot/rom/pointer.h"
 #include "../../../boot/rom/probe.h"
 #include "logo.h"
+#include "progs.h"
 
 /* ------------------------------------------------------------------ *
  * Palette
@@ -1123,8 +1124,7 @@ static int vlc_dx, vlc_dy;
 #define MENU_ITEMW  (MENU_W - 12 - MENU_STRIP)
 #define MENU_PH     26           /* place row pitch: a 24 px plate, +1   */
 #define MENU_ITEMH  34           /* program row pitch: 30 px box, 4 gap  */
-#define N_PROGRAMS  8            /* programs the desktop can run         */
-#define MENU_PROGS  2            /* of which the menu shows this many    */
+#define MENU_PROGS  1            /* of which the menu shows this many    */
 #define MENU_ITEMS  (N_PLACES + MENU_PROGS)
 
 #define MENU_P0     (MENU_Y + MENU_HEAD + 4)             /* first place */
@@ -1132,31 +1132,31 @@ static int vlc_dx, vlc_dy;
 #define MENU_G0     (MENU_SEP + 4)                       /* first program */
 
 /*
- * Which program each row of the menu's program section starts.  The
- * numbers are the slots the whole desktop counts in -- the panel, the
- * task row and the keyboard's focus all go 1..7 in this order -- while
- * the menu lists two of the seven, in the order their names sort in,
- * Preferences before VLC, as the drawers above the rule sort among
- * themselves.  Files leads those drawers rather than sitting in this
- * list, and Clock, Monitor and NeoText are filed in Tools/ beside the
- * note that says what the drawer holds, while About stands in
- * Core/Docs, where it has always stood.  About came off the menu when
- * VLC went on: it is still a program, it still opens from its entry
- * and from the reader, and it is one press away either way -- but the
- * menu is a list of what the machine is for, and the two lines it
- * keeps are the pane that sets it up and the player for the drawer
- * that holds the media.  Preferences still stands in Config/
- * beside the files it reads and VLC in Core/Media beside the files it
- * plays.  All seven are still programs, and all seven still take their
- * buttons on the bar when they are running.
+ * Which program each row of the menu's program section shows.  The
+ * number is the slot the whole desktop counts in -- the panel, the
+ * task row and the keyboard's focus all go by the same slots -- while
+ * the menu lists one of the eight, in the order the names sort in.
+ * Files leads the drawers above the rule rather than sitting in this
+ * list, because it is the root of the store, the drawer every other
+ * one is looked for in, and being a place rather than a program it
+ * opens instead of toggling.  Clock, Monitor, NeoText and NeoShell are
+ * filed in Tools/ beside the note that says what the drawer holds,
+ * while About stands in Core/Docs, where it has always stood, and VLC
+ * in Core/Media beside the files it plays -- About and VLC both came
+ * off the menu: they are still programs, they still open from their
+ * entries, and they are one press away either way -- but the menu is a
+ * list of what the machine is set up with, and the single line it
+ * keeps below the rule is the pane that sets it up.  All eight are
+ * still programs, and all eight still take their buttons on the bar
+ * when they are running.
  */
-static const unsigned char menu_slot[MENU_PROGS] = { 4, 6 };
+static const unsigned char menu_slot[MENU_PROGS] = { 4 };
 
-/* What those two rows say.  File scope rather than a local of the draw
- * pass, because the keyboard's first-letter jump asks the same two
- * names and two lists that could disagree would be two menus. */
+/* What that row says.  File scope rather than a local of the draw
+ * pass, because the keyboard's first-letter jump asks the same name
+ * and two lists that could disagree would be two menus. */
 static const char *const menu_name[MENU_PROGS] = {
-    "Preferences", "VLC"
+    "Preferences"
 };
 
 /* the show-desktop sliver: the last eight columns of the panel, which
@@ -1486,103 +1486,6 @@ static unsigned row_target(int i)
         n++;
     }
     return c;
-}
-
-/* one word of a file, compared without regard to case */
-static int tok_is(const unsigned char *s, const unsigned char *e,
-                  const char *w)
-{
-    while (s < e && *w)
-    {
-        unsigned char a = *s++;
-        unsigned char b = (unsigned char)*w++;
-
-        if (a >= 'A' && a <= 'Z')
-            a = (unsigned char)(a - 'A' + 'a');
-        if (b >= 'A' && b <= 'Z')
-            b = (unsigned char)(b - 'A' + 'a');
-        if (a != b)
-            return 0;
-    }
-    return s == e && !*w;
-}
-
-/*
- * The names a `program = ` line may carry, one per slot, in the order
- * the slots are numbered.  The store's entries are written against
- * this list and NeoShell's `progs` and `run` ask it the same question,
- * so a program added here cannot be missing from a drawer or from the
- * command line.
- */
-static const char *const prog_name[N_PROGRAMS] = {
-    "files", "clock", "monitor", "about", "preferences", "neotext",
-    "vlc", "neoshell"
-};
-
-/*
- * Is this file a program rather than a document?
- *
- * The first line of a file that is neither blank nor a comment may name
- * what the file is for -- "program = preferences" -- and a file that
- * does name one starts that program when it is chosen in the browser
- * instead of opening in NeoText.  That is how a drawer holds programs
- * the way the start menu holds them: Config/ carries the Preferences
- * entry beside the four files it reads at boot, and any other directory
- * can carry whatever the desktop can run.
- *
- * A file that says nothing, or that names a program the desktop does
- * not have, is a document and opens in the reader as it always has, so
- * a typo costs the shortcut and nothing else.  Answers the start
- * menu's program slot, or -1 for a document.
- */
-static int program_slot_of(unsigned t)
-{
-    const unsigned char *p = nb_pfs_nodes[t].data;
-    const unsigned char *end = p + nb_pfs_nodes[t].size;
-    int ret = -1;
-
-    while (p < end)
-    {
-        const unsigned char *eol = p;
-        const unsigned char *k, *eq, *ke, *v, *ve;
-        int i;
-
-        while (eol < end && *eol != '\n')
-            eol++;
-
-        k = p;
-        while (k < eol && (*k == ' ' || *k == '\t'))
-            k++;
-        if (k >= eol || *k == '#')          /* blank or a comment line   */
-        {
-            p = (eol < end) ? eol + 1 : end;
-            continue;
-        }
-
-        /* the first line with words in it is the one that decides */
-        eq = k;
-        while (eq < eol && *eq != '=')
-            eq++;
-        if (eq > k && eq < eol)
-        {
-            ke = eq;
-            while (ke > k && (ke[-1] == ' ' || ke[-1] == '\t'))
-                ke--;
-            v = eq + 1;
-            while (v < eol && (*v == ' ' || *v == '\t'))
-                v++;
-            ve = eol;
-            while (ve > v && (ve[-1] == ' ' || ve[-1] == '\t' ||
-                              ve[-1] == '\r'))
-                ve--;
-            if (tok_is(k, ke, "program"))
-                for (i = 0; i < N_PROGRAMS; i++)
-                    if (tok_is(v, ve, prog_name[i]))
-                        ret = i;
-        }
-        break;
-    }
-    return ret;
 }
 
 /*
@@ -6272,7 +6175,7 @@ void nb_desktop_dump(void)
      * a menu entry or a list row, and '-' for none.  The difference
      * between a select and an open is otherwise invisible in a log that
      * only carries the program flags, and the digit says which entry --
-     * in the menu the first six are places and the last two programs,
+     * in the menu the first six are places and the last one a program,
      * and in the player's playlist it is the line of it.  t= is whether
      * the menu is the sticky one the right button opens, and foc= is the
      * program holding the keyboard -- 0 when none does, which is what
